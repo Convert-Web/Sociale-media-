@@ -474,7 +474,7 @@ function commentsSection(post, onCount) {
 export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}) {
   let files = [];
   const ta = h('textarea', {
-    placeholder: placeholder || 'Partagez une idée, une adresse, une réussite…',
+    placeholder: placeholder || 'Que souhaitez-vous partager ?',
     maxlength: MAX_POST,
     'aria-label': 'Nouvelle publication',
     rows: 2,

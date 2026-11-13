@@ -283,7 +283,7 @@ export async function groupView(ctx) {
         empty: () => emptyState('comment', 'La discussion commence ici', 'Partagez la première publication du groupe.'),
       });
       const parts = [];
-      if (isMember) parts.push(composer({ endpoint: `/api/groups/${g.id}/posts`, placeholder: `Écrire dans « ${g.name} »…`, onPosted: (p) => list.prepend(p) }));
+      if (isMember) parts.push(composer({ endpoint: `/api/groups/${g.id}/posts`, placeholder: 'Écrire dans le groupe…', onPosted: (p) => list.prepend(p) }));
       parts.push(list.el);
       content.replaceChildren(...parts);
       stopList = list.start();

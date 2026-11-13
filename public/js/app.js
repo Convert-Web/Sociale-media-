@@ -65,6 +65,32 @@ function openComposer() {
   modal('Nouvelle publication', composer({ onPosted: () => closeModal() }));
 }
 
+// Menu « moi » sur téléphone : profil, amis, groupes, réglages… (la barre d'onglets n'a que cinq places)
+function openMeMenu() {
+  const me = store.user;
+  const c = store.counters || {};
+  const go = () => closeModal();
+  const item = (href, ic, label, count) =>
+    h('a', { href, class: 'me-item', onclick: go }, h('span', { class: 'me-item-icon' }, icon(ic)), h('span', { class: 'grow' }, label), count ? h('span', { class: 'badge-dot' }, count > 99 ? '99+' : String(count)) : null, icon('chevron', 'icon-sm'));
+  const items = [
+    item('/amis', 'users', 'Amis', c.requests),
+    item('/groupes', 'groups', 'Groupes'),
+    item('/enregistres', 'bookmark', 'Enregistrés'),
+    item('/reglages', 'settings', 'Réglages'),
+  ];
+  if (me.isAdmin) items.push(item('/admin', 'chart', 'Direction'));
+  modal(
+    'Menu',
+    h(
+      'div',
+      { class: 'modal-body me-menu' },
+      h('a', { href: `/@${me.username}`, class: 'me-profile', onclick: go }, avatar(me, 'lg'), h('span', { class: 'grow' }, h('b', null, me.displayName), h('small', null, 'Voir mon profil')), icon('chevron', 'icon-sm')),
+      h('nav', { class: 'me-list' }, items),
+      h('div', { class: 'me-list' }, h('button', { class: 'me-item danger', onclick: () => (closeModal(), logout()) }, h('span', { class: 'me-item-icon' }, icon('logout')), h('span', { class: 'grow' }, 'Se déconnecter'))),
+    ),
+  );
+}
+
 function buildShell() {
   const u = store.user;
   const unsub = [];
@@ -106,6 +132,13 @@ function buildShell() {
   };
   paintMe();
   unsub.push(store.on('user', paintMe));
+
+  // Bouton avatar placé en haut à droite des pages principales, sur téléphone
+  const meAvatar = h('span');
+  const meBtn = h('button', { class: 'me-btn mobile-only', type: 'button', 'aria-label': 'Menu : profil, amis, groupes, réglages', onclick: openMeMenu }, meAvatar, badge('requests'));
+  const paintMeBtn = () => store.user && meAvatar.replaceChildren(avatar(store.user, 'sm'));
+  paintMeBtn();
+  unsub.push(store.on('user', paintMeBtn));
 
   const sidenav = h(
     'nav',
@@ -214,6 +247,7 @@ function buildShell() {
   return {
     el,
     main,
+    meBtn,
     userId: u.id,
     setActive(key) {
       for (const [k, els] of navEls) for (const x of els) x.classList.toggle('active', k === key);
@@ -331,6 +365,10 @@ async function render(opts = {}) {
     return;
   }
   cleanups = mine;
+  if (layout === 'app' && shell) {
+    const head = el.querySelector?.('.page-head');
+    if (head && !head.querySelector('[aria-label="Retour"]')) head.append(shell.meBtn);
+  }
   const swap = () => container.replaceChildren(el);
   const smooth = !opts.same && layout === 'app' && document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (smooth) document.startViewTransition(swap);
