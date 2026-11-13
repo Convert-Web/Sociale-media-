@@ -32,6 +32,7 @@ before(async () => {
     dataDir: tmp,
     database: { url: `file:${dbPath}`, authToken: '' },
     paidEntry: false,
+    admissionDefault: 'open',
     demoPayments: false,
     rateLimit: false,
     adminEmails: [],

@@ -4,6 +4,7 @@ import { navigate } from '../router.js';
 import { h, icon, clear, spinner, emptyState, infinite, skeletonPosts } from '../dom.js';
 import { postCard, composer } from '../components/post.js';
 import { storiesBar } from '../components/stories.js';
+import { nextEventCard } from './events.js';
 
 // Carte d'accueil des nouveaux membres : 4 étapes, masquable.
 function onboardingCard() {
@@ -226,6 +227,7 @@ export function feedView(ctx) {
     null,
     h('header', { class: 'page-head' }, h('div', { class: 'grow' }, h('h1', null, 'Le Salon'), h('div', { class: 'sub' }, 'Le fil du cercle, sans algorithme ni publicité'))),
     stories.el,
+    nextEventCard(),
     h('div', { class: 'tabs' }, tabAll, tabFollow),
     onboardingCard(),
     composer(),

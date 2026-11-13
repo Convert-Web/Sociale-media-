@@ -1,7 +1,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, nameLine, memberChip, toast, popMenu, confirmDialog, emptyState, spinner, num } from '../dom.js';
+import { h, icon, avatar, nameLine, memberChip, toast, popMenu, confirmDialog, emptyState, spinner, num, verifiedMark } from '../dom.js';
 
 async function refreshCounters() {
   try {
@@ -77,7 +77,7 @@ function personRow(u, actions) {
     h(
       'a',
       { href: `/@${u.username}`, class: 'meta' },
-      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.founder ? icon('crown', 'crown') : null),
+      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null, u.founder ? icon('crown', 'crown') : null),
       h('small', null, memberChip(u), h('span', null, u.profession || `@${u.username}`)),
     ),
     h('div', { class: 'row-actions' }, actions),

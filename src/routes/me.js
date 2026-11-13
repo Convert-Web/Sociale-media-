@@ -2,23 +2,10 @@
 const express = require('express');
 const { requireAuth, requireMember, destroySession } = require('../auth');
 const { verifyPassword } = require('../security');
-const { fail, text } = require('../http');
+const { fail, text, cleanWebsite } = require('../http');
 const { single, saveImage, deleteUpload } = require('../uploads');
 const { selfUser } = require('../social');
 const { deleteUser } = require('../membership');
-
-function cleanWebsite(value) {
-  const v = text(value, { field: 'Site web', max: 120 });
-  if (!v) return '';
-  const url = /^https?:\/\//i.test(v) ? v : `https://${v}`;
-  try {
-    const parsed = new URL(url);
-    if (!['http:', 'https:'].includes(parsed.protocol) || !parsed.hostname.includes('.')) throw new Error();
-    return parsed.toString().replace(/\/$/, '');
-  } catch {
-    fail(400, 'Adresse de site web invalide.');
-  }
-}
 
 module.exports = function meRoutes(ctx) {
   const r = express.Router();

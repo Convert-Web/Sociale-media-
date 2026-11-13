@@ -14,6 +14,7 @@ function authorOf(ctx, row, prefix = '') {
     avatar: row[`${prefix}avatar`] || null,
     memberNumber: row[`${prefix}member_number`] ?? null,
     founder: isFounder(ctx, row[`${prefix}member_number`]),
+    verified: Boolean(row[`${prefix}verified_at`]),
   };
 }
 
@@ -30,6 +31,7 @@ function publicUser(ctx, u) {
     website: u.website,
     memberNumber: u.member_number ?? null,
     founder: isFounder(ctx, u.member_number),
+    verified: Boolean(u.verified_at),
     joinedAt: u.paid_at || u.created_at,
     online: ctx.hub.isOnline(u.id),
   };
@@ -41,6 +43,9 @@ function selfUser(ctx, u) {
     email: u.email,
     isMember: Boolean(u.paid_at),
     isAdmin: Boolean(u.is_admin),
+    admission: u.paid_at
+      ? null
+      : { requested: Boolean(u.admission_requested_at), declined: Boolean(u.admission_declined_at), note: u.admission_note || '' },
   };
 }
 
@@ -51,7 +56,7 @@ const REACTIONS = ['love', 'like', 'bravo', 'fire', 'haha', 'wow'];
 // il précède tous les paramètres de la clause WHERE ajoutée par l'appelant.
 const POST_SELECT = `
   SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.groupe_id,
-         u.username, u.display_name, u.avatar, u.member_number,
+         u.username, u.display_name, u.avatar, u.member_number, u.verified_at,
          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count,
          (SELECT GROUP_CONCAT(l.reaction) FROM likes l WHERE l.post_id = p.id) AS reactions,
          (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
@@ -116,7 +121,7 @@ async function getPost(ctx, postId, viewer) {
 
 const COMMENT_SELECT = `
   SELECT c.id, c.post_id, c.body, c.created_at, c.user_id,
-         u.username, u.display_name, u.avatar, u.member_number
+         u.username, u.display_name, u.avatar, u.member_number, u.verified_at
   FROM comments c JOIN users u ON u.id = c.user_id`;
 
 function serializeComment(ctx, row, viewer) {
@@ -131,14 +136,16 @@ function serializeComment(ctx, row, viewer) {
 }
 
 const NOTIF_SELECT = `
-  SELECT n.id, n.type, n.post_id, n.groupe_id, n.created_at, n.read_at,
-         a.id AS user_id, a.username, a.display_name, a.avatar, a.member_number,
+  SELECT n.id, n.type, n.post_id, n.groupe_id, n.event_id, n.place_id, n.created_at, n.read_at,
+         a.id AS user_id, a.username, a.display_name, a.avatar, a.member_number, a.verified_at,
          p.body AS post_body, p.image AS post_image,
-         g.name AS groupe_name
+         g.name AS groupe_name, e.title AS event_title, pl.name AS place_name
   FROM notifications n
   JOIN users a ON a.id = n.actor_id
   LEFT JOIN posts p ON p.id = n.post_id
-  LEFT JOIN groupes g ON g.id = n.groupe_id`;
+  LEFT JOIN groupes g ON g.id = n.groupe_id
+  LEFT JOIN events e ON e.id = n.event_id
+  LEFT JOIN places pl ON pl.id = n.place_id`;
 
 function serializeNotification(ctx, row) {
   return {
@@ -151,6 +158,8 @@ function serializeNotification(ctx, row) {
       ? { id: row.post_id, excerpt: (row.post_body || '').slice(0, 120), image: row.post_image || null }
       : null,
     group: row.groupe_id ? { id: row.groupe_id, name: row.groupe_name || 'Groupe' } : null,
+    event: row.event_id ? { id: row.event_id, title: row.event_title || 'Événement' } : null,
+    place: row.place_id ? { id: row.place_id, name: row.place_name || 'Adresse' } : null,
   };
 }
 
@@ -168,19 +177,21 @@ async function pushCounters(ctx, userId) {
   if (ctx.hub.isOnline(userId)) ctx.hub.send(userId, 'counters', await counters(ctx, userId));
 }
 
-async function notify(ctx, { userId, actorId, type, postId = null, groupId = null }) {
+const DEDUP = ['like', 'follow', 'friend_request', 'friend_accept', 'group_invite', 'group_request', 'event_join', 'place_endorse', 'admission_request', 'invite_accepted'];
+
+async function notify(ctx, { userId, actorId, type, postId = null, groupId = null, eventId = null, placeId = null }) {
   if (!userId || userId === actorId) return;
-  if (['like', 'follow', 'friend_request', 'friend_accept', 'group_invite', 'group_request'].includes(type)) {
+  if (DEDUP.includes(type)) {
     // Pas de doublon pour une même action répétée
     const existing = await ctx.db.get(
-      'SELECT id FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ? AND groupe_id IS ?',
-      userId, actorId, type, postId, groupId,
+      'SELECT id FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ? AND groupe_id IS ? AND event_id IS ? AND place_id IS ?',
+      userId, actorId, type, postId, groupId, eventId, placeId,
     );
     if (existing) return;
   }
   const { lastInsertRowid } = await ctx.db.run(
-    'INSERT INTO notifications (user_id, actor_id, type, post_id, groupe_id, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-    userId, actorId, type, postId, groupId, Date.now(),
+    'INSERT INTO notifications (user_id, actor_id, type, post_id, groupe_id, event_id, place_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    userId, actorId, type, postId, groupId, eventId, placeId, Date.now(),
   );
   if (ctx.hub.isOnline(userId)) {
     const row = await ctx.db.get(`${NOTIF_SELECT} WHERE n.id = ?`, lastInsertRowid);
@@ -189,10 +200,10 @@ async function notify(ctx, { userId, actorId, type, postId = null, groupId = nul
   }
 }
 
-async function retractNotification(ctx, { userId, actorId, type, postId = null, groupId = null }) {
+async function retractNotification(ctx, { userId, actorId, type, postId = null, groupId = null, eventId = null, placeId = null }) {
   await ctx.db.run(
-    'DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ? AND groupe_id IS ?',
-    userId, actorId, type, postId, groupId,
+    'DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ? AND groupe_id IS ? AND event_id IS ? AND place_id IS ?',
+    userId, actorId, type, postId, groupId, eventId, placeId,
   );
   await pushCounters(ctx, userId);
 }

@@ -17,6 +17,9 @@ import { adminView } from './views/admin.js';
 import { legalView } from './views/legal.js';
 import { friendsView } from './views/friends.js';
 import { groupsView, groupView } from './views/groups.js';
+import { invitationLanding, invitationsView } from './views/invite.js';
+import { agendaView, eventView } from './views/events.js';
+import { carnetView, placeView } from './views/places.js';
 import { registerServiceWorker, syncPush } from './push.js';
 
 const ROUTES = [
@@ -39,6 +42,12 @@ const ROUTES = [
   { path: '/amis', view: friendsView, access: 'member', layout: 'app', nav: 'amis' },
   { path: '/groupes', view: groupsView, access: 'member', layout: 'app', nav: 'groupes' },
   { path: '/groupes/:id', view: groupView, access: 'member', layout: 'app', nav: 'groupes' },
+  { path: '/agenda', view: agendaView, access: 'member', layout: 'app', nav: 'agenda' },
+  { path: '/agenda/:id', view: eventView, access: 'member', layout: 'app', nav: 'agenda' },
+  { path: '/carnet', view: carnetView, access: 'member', layout: 'app', nav: 'carnet' },
+  { path: '/carnet/:id', view: placeView, access: 'member', layout: 'app', nav: 'carnet' },
+  { path: '/invitations', view: invitationsView, access: 'member', layout: 'app', nav: 'invitations' },
+  { path: '/invitation/:code', view: invitationLanding, access: 'public' },
   { path: '/admin', view: adminView, access: 'admin', layout: 'app', nav: 'admin' },
   { path: '/cgv', view: legalView, access: 'public', layout: 'auto', page: 'cgv' },
   { path: '/confidentialite', view: legalView, access: 'public', layout: 'auto', page: 'confidentialite' },
@@ -75,6 +84,9 @@ function openMeMenu() {
   const items = [
     item('/amis', 'users', 'Amis', c.requests),
     item('/groupes', 'groups', 'Groupes'),
+    item('/agenda', 'calendar', 'Agenda'),
+    item('/carnet', 'book', 'Carnet d’adresses'),
+    item('/invitations', 'ticket', 'Inviter un proche'),
     item('/enregistres', 'bookmark', 'Enregistrés'),
     item('/reglages', 'settings', 'Réglages'),
   ];
@@ -116,6 +128,9 @@ function buildShell() {
     { key: 'profil', href: `/@${u.username}`, icon: 'user', label: 'Profil' },
     { key: 'amis', href: '/amis', icon: 'users', label: 'Amis', badge: 'requests' },
     { key: 'groupes', href: '/groupes', icon: 'groups', label: 'Groupes' },
+    { key: 'agenda', href: '/agenda', icon: 'calendar', label: 'Agenda' },
+    { key: 'carnet', href: '/carnet', icon: 'book', label: 'Carnet' },
+    { key: 'invitations', href: '/invitations', icon: 'ticket', label: 'Invitations' },
     { key: 'enregistres', href: '/enregistres', icon: 'bookmark', label: 'Enregistrés' },
     { key: 'reglages', href: '/reglages', icon: 'settings', label: 'Réglages' },
   ];

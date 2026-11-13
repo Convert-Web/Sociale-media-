@@ -1,7 +1,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, memberChip, founderBadge, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox, popMenu, confirmDialog } from '../dom.js';
+import { h, icon, avatar, memberChip, founderBadge, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox, popMenu, confirmDialog, verifiedMark } from '../dom.js';
 import { postList, backHead } from './feed.js';
 import { reportDialog } from '../components/report.js';
 import { friendButton } from './friends.js';
@@ -15,7 +15,7 @@ export function userRow(u, { follow = true } = {}) {
     h(
       'a',
       { href: `/@${u.username}`, class: 'meta' },
-      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.founder ? icon('crown', 'crown') : null),
+      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null, u.founder ? icon('crown', 'crown') : null),
       h('small', null, memberChip(u), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, `@${u.username}${u.profession ? ` · ${u.profession}` : ''}`)),
       u.bio ? h('span', { class: 'bio' }, u.bio) : null,
     ),
@@ -85,6 +85,21 @@ export async function profileView(ctx) {
   moreBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     const items = [{ icon: 'link', label: 'Copier le lien du profil', action: () => navigator.clipboard?.writeText(`${location.origin}/@${user.username}`).then(() => toast('Lien copié.'), () => {}) }];
+    if (store.user.isAdmin) {
+      items.push({
+        icon: 'verified',
+        label: user.verified ? 'Retirer le badge vérifié' : 'Certifier ce membre',
+        action: async () => {
+          try {
+            await api.post(`/api/admin/users/${user.id}/verify`, { verified: !user.verified });
+            toast(user.verified ? 'Badge retiré.' : `${user.displayName} est désormais « Membre vérifié ».`);
+            navigate(`/@${user.username}`, { replace: true });
+          } catch (err) {
+            toast(err.message, 'error');
+          }
+        },
+      });
+    }
     if (!user.isMe && !user.blocked) {
       items.unshift({
         icon: user.isFollowing ? 'x' : 'plus',
@@ -135,7 +150,8 @@ export async function profileView(ctx) {
 
   const actions = user.isMe
     ? [
-        h('a', { href: '/enregistres', class: 'btn btn-ghost btn-icon', 'aria-label': 'Enregistrés', title: 'Enregistrés' }, icon('bookmark')),
+        store.user.isAdmin ? moreBtn : null,
+        h('a', { href: '/invitations', class: 'btn btn-ghost btn-icon', 'aria-label': 'Mes invitations', title: 'Mes invitations' }, icon('ticket')),
         h('a', { href: '/reglages', class: 'btn btn-ghost' }, 'Modifier le profil'),
       ]
     : user.blocked
@@ -169,6 +185,8 @@ export async function profileView(ctx) {
     meta.push(h('a', { href: user.website, target: '_blank', rel: 'noopener noreferrer nofollow' }, icon('link'), user.website.replace(/^https?:\/\/(www\.)?/, '')));
   }
   meta.push(h('span', null, icon('calendar'), `Membre depuis ${monthYear(user.joinedAt)}`));
+  if (user.invitedBy) meta.push(h('span', null, icon('ticket'), 'Invité par\u00a0', h('a', { href: `/@${user.invitedBy.username}` }, user.invitedBy.displayName)));
+  if (user.invitedCount) meta.push(h('span', null, icon('users'), `A fait entrer ${user.invitedCount} membre${user.invitedCount > 1 ? 's' : ''}`));
 
   // Onglets : publications / photos
   const content = h('div');
@@ -229,7 +247,7 @@ export async function profileView(ctx) {
       'section',
       { class: 'profile-top' },
       h('div', { class: 'profile-row' }, avatarEl, h('div', { class: 'profile-actions' }, actions)),
-      h('div', { class: 'profile-name' }, h('h1', null, user.displayName), user.founder ? founderBadge() : null),
+      h('div', { class: 'profile-name' }, h('h1', null, user.displayName), user.verified ? verifiedMark() : null, user.founder ? founderBadge() : null),
       h(
         'div',
         { class: 'profile-handle' },

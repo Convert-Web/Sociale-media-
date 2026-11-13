@@ -22,6 +22,7 @@ before(async () => {
     dataDir: tmp,
     database: { url: `file:${path.join(tmp, 'v3.db')}`, authToken: '' },
     paidEntry: false,
+    admissionDefault: 'open',
     demoPayments: false,
     rateLimit: false,
     adminEmails: [],

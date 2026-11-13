@@ -1,7 +1,8 @@
 import { api } from '../api.js';
 import { store, connectRealtime } from '../store.js';
 import { navigate, safePath } from '../router.js';
-import { h, icon, memberCard, cardSince } from '../dom.js';
+import { h, icon, memberCard, cardSince, avatar } from '../dom.js';
+import { rememberedInvitation, rememberInvitation } from './invite.js';
 
 function authLayout(content) {
   return h(
@@ -126,6 +127,33 @@ export function signupView(ctx) {
   const consent = h('input', { type: 'checkbox', required: true });
   const btn = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'submit' }, store.config.paidEntry ? 'Continuer' : 'Créer mon compte', icon('arrow'));
 
+  // Entrée sur invitation : code d'un parrain (lien d'invitation) ou demande d'admission
+  const onInvitation = store.config.admission === 'invitation';
+  let code = store.config.paidEntry ? '' : (ctx.query.get('invitation') || rememberedInvitation()).toUpperCase();
+  const inviteBox = h('div');
+  const note = h('textarea', { class: 'textarea', rows: 3, maxlength: 500, placeholder: 'Votre activité, ce qui vous amène, qui vous connaissez au sein du cercle…' });
+  const noteField = field('Présentez-vous (facultatif)', note, 'Lu par la Direction, qui valide chaque demande personnellement.');
+  const paintEntry = () => {
+    noteField.hidden = !onInvitation || Boolean(code);
+    if (!store.config.paidEntry) btn.firstChild.textContent = onInvitation && !code ? 'Envoyer ma demande' : 'Créer mon compte';
+  };
+  if (code) {
+    api
+      .get(`/api/invitations/${encodeURIComponent(code)}/preview`)
+      .then((d) => {
+        if (!d.valid) {
+          code = '';
+          rememberInvitation(null);
+          inviteBox.replaceChildren(h('div', { class: 'form-error' }, 'Ce lien d’invitation n’est plus valable : votre demande sera examinée par la Direction.'));
+        } else {
+          inviteBox.replaceChildren(h('div', { class: 'invite-banner' }, avatar(d.inviter, 'sm'), h('span', null, 'Invitation de ', h('b', null, d.inviter.displayName)), icon('check')));
+        }
+        paintEntry();
+      })
+      .catch(() => {});
+  }
+  paintEntry();
+
   displayName.addEventListener('input', () => {
     if (!usernameTouched) username.value = slugify(displayName.value);
   });
@@ -148,7 +176,10 @@ export function signupView(ctx) {
             username: username.value,
             email: email.value,
             password: password.value,
+            invitation: code || undefined,
+            note: noteField.hidden ? undefined : note.value,
           });
+          if (user.isMember) rememberInvitation(null);
           afterAuth(user, '/bienvenue');
         } catch (e2) {
           err.show(e2.message);
@@ -156,11 +187,13 @@ export function signupView(ctx) {
         }
       },
     },
+    inviteBox,
     err.el,
     field('Nom complet', displayName, 'Tel qu’il apparaîtra sur votre carte.'),
     field("Nom d'utilisateur", h('div', { class: 'input-prefix' }, h('b', null, '@'), username)),
     field('E-mail', email),
     h('label', { class: 'field' }, h('span', null, 'Mot de passe'), password, meter),
+    noteField,
     h(
       'label',
       { class: 'check' },
@@ -183,7 +216,15 @@ export function signupView(ctx) {
   return authLayout([
     paid ? h('div', { class: 'steps' }, h('i', { class: 'on' }), h('i'), h('span', null, 'Étape 1 sur 2 — Votre identité')) : null,
     h('h1', null, 'Demandez votre carte.'),
-    h('p', { class: 'sub' }, paid ? "Quelques informations, puis le droit d'entrée. Deux minutes, pas plus." : 'Quelques informations et votre carte de membre est à vous. Gratuit.'),
+    h(
+      'p',
+      { class: 'sub' },
+      paid
+        ? "Quelques informations, puis le droit d'entrée. Deux minutes, pas plus."
+        : onInvitation
+          ? 'L’entrée se fait sur invitation. Sans invitation, votre demande est étudiée personnellement par la Direction.'
+          : 'Quelques informations et votre carte de membre est à vous. Gratuit.',
+    ),
     form,
     h('p', { class: 'auth-alt' }, 'Déjà membre ? ', h('a', { href: '/connexion' }, 'Se connecter')),
   ]);

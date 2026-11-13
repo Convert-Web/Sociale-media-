@@ -166,7 +166,7 @@ module.exports = function postRoutes(ctx) {
   r.get('/posts/:id/likes', async (req, res) => {
     const post = await loadPost(req.params.id, req.user);
     const rows = await db.all(
-      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, l.reaction
+      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, l.reaction
        FROM likes l JOIN users u ON u.id = l.user_id
        WHERE l.post_id = ? ORDER BY l.created_at DESC LIMIT 200`,
       post.id,

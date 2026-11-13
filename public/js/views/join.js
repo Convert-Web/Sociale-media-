@@ -3,6 +3,7 @@ import { store, connectRealtime, disconnectRealtime } from '../store.js';
 import { detachPush } from '../push.js';
 import { navigate } from '../router.js';
 import { h, icon, memberCard, money, cardSince, modal, toast, memberNo } from '../dom.js';
+import { redeemCode, rememberedInvitation } from './invite.js';
 
 export async function logout() {
   await detachPush();
@@ -16,13 +17,121 @@ export async function logout() {
   navigate('/');
 }
 
+// Entrée gratuite sur invitation : demande en cours d'examen, ou code d'un parrain
+function admissionView(ctx) {
+  const u = store.user;
+  const firstName = u.displayName.split(/\s+/)[0];
+  const declined = u.admission?.declined;
+
+  const codeInput = h('input', { class: 'input invite-code-input', placeholder: 'Code à 8 caractères', autocomplete: 'off', autocapitalize: 'characters', maxlength: 12, value: rememberedInvitation() });
+  const codeBtn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Entrer');
+  const codeForm = h(
+    'form',
+    {
+      class: 'admission-code',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        if (!codeInput.value.trim()) return codeInput.focus();
+        codeBtn.disabled = true;
+        try {
+          await redeemCode(codeInput.value);
+        } catch (err) {
+          toast(err.message, 'error');
+          codeBtn.disabled = false;
+        }
+      },
+    },
+    codeInput,
+    codeBtn,
+  );
+
+  const note = h('textarea', { class: 'textarea', rows: 4, maxlength: 500, placeholder: 'Votre activité, ce qui vous amène, qui vous connaissez au sein du cercle…' });
+  note.value = u.admission?.note || '';
+  const saveNote = h('button', { class: 'btn btn-secondary', type: 'submit' }, 'Enregistrer');
+  const noteForm = h(
+    'form',
+    {
+      class: 'admission-note',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        saveNote.disabled = true;
+        try {
+          const { user } = await api.post('/api/admission/note', { note: note.value });
+          store.setUser(user);
+          toast('Présentation transmise à la Direction.');
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+        saveNote.disabled = false;
+      },
+    },
+    h('label', { class: 'field' }, h('span', null, 'Votre présentation'), note),
+    h('div', { class: 'row-end' }, saveNote),
+  );
+
+  // Vérifie régulièrement si la Direction a validé la demande
+  const timer = setInterval(async () => {
+    try {
+      await store.refresh();
+      if (store.isMember) {
+        clearInterval(timer);
+        connectRealtime();
+        navigate('/bienvenue', { replace: true });
+      }
+    } catch {
+      /* nouvel essai */
+    }
+  }, 20000);
+  ctx.onCleanup(() => clearInterval(timer));
+
+  ctx.title = 'Demande d’admission — AURUM';
+  return h(
+    'div',
+    { class: 'join' },
+    h(
+      'div',
+      { class: 'container', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+      h('a', { href: '/', class: 'logo' }, 'AURUM'),
+      h('button', { class: 'btn btn-ghost btn-sm', onclick: logout }, 'Se déconnecter'),
+    ),
+    h(
+      'div',
+      { class: 'join-grid' },
+      h(
+        'div',
+        { class: 'fade-up' },
+        h('span', { class: 'eyebrow' }, declined ? 'Demande d’admission' : 'Demande en cours d’examen'),
+        h('h1', null, declined ? 'Pas cette fois, ' : 'Votre demande est entre de bonnes mains, ', h('em', { class: 'accent' }, firstName), '.'),
+        h(
+          'p',
+          { class: 'lead' },
+          declined
+            ? 'Le cercle grandit lentement et la Direction n’a pas retenu votre demande pour le moment. Une invitation d’un membre vous ouvre la porte à tout moment.'
+            : 'La Direction examine chaque candidature personnellement. Cette page s’ouvrira d’elle-même dès votre admission.',
+        ),
+        h('div', { style: { marginTop: '30px', maxWidth: '420px' } }, memberCard({ name: u.displayName, number: null, since: cardSince(Date.now()) })),
+      ),
+      h(
+        'div',
+        { class: 'join-box fade-up', style: { animationDelay: '.1s' } },
+        h('div', null, h('h2', { class: 'admission-title' }, icon('ticket'), 'Vous avez une invitation ?'), h('p', { class: 'muted small' }, 'Saisissez le code reçu d’un membre : vous entrez immédiatement.')),
+        codeForm,
+        declined ? null : h('hr', { class: 'sep' }),
+        declined ? null : noteForm,
+      ),
+    ),
+  );
+}
+
 export function joinView(ctx) {
   const u = store.user;
   if (u.isMember) {
-    navigate('/salon', { replace: true });
+    // Admis entre-temps (validation de la Direction) : cérémonie de la carte
+    navigate('/bienvenue', { replace: true });
     return h('div');
   }
   const cfg = store.config;
+  if (!cfg.paidEntry) return admissionView(ctx);
   const price = money(cfg.priceCents, cfg.currency);
   const firstName = u.displayName.split(/\s+/)[0];
   const status = ctx.query.get('statut');

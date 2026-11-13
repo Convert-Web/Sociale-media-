@@ -39,7 +39,7 @@ module.exports = function storyRoutes(ctx) {
     const me = req.user.id;
     const rows = await db.all(
       `SELECT s.id, s.user_id, s.media, s.caption, s.created_at,
-              u.username, u.display_name, u.avatar, u.member_number,
+              u.username, u.display_name, u.avatar, u.member_number, u.verified_at,
               EXISTS(SELECT 1 FROM story_views sv WHERE sv.story_id = s.id AND sv.user_id = ?) AS viewed,
               (SELECT COUNT(*) FROM story_views sv WHERE sv.story_id = s.id) AS views
        FROM stories s JOIN users u ON u.id = s.user_id
@@ -93,7 +93,7 @@ module.exports = function storyRoutes(ctx) {
     const story = await loadStory(req.params.id);
     if (story.user_id !== req.user.id) fail(403, 'Seul l’auteur voit qui a regardé sa story.');
     const rows = await db.all(
-      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, sv.viewed_at
+      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, sv.viewed_at
        FROM story_views sv JOIN users u ON u.id = sv.user_id
        WHERE sv.story_id = ? ORDER BY sv.viewed_at DESC LIMIT 500`,
       story.id,

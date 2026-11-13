@@ -1,6 +1,6 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
-import { h, icon, avatar, memberChip, clear, spinner, emptyState, debounce, num } from '../dom.js';
+import { h, icon, avatar, memberChip, clear, spinner, emptyState, debounce, num, verifiedMark } from '../dom.js';
 import { postCard } from '../components/post.js';
 import { userRow, followButton } from './profile.js';
 
@@ -12,7 +12,7 @@ function memberCardSmall(u) {
     h(
       'a',
       { href: `/@${u.username}`, class: 'meta' },
-      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.founder ? icon('crown', 'crown') : null),
+      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null, u.founder ? icon('crown', 'crown') : null),
       h('small', null, u.profession || `@${u.username}`),
       memberChip(u),
     ),
@@ -84,6 +84,9 @@ export function exploreView(ctx) {
   const shortcuts = h(
     'div',
     { class: 'shortcuts' },
+    shortcut('/agenda', 'calendar', 'Agenda', 'Événements'),
+    shortcut('/carnet', 'book', 'Carnet', 'Adresses'),
+    shortcut('/invitations', 'ticket', 'Inviter', 'Vos proches'),
     shortcut('/amis', 'users', 'Amis', 'Vos relations', reqBadge),
     shortcut('/groupes', 'groups', 'Groupes', 'Cercles privés'),
     shortcut('/enregistres', 'bookmark', 'Enregistrés', 'Vos favoris'),

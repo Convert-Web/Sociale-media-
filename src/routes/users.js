@@ -6,7 +6,7 @@ const { fail, intParam } = require('../http');
 const { POST_SELECT, NOT_BLOCKED, PUBLIC_POST, serializePost, publicUser, authorOf, notify, retractNotification, isBlocked } = require('../social');
 
 // Le premier paramètre de chaque requête USER_LIST est l'identifiant du membre qui consulte.
-const USER_LIST = `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.bio, u.profession, u.city,
+const USER_LIST = `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.bio, u.profession, u.city,
   EXISTS(SELECT 1 FROM follows fx WHERE fx.follower_id = ? AND fx.followee_id = u.id) AS is_following`;
 // Exclut les membres bloqués (dans un sens ou dans l'autre) : deux paramètres, l'identifiant du lecteur.
 const USER_NOT_BLOCKED = `u.id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)`;
@@ -65,6 +65,10 @@ module.exports = function userRoutes(ctx) {
         isFollowing: Boolean(row.is_following),
         followsYou: Boolean(row.follows_you),
         blocked: Boolean(row.blocked),
+        invitedBy: u.invited_by
+          ? await db.get('SELECT username, display_name AS displayName FROM users WHERE id = ? AND paid_at IS NOT NULL', u.invited_by).then((x) => x || null)
+          : null,
+        invitedCount: (await db.get('SELECT COUNT(*) AS n FROM users WHERE invited_by = ? AND paid_at IS NOT NULL', u.id)).n,
       },
     });
   });
@@ -149,7 +153,7 @@ module.exports = function userRoutes(ctx) {
   // Membres bloqués (réglages)
   r.get('/me/blocked', requireMember, async (req, res) => {
     const rows = await db.all(
-      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number
+      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at
        FROM blocks b JOIN users u ON u.id = b.blocked_id WHERE b.blocker_id = ? ORDER BY b.created_at DESC`,
       req.user.id,
     );

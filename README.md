@@ -13,6 +13,10 @@ Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (bar
 | | |
 |---|---|
 | **Droit d'entrée (optionnel)** | Désactivé par défaut. Avec `PAID_ENTRY=true` : paiement unique via **Stripe Checkout** (carte bancaire, et Apple Pay / Google Pay selon votre configuration Stripe), vérifié côté serveur + webhook signé. Case de renonciation au droit de rétractation (art. L221-28 du Code de la consommation). |
+| **Entrée sur invitation** | Par défaut, on entre au cercle **sur invitation** : chaque membre dispose de 3 invitations personnelles (lien à partager sur WhatsApp, iMessage…), la personne invitée entre immédiatement. Sans invitation, l'inscription devient une **demande d'admission** que la Direction accepte ou refuse (notification sur le téléphone). Interrupteur « Entrée sur invitation » dans la page Direction pour revenir à l'entrée libre. Le profil affiche « Invité par… ». |
+| **Agenda du cercle** | Événements privés (dîners, vernissages, voyages) : photo, date, lieu avec itinéraire, nombre de places, « Je viens », liste des participants, ajout au calendrier du téléphone (.ics), carte « Prochain événement » en tête du Salon. |
+| **Carnet d'adresses** | Les recommandations des membres (restaurants, hôtels, bars, boutiques, artisans, bien-être, services, voyages) par ville et catégorie, avec photo, itinéraire, site web et « Je recommande aussi ». |
+| **Membre vérifié** | Badge bleu attribué par la Direction depuis le profil d'un membre, affiché à côté de son nom partout. |
 | **Carte de membre** | Numéro unique attribué dans l'ordre d'arrivée et **jamais réattribué**. Carte en titane clair, en **or** pour les 100 premiers « Fondateurs ». Cérémonie d'accueil à l'inscription. Le premier compte créé devient administrateur. |
 | **Le Salon** | Fil chronologique « Tout le cercle » / « Mes abonnements », publications avec jusqu'à 6 photos (carrousel), modification, commentaires, #hashtags, @mentions avec suggestions, défilement infini, bandeau « nouvelles publications ». |
 | **Réactions** | ❤️ 👍 👏 🔥 😂 😮 : un toucher pour ❤️, appui long (ou survol) pour choisir, liste des membres qui ont réagi. |

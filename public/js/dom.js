@@ -147,9 +147,15 @@ export function avatar(user, size = '', { presence = false } = {}) {
   return el;
 }
 
+// Badge « Membre vérifié » (identité confirmée par la Direction)
+export function verifiedMark() {
+  return h('span', { class: 'verified', title: 'Membre vérifié', 'aria-label': 'Membre vérifié' }, icon('verified'));
+}
+
 export function nameLine(user, { link = true } = {}) {
   const parts = [
     h('b', null, user.displayName),
+    user.verified ? verifiedMark() : null,
     user.founder ? h('span', { title: 'Membre fondateur' }, icon('crown', 'crown')) : null,
   ];
   return link

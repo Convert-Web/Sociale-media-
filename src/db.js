@@ -209,6 +209,59 @@ CREATE TABLE IF NOT EXISTS groupe_members (
 );
 CREATE INDEX IF NOT EXISTS idx_groupe_members_user ON groupe_members(user_id, status);
 
+-- v4 : invitations (parrainage), agenda, carnet d'adresses
+CREATE TABLE IF NOT EXISTS invitations (
+  code        TEXT PRIMARY KEY,
+  inviter_id  INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL,
+  used_by     INTEGER,
+  used_at     INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_invitations_inviter ON invitations(inviter_id);
+
+CREATE TABLE IF NOT EXISTS events (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  title        TEXT NOT NULL,
+  description  TEXT NOT NULL DEFAULT '',
+  location     TEXT NOT NULL DEFAULT '',
+  cover        TEXT,
+  starts_at    INTEGER NOT NULL,
+  ends_at      INTEGER,
+  capacity     INTEGER,
+  owner_id     INTEGER NOT NULL,
+  created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_starts ON events(starts_at);
+
+CREATE TABLE IF NOT EXISTS event_attendees (
+  event_id    INTEGER NOT NULL,
+  user_id     INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (event_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_event_attendees_user ON event_attendees(user_id);
+
+CREATE TABLE IF NOT EXISTS places (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  category    TEXT NOT NULL,
+  city        TEXT NOT NULL,
+  address     TEXT NOT NULL DEFAULT '',
+  website     TEXT NOT NULL DEFAULT '',
+  note        TEXT NOT NULL,
+  photo       TEXT,
+  author_id   INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_places_city ON places(city);
+
+CREATE TABLE IF NOT EXISTS place_endorsements (
+  place_id    INTEGER NOT NULL,
+  user_id     INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (place_id, user_id)
+);
+
 -- Photos envoyées par les membres, stockées dans la base
 -- (les hébergeurs gratuits effacent leurs fichiers à chaque redémarrage).
 CREATE TABLE IF NOT EXISTS media (
@@ -246,6 +299,13 @@ const COLUMNS = [
   ['posts', 'edited_at', 'INTEGER'],
   ['posts', 'groupe_id', 'INTEGER'],
   ['notifications', 'groupe_id', 'INTEGER'],
+  ['notifications', 'event_id', 'INTEGER'],
+  ['notifications', 'place_id', 'INTEGER'],
+  ['users', 'invited_by', 'INTEGER'],
+  ['users', 'verified_at', 'INTEGER'],
+  ['users', 'admission_requested_at', 'INTEGER'],
+  ['users', 'admission_declined_at', 'INTEGER'],
+  ['users', 'admission_note', "TEXT NOT NULL DEFAULT ''"],
 ];
 
 async function migrate(client) {

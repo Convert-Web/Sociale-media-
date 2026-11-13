@@ -1,7 +1,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, nameLine, memberChip, toast, popMenu, confirmDialog, emptyState, spinner, num, modal, autosize } from '../dom.js';
+import { h, icon, avatar, nameLine, memberChip, toast, popMenu, confirmDialog, emptyState, spinner, num, modal, autosize, verifiedMark } from '../dom.js';
 import { composer } from '../components/post.js';
 import { cropImage } from '../components/cropper.js';
 import { postList, backHead } from './feed.js';
@@ -306,7 +306,7 @@ export async function groupView(ctx) {
             } });
           }
           const btn = menu.length ? h('button', { class: 'icon-btn', 'aria-label': 'Options', onclick: (e) => { e.stopPropagation(); popMenu(btn, menu); } }, icon('more')) : null;
-          return h('div', { class: 'user-row' }, h('a', { href: `/@${m.username}` }, avatar(m)), h('a', { href: `/@${m.username}`, class: 'meta' }, h('span', { class: 'name-line' }, h('b', null, m.displayName), m.founder ? icon('crown', 'crown') : null), h('small', null, memberChip(m), h('span', null, m.profession || `@${m.username}`))), roleTag(m), btn);
+          return h('div', { class: 'user-row' }, h('a', { href: `/@${m.username}` }, avatar(m)), h('a', { href: `/@${m.username}`, class: 'meta' }, h('span', { class: 'name-line' }, h('b', null, m.displayName), m.verified ? verifiedMark() : null, m.founder ? icon('crown', 'crown') : null), h('small', null, memberChip(m), h('span', null, m.profession || `@${m.username}`))), roleTag(m), btn);
         };
         content.replaceChildren(h('div', { class: 'explore-list', style: { marginTop: '12px' } }, d.members.map(row)));
       } catch (err) {

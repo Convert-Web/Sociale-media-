@@ -83,6 +83,17 @@ async function deleteUser(ctx, userId) {
     await t.run('DELETE FROM push_subscriptions WHERE user_id = ?', userId);
     await t.run('DELETE FROM friend_requests WHERE requester_id = ? OR addressee_id = ?', userId, userId);
     await t.run('DELETE FROM groupe_members WHERE user_id = ?', userId);
+    // v4 : événements organisés, adresses recommandées, invitations
+    for (const e of await t.all('SELECT cover FROM events WHERE owner_id = ? AND cover IS NOT NULL', userId)) media.push(e.cover);
+    for (const p of await t.all('SELECT photo FROM places WHERE author_id = ? AND photo IS NOT NULL', userId)) media.push(p.photo);
+    await t.run('DELETE FROM event_attendees WHERE user_id = ? OR event_id IN (SELECT id FROM events WHERE owner_id = ?)', userId, userId);
+    await t.run('DELETE FROM notifications WHERE event_id IN (SELECT id FROM events WHERE owner_id = ?)', userId);
+    await t.run('DELETE FROM events WHERE owner_id = ?', userId);
+    await t.run('DELETE FROM place_endorsements WHERE user_id = ? OR place_id IN (SELECT id FROM places WHERE author_id = ?)', userId, userId);
+    await t.run('DELETE FROM notifications WHERE place_id IN (SELECT id FROM places WHERE author_id = ?)', userId);
+    await t.run('DELETE FROM places WHERE author_id = ?', userId);
+    await t.run('DELETE FROM invitations WHERE inviter_id = ? AND used_by IS NULL', userId);
+    await t.run('UPDATE users SET invited_by = NULL WHERE invited_by = ?', userId);
     await t.run(`DELETE FROM likes WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
     await t.run(`DELETE FROM comments WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
     await t.run(`DELETE FROM notifications WHERE user_id = ? OR actor_id = ? OR post_id IN (${mine})`, userId, userId, userId);

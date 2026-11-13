@@ -5,6 +5,7 @@ const { createSession, destroySession, requireAuth } = require('../auth');
 const { fail, text, USERNAME_RE, EMAIL_RE, RESERVED } = require('../http');
 const { selfUser, counters } = require('../social');
 const { admitMember } = require('../membership');
+const { admissionMode, findInvitation, normalizeCode, foundersLeft, redeemInvitation, announceAdmissionRequest } = require('../admission');
 
 function validatePassword(pw) {
   if (typeof pw !== 'string' || pw.length < 8) fail(400, 'Le mot de passe doit contenir au moins 8 caractères.');
@@ -28,6 +29,8 @@ module.exports = function authRoutes(ctx) {
         stripeEnabled: Boolean(ctx.stripe),
         demoPayments: config.demoPayments,
         founderLimit: config.founderLimit,
+        foundersLeft: await foundersLeft(ctx),
+        admission: config.paidEntry ? 'paid' : await admissionMode(ctx),
         realtime: config.realtime,
       },
     });
@@ -46,20 +49,42 @@ module.exports = function authRoutes(ctx) {
     if (!EMAIL_RE.test(email)) fail(400, 'Adresse e-mail invalide.');
     if (await db.get('SELECT 1 FROM users WHERE username = ?', username)) fail(409, "Ce nom d'utilisateur est déjà pris.");
     if (await db.get('SELECT 1 FROM users WHERE email = ?', email)) fail(409, 'Un compte existe déjà avec cet e-mail.');
+    // Invitation d'un membre : vérifiée avant de créer le compte
+    let invitation = null;
+    if (!config.paidEntry && normalizeCode(req.body.invitation)) {
+      invitation = await findInvitation(ctx, req.body.invitation);
+      if (!invitation || invitation.used_by || !invitation.inviter_member) {
+        fail(400, 'Cette invitation n’est plus valable. Retirez le code pour simplement demander votre admission.');
+      }
+    }
+    const note = text(req.body.note, { field: 'Présentation', max: 500 });
 
     const hash = await hashPassword(password);
     // Sans ADMIN_EMAILS, le tout premier compte créé devient administrateur.
     const firstAccount = !config.adminEmails.length && !(await db.get('SELECT 1 FROM users WHERE is_admin = 1'));
     const isAdmin = config.adminEmails.includes(email) || firstAccount ? 1 : 0;
     const { lastInsertRowid } = await db.run(
-      `INSERT INTO users (username, email, password_hash, display_name, is_admin, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      username, email, hash, displayName, isAdmin, Date.now(),
+      `INSERT INTO users (username, email, password_hash, display_name, is_admin, created_at, admission_note)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      username, email, hash, displayName, isAdmin, Date.now(), note,
     );
     await createSession(ctx, res, lastInsertRowid);
-    const user = config.paidEntry
-      ? await db.get('SELECT * FROM users WHERE id = ?', lastInsertRowid)
-      : await admitMember(ctx, lastInsertRowid);
+    let user;
+    if (config.paidEntry) {
+      user = await db.get('SELECT * FROM users WHERE id = ?', lastInsertRowid);
+    } else if (invitation) {
+      user = (await redeemInvitation(ctx, lastInsertRowid, invitation)) || (await db.get('SELECT * FROM users WHERE id = ?', lastInsertRowid));
+    } else {
+      const noMemberYet = !(await db.get('SELECT 1 FROM users WHERE paid_at IS NOT NULL'));
+      if (isAdmin || noMemberYet || (await admissionMode(ctx)) === 'open') {
+        user = await admitMember(ctx, lastInsertRowid);
+      } else {
+        // Sur invitation : la demande est transmise à la Direction
+        await db.run('UPDATE users SET admission_requested_at = ? WHERE id = ?', Date.now(), lastInsertRowid);
+        user = await db.get('SELECT * FROM users WHERE id = ?', lastInsertRowid);
+        await announceAdmissionRequest(ctx, user);
+      }
+    }
     res.status(201).json({ user: selfUser(ctx, user) });
   });
 
@@ -73,7 +98,9 @@ module.exports = function authRoutes(ctx) {
       await db.run('UPDATE users SET is_admin = 1 WHERE id = ?', user.id);
     }
     await createSession(ctx, res, user.id);
-    const fresh = user.paid_at || config.paidEntry ? await db.get('SELECT * FROM users WHERE id = ?', user.id) : await admitMember(ctx, user.id);
+    // Entrée libre : un compte créé avant reste admis à la connexion. Sur invitation : il attend la Direction.
+    const autoAdmit = !user.paid_at && !config.paidEntry && (user.is_admin || (await admissionMode(ctx)) === 'open');
+    const fresh = autoAdmit ? await admitMember(ctx, user.id) : await db.get('SELECT * FROM users WHERE id = ?', user.id);
     res.json({ user: selfUser(ctx, fresh) });
   });
 

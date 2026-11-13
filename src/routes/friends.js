@@ -17,7 +17,7 @@ async function friendStatus(ctx, me, other) {
   return row.requester_id === me ? 'outgoing' : 'incoming';
 }
 
-const FRIEND_LIST = `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.bio, u.profession, u.city`;
+const FRIEND_LIST = `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.bio, u.profession, u.city`;
 
 module.exports = function friendRoutes(ctx) {
   const r = express.Router();

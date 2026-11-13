@@ -2,6 +2,7 @@
 const { newToken, sha256 } = require('./security');
 const { fail } = require('./http');
 const { admitMember } = require('./membership');
+const { admissionMode } = require('./admission');
 
 const SESSION_COOKIE = 'aurum_sid';
 const SESSION_TTL = 30 * 24 * 3600 * 1000; // 30 jours
@@ -40,7 +41,12 @@ function loadUser(ctx) {
          WHERE s.id = ? AND s.expires_at > ?`,
         sha256(token), now,
       );
-      if (row) req.user = row.paid_at || ctx.config.paidEntry ? row : await admitMember(ctx, row.id);
+      // Entrée libre : un compte non admis (ex. créé du temps de l'entrée payante) l'est à sa visite.
+      // Sur invitation, il attend la Direction ou un code.
+      if (row) {
+        const admit = !row.paid_at && !ctx.config.paidEntry && (row.is_admin || (await admissionMode(ctx)) === 'open');
+        req.user = admit ? await admitMember(ctx, row.id) : row;
+      }
       if (now - lastCleanup > 3600 * 1000) {
         lastCleanup = now;
         ctx.db.run('DELETE FROM sessions WHERE expires_at <= ?', now).catch(() => {});

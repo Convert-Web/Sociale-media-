@@ -33,6 +33,10 @@ const config = {
   priceCents: Number(env.ENTRY_PRICE_CENTS) || 999,
   currency: (env.CURRENCY || 'eur').toLowerCase(),
   founderLimit: Number(env.FOUNDER_LIMIT) || 100,
+  // Entrée gratuite : « invitation » (parrainage ou validation par la Direction) ou « open » (libre).
+  // Modifiable ensuite depuis la page Direction.
+  admissionDefault: env.ADMISSION === 'open' ? 'open' : 'invitation',
+  invitesPerMember: Number(env.INVITES_PER_MEMBER) || 3,
   // Droit d'entrée payant : désactivé par défaut (inscription gratuite).
   // Passez PAID_ENTRY=true pour exiger le paiement à l'inscription.
   paidEntry: bool(env.PAID_ENTRY, false),

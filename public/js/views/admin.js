@@ -97,8 +97,70 @@ async function reportsSection() {
   return host;
 }
 
+// Demandes d'admission et mode d'entrée (libre / sur invitation)
+async function admissionsSection(mode) {
+  const host = h('div', { class: 'admissions' });
+  const { admissions } = await api.get('/api/admin/admissions');
+  let current = mode;
+  const sw = h('input', { type: 'checkbox', class: 'switch', checked: current === 'invitation', 'aria-label': 'Entrée sur invitation' });
+  const status = h('small', { class: 'muted' });
+  const paintMode = () => {
+    status.textContent =
+      current === 'invitation'
+        ? 'Sans invitation, chaque inscription arrive ici pour validation.'
+        : 'Entrée libre : toute inscription devient membre immédiatement.';
+  };
+  paintMode();
+  sw.addEventListener('change', async () => {
+    try {
+      ({ admission: current } = await api.post('/api/admin/settings', { admission: sw.checked ? 'invitation' : 'open' }));
+      paintMode();
+      toast(current === 'invitation' ? 'Entrée sur invitation activée.' : 'Entrée libre activée.');
+    } catch (err) {
+      sw.checked = !sw.checked;
+      toast(err.message, 'error');
+    }
+  });
+  host.append(h('label', { class: 'admission-mode' }, h('span', { class: 'grow' }, h('b', null, 'Entrée sur invitation'), status), sw));
+
+  const pending = admissions.filter((a) => !a.declined);
+  const declined = admissions.filter((a) => a.declined);
+  const row = (a) => {
+    const act = async (action) => {
+      try {
+        await api.post(`/api/admin/admissions/${a.id}/${action}`);
+        toast(action === 'approve' ? `${a.displayName} est désormais membre.` : 'Demande refusée.');
+        card.remove();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    };
+    const card = h(
+      'div',
+      { class: 'admission-card' },
+      h('div', { class: 'admission-head' }, avatar(a, 'sm'), h('div', { class: 'grow' }, h('b', null, a.displayName), h('small', { class: 'muted' }, `@${a.username} · ${a.email} · ${timeAgo(a.createdAt)}`))),
+      a.note ? h('p', { class: 'admission-text' }, `« ${a.note} »`) : h('p', { class: 'muted small' }, 'Aucune présentation.'),
+      h(
+        'div',
+        { class: 'row-start' },
+        h('button', { class: 'btn btn-primary btn-sm', onclick: () => act('approve') }, icon('check', 'icon-sm'), 'Admettre'),
+        a.declined ? h('span', { class: 'tag' }, 'Refusée') : h('button', { class: 'btn btn-ghost btn-sm', onclick: () => act('decline') }, 'Refuser'),
+      ),
+    );
+    return card;
+  };
+  if (!pending.length) host.append(h('div', { class: 'reports-empty' }, icon('ticket', 'icon-sm'), 'Aucune demande en attente.'));
+  for (const a of pending) host.append(row(a));
+  if (declined.length) {
+    const more = h('details', { class: 'admissions-declined' }, h('summary', null, `Demandes refusées (${declined.length})`), declined.map(row));
+    host.append(more);
+  }
+  return host;
+}
+
 export async function adminView(ctx) {
   const data = await api.get('/api/admin/overview');
+  const admissions = data.config.paidEntry ? null : await admissionsSection(data.config.admission);
   const reports = await reportsSection();
   const t = data.totals;
   const conversion = t.members + t.pending ? Math.round((t.members / (t.members + t.pending)) * 100) : 0;
@@ -172,6 +234,8 @@ export async function adminView(ctx) {
       kpi('Commentaires', num(t.comments)),
       kpi('Messages privés', num(t.messages)),
     ),
+    admissions ? h('div', { class: 'section-title' }, `Demandes d’admission${data.totals.admissions ? ` · ${data.totals.admissions}` : ''}`) : null,
+    admissions,
     h('div', { class: 'section-title' }, 'Signalements'),
     reports,
     h('div', { class: 'section-title' }, 'Nouveaux membres — 14 jours'),

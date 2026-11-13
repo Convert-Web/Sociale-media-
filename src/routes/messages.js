@@ -33,7 +33,7 @@ module.exports = function messageRoutes(ctx) {
          FROM messages WHERE sender_id = ? OR recipient_id = ?
          GROUP BY other_id
        )
-       SELECT conv.other_id AS user_id, u.username, u.display_name, u.avatar, u.member_number,
+       SELECT conv.other_id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at,
               m.body, m.created_at, m.sender_id,
               (SELECT COUNT(*) FROM messages x WHERE x.sender_id = conv.other_id AND x.recipient_id = ? AND x.read_at IS NULL) AS unread
        FROM conv

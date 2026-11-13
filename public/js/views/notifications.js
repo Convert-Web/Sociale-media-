@@ -12,12 +12,28 @@ const TYPES = {
   group_invite: { icon: 'groups', text: (n) => `vous invite à rejoindre « ${n.group?.name || 'un groupe'} »` },
   group_request: { icon: 'groups', text: (n) => `souhaite rejoindre « ${n.group?.name || 'votre groupe'} »` },
   group_accept: { icon: 'groups', text: (n) => `vous a accueilli dans « ${n.group?.name || 'le groupe'} »` },
+  event_join: { icon: 'calendar', text: (n) => `participera à « ${n.event?.title || 'votre événement'} »` },
+  place_endorse: { icon: 'book', text: (n) => `recommande aussi « ${n.place?.name || 'votre adresse'} »` },
+  invite_accepted: { icon: 'ticket', text: 'a accepté votre invitation et rejoint le cercle' },
+  admission_request: { icon: 'ticket', text: 'demande à rejoindre le cercle' },
 };
 
 function notifEl(n) {
   const t = TYPES[n.type] || { icon: 'bell', text: 'a interagi avec vous' };
   const text = typeof t.text === 'function' ? t.text(n) : t.text;
-  const href = n.post ? `/p/${n.post.id}` : n.type === 'friend_request' ? '/amis' : n.group ? `/groupes/${n.group.id}` : `/@${n.actor.username}`;
+  const href = n.post
+    ? `/p/${n.post.id}`
+    : n.type === 'friend_request'
+      ? '/amis'
+      : n.type === 'admission_request'
+        ? '/admin'
+        : n.event
+          ? `/agenda/${n.event.id}`
+          : n.place
+            ? `/carnet/${n.place.id}`
+            : n.group
+              ? `/groupes/${n.group.id}`
+              : `/@${n.actor.username}`;
   return h(
     'a',
     { href, class: `notif${n.read ? '' : ' unread'}` },
