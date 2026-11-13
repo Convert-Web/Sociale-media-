@@ -3,10 +3,25 @@ import { store } from '../store.js';
 import { navigate } from '../router.js';
 import {
   h, icon, avatar, nameLine, memberChip, timeAgo, fullDate, richText, toast, popMenu,
-  confirmDialog, lightbox, autosize, spinner, clear, shrinkImage, TOO_BIG_GIF,
+  confirmDialog, lightbox, autosize, spinner, clear, shrinkImage, TOO_BIG_GIF, modal, num,
 } from '../dom.js';
+import { reportDialog } from './report.js';
+import { attachMentions } from './mentions.js';
 
 const MAX_POST = 2000;
+const MAX_PHOTOS = 6;
+const MAX_UPLOAD = 4.2 * 1024 * 1024; // limite d'une requête sur l'hébergement
+
+// Réactions : la première est celle d'un simple toucher.
+export const REACTIONS = [
+  ['love', '❤️', 'J’adore'],
+  ['like', '👍', 'J’aime'],
+  ['bravo', '👏', 'Bravo'],
+  ['fire', '🔥', 'Génial'],
+  ['haha', '😂', 'Drôle'],
+  ['wow', '😮', 'Impressionnant'],
+];
+export const EMOJI = Object.fromEntries(REACTIONS.map(([k, e]) => [k, e]));
 
 async function copy(text) {
   try {
@@ -18,44 +33,181 @@ async function copy(text) {
 }
 
 // ---------------------------------------------------------------------------
+// Photos : une seule, ou un carrousel qui se fait défiler du doigt
+// ---------------------------------------------------------------------------
+function gallery(images) {
+  if (images.length === 1) {
+    return h('div', { class: 'post-image', onclick: () => lightbox(images[0]) }, h('img', { src: images[0], alt: '', loading: 'lazy', decoding: 'async' }));
+  }
+  const track = h(
+    'div',
+    { class: 'carousel-track' },
+    images.map((src) => h('div', { class: 'carousel-slide', onclick: () => lightbox(src) }, h('img', { src, alt: '', loading: 'lazy', decoding: 'async' }))),
+  );
+  const dots = h('div', { class: 'carousel-dots' }, images.map((_, i) => h('i', { class: i === 0 ? 'on' : '' })));
+  const counter = h('span', { class: 'carousel-count' }, `1/${images.length}`);
+  const go = (dir) => track.scrollBy({ left: dir * track.clientWidth, behavior: 'smooth' });
+  const prev = h('button', { class: 'carousel-nav prev', type: 'button', 'aria-label': 'Photo précédente', onclick: () => go(-1) }, icon('chevronLeft'));
+  const next = h('button', { class: 'carousel-nav next', type: 'button', 'aria-label': 'Photo suivante', onclick: () => go(1) }, icon('chevron'));
+  const paint = () => {
+    const i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+    counter.textContent = `${i + 1}/${images.length}`;
+    [...dots.children].forEach((d, j) => d.classList.toggle('on', j === i));
+    prev.hidden = i === 0;
+    next.hidden = i === images.length - 1;
+  };
+  track.addEventListener('scroll', () => requestAnimationFrame(paint), { passive: true });
+  prev.hidden = true;
+  return h('div', { class: 'carousel' }, track, counter, dots, prev, next);
+}
+
+// ---------------------------------------------------------------------------
+// Réactions
+// ---------------------------------------------------------------------------
+let openPicker = null;
+function closePicker() {
+  openPicker?.remove();
+  openPicker = null;
+}
+document.addEventListener('pointerdown', (e) => {
+  if (openPicker && !openPicker.contains(e.target)) closePicker();
+});
+
+function reactorsModal(postId) {
+  const body = h('div', { class: 'modal-body', style: { padding: '8px' } }, spinner());
+  modal('Réactions', body);
+  api
+    .get(`/api/posts/${postId}/likes`)
+    .then(({ users }) => {
+      clear(body);
+      for (const u of users) {
+        body.append(
+          h(
+            'a',
+            { href: `/@${u.username}`, class: 'user-row' },
+            h('span', { class: 'reactor' }, avatar(u), h('span', { class: 'reactor-emoji' }, EMOJI[u.reaction] || '❤️')),
+            h('span', { class: 'meta' }, nameLine(u, { link: false }), h('small', null, `@${u.username}`)),
+          ),
+        );
+      }
+    })
+    .catch((err) => body.replaceChildren(h('p', { class: 'muted', style: { padding: '12px' } }, err.message)));
+}
+
+function reactionControl(post) {
+  const btn = h('button', { class: 'act react-btn', 'aria-label': 'Réagir' });
+  const faces = h('button', { class: 'reaction-faces', type: 'button', 'aria-label': 'Voir les réactions', onclick: () => reactorsModal(post.id) });
+
+  const paint = () => {
+    btn.replaceChildren(post.myReaction ? h('span', { class: 'react-emoji' }, EMOJI[post.myReaction]) : icon('heart'), h('span', null, post.likeCount ? num(post.likeCount) : ''));
+    btn.classList.toggle('liked', Boolean(post.myReaction));
+    btn.setAttribute('aria-pressed', String(Boolean(post.myReaction)));
+    const top = (post.reactions || []).slice(0, 3);
+    faces.replaceChildren(...top.map((r) => h('span', null, EMOJI[r.type] || '❤️')));
+    faces.hidden = !top.length;
+  };
+
+  const send = async (reaction) => {
+    const before = { ...post, reactions: [...(post.reactions || [])] };
+    // Mise à jour immédiate, confirmée par le serveur
+    if (reaction) {
+      if (!post.myReaction) post.likeCount += 1;
+      post.myReaction = reaction;
+      btn.classList.remove('pop');
+      void btn.offsetWidth;
+      btn.classList.add('pop');
+    } else {
+      post.likeCount = Math.max(0, post.likeCount - 1);
+      post.myReaction = null;
+    }
+    paint();
+    try {
+      const res = reaction ? await api.post(`/api/posts/${post.id}/like`, { reaction }) : await api.del(`/api/posts/${post.id}/like`);
+      Object.assign(post, { myReaction: res.myReaction, likeCount: res.likeCount, reactions: res.reactions, liked: res.liked });
+    } catch (err) {
+      Object.assign(post, before);
+      toast(err.message, 'error');
+    }
+    paint();
+  };
+
+  const showPicker = () => {
+    closePicker();
+    const picker = h(
+      'div',
+      { class: 'reaction-picker', role: 'menu' },
+      REACTIONS.map(([key, emoji, label], i) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            class: post.myReaction === key ? 'on' : '',
+            title: label,
+            'aria-label': label,
+            style: { animationDelay: `${i * 25}ms` },
+            onclick: (e) => {
+              e.stopPropagation();
+              closePicker();
+              send(post.myReaction === key ? null : key);
+            },
+          },
+          emoji,
+        ),
+      ),
+    );
+    document.body.append(picker);
+    const r = btn.getBoundingClientRect();
+    const w = picker.offsetWidth;
+    const ph = picker.offsetHeight;
+    // Au-dessus du bouton, sinon en dessous, et toujours dans l'écran
+    const above = r.top - ph - 8;
+    const top = above >= 10 ? above : r.bottom + 8;
+    picker.style.left = `${Math.max(10, Math.min(r.left - 8, innerWidth - w - 10))}px`;
+    picker.style.top = `${Math.max(10, Math.min(top, innerHeight - ph - 10))}px`;
+    openPicker = picker;
+  };
+
+  // Toucher : ❤️ / retirer. Appui long (mobile) ou survol prolongé (ordinateur) : choix de la réaction.
+  let pressTimer = null;
+  let longPressed = false;
+  btn.addEventListener('pointerdown', (e) => {
+    longPressed = false;
+    if (e.pointerType === 'mouse') return;
+    pressTimer = setTimeout(() => {
+      longPressed = true;
+      navigator.vibrate?.(10);
+      showPicker();
+    }, 420);
+  });
+  const cancelPress = () => clearTimeout(pressTimer);
+  btn.addEventListener('pointerup', cancelPress);
+  btn.addEventListener('pointerleave', cancelPress);
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  let hoverTimer = null;
+  btn.addEventListener('mouseenter', () => {
+    hoverTimer = setTimeout(showPicker, 550);
+  });
+  btn.addEventListener('mouseleave', () => clearTimeout(hoverTimer));
+  btn.addEventListener('click', () => {
+    clearTimeout(hoverTimer);
+    if (longPressed) return;
+    closePicker();
+    send(post.myReaction ? null : REACTIONS[0][0]);
+  });
+
+  paint();
+  return { btn, faces };
+}
+
+// ---------------------------------------------------------------------------
 // Carte de publication
 // ---------------------------------------------------------------------------
 export function postCard(post, { expanded = false } = {}) {
   const link = `/p/${post.id}`;
+  post.images = post.images || (post.image ? [post.image] : []);
+  const el = h('article', { class: `post${expanded ? ' big' : ''}`, dataset: { id: post.id } });
 
-  const likeCount = h('span', null, post.likeCount || '');
-  const likeBtn = h(
-    'button',
-    { class: `act${post.liked ? ' liked' : ''}`, 'aria-label': "J'aime", 'aria-pressed': String(post.liked) },
-    icon('heart'),
-    likeCount,
-  );
-  likeBtn.addEventListener('click', async () => {
-    const was = post.liked;
-    post.liked = !was;
-    post.likeCount += was ? -1 : 1;
-    render();
-    if (!was) {
-      likeBtn.classList.remove('pop');
-      void likeBtn.offsetWidth;
-      likeBtn.classList.add('pop');
-    }
-    try {
-      const res = was ? await api.del(`/api/posts/${post.id}/like`) : await api.post(`/api/posts/${post.id}/like`);
-      post.liked = res.liked;
-      post.likeCount = res.likeCount;
-    } catch (err) {
-      post.liked = was;
-      post.likeCount += was ? 1 : -1;
-      toast(err.message, 'error');
-    }
-    render();
-  });
-  function render() {
-    likeBtn.classList.toggle('liked', post.liked);
-    likeBtn.setAttribute('aria-pressed', String(post.liked));
-    likeCount.textContent = post.likeCount || '';
-  }
+  const { btn: reactBtn, faces } = reactionControl(post);
 
   const commentCount = h('span', null, post.commentCount || '');
   const commentBtn = h('button', { class: 'act', 'aria-label': 'Commenter' }, icon('comment'), commentCount);
@@ -85,12 +237,78 @@ export function postCard(post, { expanded = false } = {}) {
   const shareBtn = h('button', { class: 'act', 'aria-label': 'Copier le lien' }, icon('link'));
   shareBtn.addEventListener('click', () => copy(`${location.origin}${link}`));
 
-  const el = h('article', { class: `post${expanded ? ' big' : ''}`, dataset: { id: post.id } });
+  const saveBtn = h('button', { class: `act save-btn${post.saved ? ' saved' : ''}`, 'aria-label': 'Enregistrer', 'aria-pressed': String(post.saved) }, icon('bookmark'));
+  saveBtn.addEventListener('click', async () => {
+    const was = post.saved;
+    post.saved = !was;
+    saveBtn.classList.toggle('saved', post.saved);
+    saveBtn.setAttribute('aria-pressed', String(post.saved));
+    try {
+      if (was) await api.del(`/api/posts/${post.id}/save`);
+      else await api.post(`/api/posts/${post.id}/save`);
+      toast(was ? 'Retiré de vos enregistrements.' : 'Enregistré.');
+      store.emit('saved:changed', { id: post.id, saved: post.saved });
+    } catch (err) {
+      post.saved = was;
+      saveBtn.classList.toggle('saved', was);
+      toast(err.message, 'error');
+    }
+  });
+
+  const bodyEl = h('div', { class: 'post-body' });
+  const edited = h('span', { class: 'edited', hidden: !post.editedAt, title: post.editedAt ? `Modifié ${fullDate(post.editedAt)}` : '' }, ' · modifié');
+  const paintBody = () => {
+    bodyEl.replaceChildren(richText(post.body || ''));
+    bodyEl.hidden = !post.body;
+    edited.hidden = !post.editedAt;
+  };
+  paintBody();
+
+  const editPost = () => {
+    const ta = h('textarea', { class: 'textarea', maxlength: MAX_POST, rows: 5 });
+    ta.value = post.body || '';
+    const save = h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Enregistrer');
+    const m = modal(
+      'Modifier la publication',
+      h(
+        'form',
+        {
+          class: 'modal-body',
+          style: { display: 'grid', gap: '14px' },
+          onsubmit: async (e) => {
+            e.preventDefault();
+            save.disabled = true;
+            try {
+              const res = await api.patch(`/api/posts/${post.id}`, { body: ta.value });
+              Object.assign(post, { body: res.post.body, editedAt: res.post.editedAt });
+              paintBody();
+              m.close();
+              toast('Publication modifiée.');
+            } catch (err) {
+              save.disabled = false;
+              toast(err.message, 'error');
+            }
+          },
+        },
+        ta,
+        save,
+      ),
+    );
+    autosize(ta);
+    attachMentions(ta);
+  };
+
   const menuBtn = h('button', { class: 'icon-btn menu-btn', 'aria-label': 'Options' }, icon('more'));
   menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const items = [{ icon: 'link', label: 'Copier le lien', action: () => copy(`${location.origin}${link}`) }];
-    if (!post.mine) items.push({ icon: 'mail', label: `Écrire à ${post.author.displayName}`, action: () => navigate(`/messages/${post.author.username}`) });
+    const items = [];
+    if (post.mine) items.push({ icon: 'pen', label: 'Modifier', action: editPost });
+    items.push({ icon: 'bookmark', label: post.saved ? 'Retirer des enregistrements' : 'Enregistrer', action: () => saveBtn.click() });
+    items.push({ icon: 'link', label: 'Copier le lien', action: () => copy(`${location.origin}${link}`) });
+    if (!post.mine) {
+      items.push({ icon: 'mail', label: `Écrire à ${post.author.displayName}`, action: () => navigate(`/messages/${post.author.username}`) });
+      items.push({ icon: 'flag', label: 'Signaler la publication', action: () => reportDialog('post', post.id, 'Signaler la publication') });
+    }
     if (post.canDelete) {
       items.push({
         icon: 'trash',
@@ -127,15 +345,13 @@ export function postCard(post, { expanded = false } = {}) {
           { class: 'who' },
           nameLine(post.author),
           memberChip(post.author),
-          h('span', { class: 'handle' }, `@${post.author.username} · `, h('a', { href: link, title: fullDate(post.createdAt) }, timeAgo(post.createdAt))),
+          h('span', { class: 'handle' }, `@${post.author.username} · `, h('a', { href: link, title: fullDate(post.createdAt) }, timeAgo(post.createdAt)), edited),
         ),
         menuBtn,
       ),
-      post.body ? h('div', { class: 'post-body' }, richText(post.body)) : null,
-      post.image
-        ? h('div', { class: 'post-image', onclick: () => lightbox(post.image) }, h('img', { src: post.image, alt: '', loading: 'lazy', decoding: 'async' }))
-        : null,
-      h('div', { class: 'post-actions' }, likeBtn, commentBtn, shareBtn),
+      bodyEl,
+      post.images.length ? gallery(post.images) : null,
+      h('div', { class: 'post-actions' }, reactBtn, faces, commentBtn, shareBtn, h('span', { class: 'grow' }), saveBtn),
       commentsHost,
     ),
   ]);
@@ -152,8 +368,10 @@ function append(el, kids) {
 // Commentaires
 // ---------------------------------------------------------------------------
 function commentEl(c, onDelete) {
-  const del = c.canDelete
-    ? h(
+  const actions = [];
+  if (c.canDelete) {
+    actions.push(
+      h(
         'button',
         {
           onclick: async () => {
@@ -167,8 +385,12 @@ function commentEl(c, onDelete) {
           },
         },
         'Supprimer',
-      )
-    : null;
+      ),
+    );
+  }
+  if (c.author.id !== store.user.id) {
+    actions.push(h('button', { onclick: () => reportDialog('comment', c.id, 'Signaler le commentaire') }, 'Signaler'));
+  }
   return h(
     'div',
     { class: 'comment', dataset: { id: c.id } },
@@ -182,7 +404,7 @@ function commentEl(c, onDelete) {
         h('div', { class: 'post-head' }, h('div', { class: 'who' }, nameLine(c.author), memberChip(c.author))),
         h('div', { class: 'comment-body' }, richText(c.body)),
       ),
-      h('div', { class: 'comment-meta' }, h('span', { title: fullDate(c.createdAt) }, timeAgo(c.createdAt)), del),
+      h('div', { class: 'comment-meta' }, h('span', { title: fullDate(c.createdAt) }, timeAgo(c.createdAt)), actions),
     ),
   );
 }
@@ -223,6 +445,7 @@ function commentsSection(post, onCount) {
     ta,
     send,
   );
+  attachMentions(ta, { placement: 'above' });
   ta.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
@@ -246,10 +469,10 @@ function commentsSection(post, onCount) {
 }
 
 // ---------------------------------------------------------------------------
-// Éditeur de publication
+// Éditeur de publication (texte + jusqu'à 6 photos)
 // ---------------------------------------------------------------------------
 export function composer({ onPosted, placeholder } = {}) {
-  let file = null;
+  let files = [];
   const ta = h('textarea', {
     placeholder: placeholder || 'Partagez une idée, une adresse, une réussite…',
     maxlength: MAX_POST,
@@ -258,41 +481,59 @@ export function composer({ onPosted, placeholder } = {}) {
   });
   const fit = autosize(ta);
   const counter = h('span', { class: 'char-count' });
-  const previewHost = h('div');
-  const fileInput = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true });
+  const previewHost = h('div', { class: 'preview-grid' });
+  const fileInput = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', multiple: true, hidden: true });
   const submit = h('button', { class: 'btn btn-primary btn-sm', type: 'submit', disabled: true }, 'Publier');
+  const addBtn = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Ajouter des photos', onclick: () => fileInput.click() }, icon('image'));
 
   const update = () => {
     const len = ta.value.length;
     counter.textContent = len > MAX_POST - 300 ? `${MAX_POST - len}` : '';
     counter.classList.toggle('warn', len > MAX_POST - 50);
-    submit.disabled = !ta.value.trim() && !file;
+    submit.disabled = !ta.value.trim() && !files.length;
+    addBtn.disabled = files.length >= MAX_PHOTOS;
   };
   ta.addEventListener('input', update);
 
-  const setFile = (f) => {
-    clear(previewHost);
-    file = f;
-    if (f) {
-      if (f.type === 'image/gif' && f.size > TOO_BIG_GIF) {
-        toast('GIF trop lourd (4 Mo maximum).', 'error');
-        file = null;
-      } else {
-        const url = URL.createObjectURL(f);
-        previewHost.append(
-          h(
-            'div',
-            { class: 'preview' },
-            h('img', { src: url, alt: '' }),
-            h('button', { class: 'icon-btn', type: 'button', 'aria-label': "Retirer l'image", onclick: () => setFile(null) }, icon('x')),
-          ),
-        );
-      }
-    }
-    fileInput.value = '';
+  const paintPreviews = () => {
+    previewHost.replaceChildren(
+      ...files.map((f, i) =>
+        h(
+          'div',
+          { class: 'preview' },
+          h('img', { src: f.url, alt: '' }),
+          h('button', {
+            class: 'icon-btn',
+            type: 'button',
+            'aria-label': 'Retirer la photo',
+            onclick: () => {
+              URL.revokeObjectURL(f.url);
+              files.splice(i, 1);
+              paintPreviews();
+            },
+          }, icon('x')),
+        ),
+      ),
+    );
+    previewHost.dataset.count = String(files.length);
     update();
   };
-  fileInput.addEventListener('change', () => setFile(fileInput.files[0] || null));
+  const addFiles = (list) => {
+    for (const f of list) {
+      if (files.length >= MAX_PHOTOS) {
+        toast(`${MAX_PHOTOS} photos maximum par publication.`, 'error');
+        break;
+      }
+      if (f.type === 'image/gif' && f.size > TOO_BIG_GIF) {
+        toast('GIF trop lourd (4 Mo maximum).', 'error');
+        continue;
+      }
+      files.push({ file: f, url: URL.createObjectURL(f) });
+    }
+    fileInput.value = '';
+    paintPreviews();
+  };
+  fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
 
   const form = h(
     'form',
@@ -301,18 +542,23 @@ export function composer({ onPosted, placeholder } = {}) {
       onsubmit: async (e) => {
         e.preventDefault();
         if (submit.disabled) return;
-        const fd = new FormData();
         submit.disabled = true;
         submit.textContent = 'Publication…';
         try {
+          const fd = new FormData();
           fd.append('body', ta.value);
-          if (file) {
+          let total = 0;
+          for (const { file } of files) {
             const small = await shrinkImage(file, 1600);
-            fd.append('image', small, small.name || 'photo');
+            total += small.size;
+            fd.append('images', small, small.name || 'photo');
           }
+          if (total > MAX_UPLOAD) throw new Error('Photos trop lourdes : retirez-en une ou deux.');
           const { post } = await api.post('/api/posts', fd);
           ta.value = '';
-          setFile(null);
+          files.forEach((f) => URL.revokeObjectURL(f.url));
+          files = [];
+          paintPreviews();
           fit();
           toast('Publié dans le Salon.');
           store.emit('post:created', post);
@@ -334,23 +580,19 @@ export function composer({ onPosted, placeholder } = {}) {
       h(
         'div',
         { class: 'composer-bar' },
-        h(
-          'div',
-          { class: 'composer-tools' },
-          h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Ajouter une image', onclick: () => fileInput.click() }, icon('image')),
-          fileInput,
-        ),
+        h('div', { class: 'composer-tools' }, addBtn, fileInput),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '14px' } }, counter, submit),
       ),
     ),
   );
+  attachMentions(ta);
   ta.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) form.requestSubmit();
   });
   // Coller une image directement
   ta.addEventListener('paste', (e) => {
-    const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
-    if (item) setFile(item.getAsFile());
+    const imgs = [...(e.clipboardData?.items || [])].filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile());
+    if (imgs.length) addFiles(imgs);
   });
   form.focusInput = () => ta.focus();
   return form;

@@ -209,6 +209,50 @@ export function settingsView(ctx) {
     ),
   );
 
+  // --- Membres bloqués ---------------------------------------------------------
+  const blockedList = h('div', { class: 'blocked-list' }, h('p', { class: 'muted small' }, 'Chargement…'));
+  const paintBlocked = async () => {
+    try {
+      const { users } = await api.get('/api/me/blocked');
+      if (!users.length) {
+        blockedList.replaceChildren(h('p', { class: 'muted small' }, 'Vous n’avez bloqué personne.'));
+        return;
+      }
+      blockedList.replaceChildren(
+        ...users.map((b) =>
+          h(
+            'div',
+            { class: 'user-row' },
+            avatar(b, 'sm'),
+            h('span', { class: 'meta' }, h('b', null, b.displayName), h('small', null, `@${b.username}`)),
+            h('button', {
+              class: 'btn btn-secondary btn-sm',
+              onclick: async () => {
+                try {
+                  await api.del(`/api/users/${encodeURIComponent(b.username)}/block`);
+                  toast(`${b.displayName} est débloqué.`);
+                  paintBlocked();
+                } catch (err) {
+                  toast(err.message, 'error');
+                }
+              },
+            }, 'Débloquer'),
+          ),
+        ),
+      );
+    } catch (err) {
+      blockedList.replaceChildren(h('p', { class: 'muted small' }, err.message));
+    }
+  };
+  paintBlocked();
+  const blockedCard = h(
+    'div',
+    { class: 'card' },
+    h('h2', null, 'Membres bloqués'),
+    h('p', { class: 'desc' }, 'Ils ne voient plus votre profil ni vos publications, et ne peuvent plus vous écrire.'),
+    blockedList,
+  );
+
   ctx.title = 'Réglages — AURUM';
-  return h('div', null, backHead('Réglages', `@${u.username}`), h('div', { class: 'settings' }, profileForm, membership, security, data));
+  return h('div', null, backHead('Réglages', `@${u.username}`), h('div', { class: 'settings' }, profileForm, membership, security, blockedCard, data));
 }

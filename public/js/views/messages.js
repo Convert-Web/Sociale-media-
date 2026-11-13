@@ -186,10 +186,12 @@ export function messagesView(ctx) {
         ),
       ),
       box,
-      form,
+      data.blocked
+        ? h('div', { class: 'dm-blocked' }, icon('ban', 'icon-sm'), 'Vous ne pouvez plus échanger avec ce membre.')
+        : form,
     );
     scrollDown();
-    if (window.matchMedia('(min-width: 721px)').matches) ta.focus();
+    if (!data.blocked && window.matchMedia('(min-width: 721px)').matches) ta.focus();
     loadList();
   }
 

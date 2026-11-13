@@ -2,16 +2,18 @@
 const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, intParam } = require('../http');
-const { POST_SELECT, serializePost, publicUser, authorOf, notify, retractNotification } = require('../social');
+const { POST_SELECT, NOT_BLOCKED, serializePost, publicUser, authorOf, notify, retractNotification, isBlocked } = require('../social');
 
 // Le premier paramètre de chaque requête USER_LIST est l'identifiant du membre qui consulte.
 const USER_LIST = `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.bio, u.profession, u.city,
   EXISTS(SELECT 1 FROM follows fx WHERE fx.follower_id = ? AND fx.followee_id = u.id) AS is_following`;
+// Exclut les membres bloqués (dans un sens ou dans l'autre) : deux paramètres, l'identifiant du lecteur.
+const USER_NOT_BLOCKED = `u.id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)`;
 
 module.exports = function userRoutes(ctx) {
   const r = express.Router();
   const { db } = ctx;
-  r.use(['/users', '/search', '/suggestions', '/trending', '/members'], requireMember);
+  r.use(['/users', '/search', '/suggestions', '/trending', '/members', '/me/progress'], requireMember);
 
   const listUser = (row, viewer) => ({
     ...authorOf(ctx, row),
@@ -23,13 +25,22 @@ module.exports = function userRoutes(ctx) {
   });
 
   const findMember = async (username) => {
-    const u = typeof username === 'string' && await db.get('SELECT * FROM users WHERE username = ? AND paid_at IS NOT NULL', username);
+    const u = typeof username === 'string' && (await db.get('SELECT * FROM users WHERE username = ? AND paid_at IS NOT NULL', username));
     if (!u) fail(404, 'Ce membre est introuvable.');
     return u;
   };
 
+  // Profil visible : introuvable pour qui a été bloqué par ce membre.
+  const findVisible = async (username, viewer) => {
+    const u = await findMember(username);
+    if (u.id !== viewer.id && (await db.get('SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_id = ?', u.id, viewer.id))) {
+      fail(404, 'Ce membre est introuvable.');
+    }
+    return u;
+  };
+
   r.get('/users/:username', async (req, res) => {
-    const u = await findMember(req.params.username);
+    const u = await findVisible(req.params.username, req.user);
     const me = req.user.id;
     const row = await db.get(
       `SELECT
@@ -37,47 +48,66 @@ module.exports = function userRoutes(ctx) {
          (SELECT COUNT(*) FROM follows f JOIN users x ON x.id = f.follower_id WHERE f.followee_id = ?) AS followers,
          (SELECT COUNT(*) FROM follows f JOIN users x ON x.id = f.followee_id WHERE f.follower_id = ?) AS following,
          (SELECT COUNT(*) FROM likes l JOIN posts p ON p.id = l.post_id WHERE p.user_id = ?) AS likes,
+         (SELECT COUNT(*) FROM posts p WHERE p.user_id = ? AND p.image IS NOT NULL) AS photos,
          EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS is_following,
-         EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS follows_you`,
-      u.id, u.id, u.id, u.id, me, u.id, u.id, me,
+         EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS follows_you,
+         EXISTS(SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_id = ?) AS blocked`,
+      u.id, u.id, u.id, u.id, u.id, me, u.id, u.id, me, me, u.id,
     );
-    const { is_following: isFollowing, follows_you: followsYou, ...stats } = row;
     res.json({
       user: {
         ...publicUser(ctx, u),
-        stats: { posts: stats.posts, followers: stats.followers, following: stats.following, likes: stats.likes },
+        stats: { posts: row.posts, followers: row.followers, following: row.following, likes: row.likes, photos: row.photos },
         isMe: u.id === me,
-        isFollowing: Boolean(isFollowing),
-        followsYou: Boolean(followsYou),
+        isFollowing: Boolean(row.is_following),
+        followsYou: Boolean(row.follows_you),
+        blocked: Boolean(row.blocked),
       },
     });
   });
 
   r.get('/users/:username/posts', async (req, res) => {
-    const u = await findMember(req.params.username);
+    const u = await findVisible(req.params.username, req.user);
     const before = intParam(req.query.before);
     const limit = 15;
     const rows = await db.all(
-      `${POST_SELECT} WHERE p.user_id = ? AND (? IS NULL OR p.id < ?) ORDER BY p.id DESC LIMIT ?`,
+      `${POST_SELECT} WHERE p.user_id = ? AND (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} ORDER BY p.id DESC LIMIT ?`,
       req.user.id, u.id, before, before, limit,
     );
     res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)), hasMore: rows.length === limit });
   });
 
+  // Toutes les photos publiées par un membre (grille du profil)
+  r.get('/users/:username/photos', async (req, res) => {
+    const u = await findVisible(req.params.username, req.user);
+    if (u.id !== req.user.id && (await isBlocked(ctx, req.user.id, u.id))) return res.json({ photos: [] });
+    const rows = await db.all(
+      `SELECT post_id, url FROM (
+         SELECT p.id AS post_id, p.image AS url, p.id * 100 AS k FROM posts p WHERE p.user_id = ? AND p.image IS NOT NULL
+         UNION ALL
+         SELECT pm.post_id, pm.url, pm.post_id * 100 + pm.position FROM post_media pm JOIN posts p ON p.id = pm.post_id WHERE p.user_id = ?
+       ) ORDER BY k DESC LIMIT 90`,
+      u.id, u.id,
+    );
+    res.json({ photos: rows.map((row) => ({ postId: row.post_id, url: row.url })) });
+  });
+
   r.get('/users/:username/:relation', async (req, res) => {
     const { relation } = req.params;
     if (relation !== 'followers' && relation !== 'following') fail(404, 'Introuvable.');
-    const u = await findMember(req.params.username);
+    const u = await findVisible(req.params.username, req.user);
+    const me = req.user.id;
     const rows =
       relation === 'followers'
-        ? await db.all(`${USER_LIST} FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.followee_id = ? ORDER BY f.created_at DESC LIMIT 200`, req.user.id, u.id)
-        : await db.all(`${USER_LIST} FROM follows f JOIN users u ON u.id = f.followee_id WHERE f.follower_id = ? ORDER BY f.created_at DESC LIMIT 200`, req.user.id, u.id);
+        ? await db.all(`${USER_LIST} FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.followee_id = ? AND ${USER_NOT_BLOCKED} ORDER BY f.created_at DESC LIMIT 200`, me, u.id, me, me)
+        : await db.all(`${USER_LIST} FROM follows f JOIN users u ON u.id = f.followee_id WHERE f.follower_id = ? AND ${USER_NOT_BLOCKED} ORDER BY f.created_at DESC LIMIT 200`, me, u.id, me, me);
     res.json({ users: rows.map((row) => listUser(row, req.user)) });
   });
 
   r.post('/users/:username/follow', async (req, res) => {
-    const u = await findMember(req.params.username);
+    const u = await findVisible(req.params.username, req.user);
     if (u.id === req.user.id) fail(400, 'Vous ne pouvez pas vous suivre vous-même.');
+    if (await isBlocked(ctx, req.user.id, u.id)) fail(403, 'Débloquez ce membre pour le suivre.');
     const { changes } = await db.run(
       'INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)',
       req.user.id, u.id, Date.now(),
@@ -93,23 +123,71 @@ module.exports = function userRoutes(ctx) {
     res.json({ following: false });
   });
 
+  // Bloquer : plus d'abonnement dans un sens ni dans l'autre, contenus masqués, messages impossibles.
+  r.post('/users/:username/block', async (req, res) => {
+    const u = await findMember(req.params.username);
+    if (u.id === req.user.id) fail(400, 'Vous ne pouvez pas vous bloquer vous-même.');
+    const me = req.user.id;
+    await db.transaction(async (t) => {
+      await t.run('INSERT OR IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)', me, u.id, Date.now());
+      await t.run('DELETE FROM follows WHERE (follower_id = ? AND followee_id = ?) OR (follower_id = ? AND followee_id = ?)', me, u.id, u.id, me);
+      await t.run('DELETE FROM notifications WHERE (user_id = ? AND actor_id = ?) OR (user_id = ? AND actor_id = ?)', me, u.id, u.id, me);
+    });
+    res.json({ blocked: true });
+  });
+
+  r.delete('/users/:username/block', async (req, res) => {
+    const u = await findMember(req.params.username);
+    await db.run('DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?', req.user.id, u.id);
+    res.json({ blocked: false });
+  });
+
+  // Membres bloqués (réglages)
+  r.get('/me/blocked', requireMember, async (req, res) => {
+    const rows = await db.all(
+      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number
+       FROM blocks b JOIN users u ON u.id = b.blocked_id WHERE b.blocker_id = ? ORDER BY b.created_at DESC`,
+      req.user.id,
+    );
+    res.json({ users: rows.map((row) => authorOf(ctx, row)) });
+  });
+
+  // Étapes d'accueil des nouveaux membres
+  r.get('/me/progress', async (req, res) => {
+    const me = req.user.id;
+    const row = await db.get(
+      `SELECT (SELECT COUNT(*) FROM follows WHERE follower_id = ?) AS following,
+              (SELECT COUNT(*) FROM posts WHERE user_id = ?) AS posts`,
+      me, me,
+    );
+    res.json({
+      avatar: Boolean(req.user.avatar),
+      bio: Boolean(req.user.bio),
+      following: row.following,
+      posts: row.posts,
+    });
+  });
+
   r.get('/search', async (req, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 60) : '';
     if (!q) return res.json({ users: [], posts: [] });
+    const me = req.user.id;
     const like = `%${q.replace(/^[@#]/, '').replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     const users = q.startsWith('#')
       ? []
       : await db.all(
           `${USER_LIST} FROM users u
-           WHERE u.paid_at IS NOT NULL AND (u.username LIKE ? ESCAPE '\\' OR u.display_name LIKE ? ESCAPE '\\'
-                 OR u.profession LIKE ? ESCAPE '\\' OR u.city LIKE ? ESCAPE '\\')
+           WHERE u.paid_at IS NOT NULL AND ${USER_NOT_BLOCKED}
+             AND (u.username LIKE ? ESCAPE '\\' OR u.display_name LIKE ? ESCAPE '\\'
+                  OR u.profession LIKE ? ESCAPE '\\' OR u.city LIKE ? ESCAPE '\\')
            ORDER BY u.member_number ASC LIMIT 20`,
-          req.user.id, like, like, like, like,
+          me, me, me, like, like, like, like,
         );
+    if (req.query.only === 'users') return res.json({ users: users.map((row) => listUser(row, req.user)), posts: [] });
     const postLike = q.startsWith('#') ? `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : like;
     const posts = await db.all(
-      `${POST_SELECT} WHERE p.body LIKE ? ESCAPE '\\' ORDER BY p.id DESC LIMIT 30`,
-      req.user.id, postLike,
+      `${POST_SELECT} WHERE p.body LIKE ? ESCAPE '\\' AND ${NOT_BLOCKED} ORDER BY p.id DESC LIMIT 30`,
+      me, postLike,
     );
     res.json({
       users: users.map((row) => listUser(row, req.user)),
@@ -119,22 +197,24 @@ module.exports = function userRoutes(ctx) {
 
   r.get('/suggestions', async (req, res) => {
     const limit = Math.min(intParam(req.query.limit) || 5, 30);
+    const me = req.user.id;
     const rows = await db.all(
       `${USER_LIST},
          (SELECT COUNT(*) FROM follows f WHERE f.followee_id = u.id) AS followers
        FROM users u
-       WHERE u.paid_at IS NOT NULL AND u.id != ?
+       WHERE u.paid_at IS NOT NULL AND u.id != ? AND ${USER_NOT_BLOCKED}
          AND u.id NOT IN (SELECT followee_id FROM follows WHERE follower_id = ?)
        ORDER BY followers DESC, RANDOM() LIMIT ?`,
-      req.user.id, req.user.id, req.user.id, limit,
+      me, me, me, me, me, limit,
     );
     res.json({ users: rows.map((row) => listUser(row, req.user)) });
   });
 
   r.get('/members', async (req, res) => {
+    const me = req.user.id;
     const rows = await db.all(
-      `${USER_LIST} FROM users u WHERE u.paid_at IS NOT NULL ORDER BY u.paid_at DESC LIMIT 30`,
-      req.user.id,
+      `${USER_LIST} FROM users u WHERE u.paid_at IS NOT NULL AND ${USER_NOT_BLOCKED} ORDER BY u.paid_at DESC LIMIT 30`,
+      me, me, me,
     );
     res.json({ users: rows.map((row) => listUser(row, req.user)) });
   });

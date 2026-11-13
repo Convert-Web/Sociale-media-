@@ -7,7 +7,7 @@ import { composer } from './components/post.js';
 import { landingView } from './views/landing.js';
 import { loginView, signupView, forgotView, resetView } from './views/auth.js';
 import { joinView, welcomeView, logout } from './views/join.js';
-import { feedView, postView } from './views/feed.js';
+import { feedView, postView, savedView } from './views/feed.js';
 import { profileView, userRow } from './views/profile.js';
 import { exploreView } from './views/explore.js';
 import { messagesView } from './views/messages.js';
@@ -32,6 +32,7 @@ const ROUTES = [
   { path: '/p/:id', view: postView, access: 'member', layout: 'app' },
   { path: '/@:username', view: profileView, access: 'member', layout: 'app', nav: 'profil' },
   { path: '/reglages', view: settingsView, access: 'member', layout: 'app', nav: 'reglages' },
+  { path: '/enregistres', view: savedView, access: 'member', layout: 'app', nav: 'enregistres' },
   { path: '/admin', view: adminView, access: 'admin', layout: 'app', nav: 'admin' },
   { path: '/cgv', view: legalView, access: 'public', layout: 'auto', page: 'cgv' },
   { path: '/confidentialite', view: legalView, access: 'public', layout: 'auto', page: 'confidentialite' },
@@ -80,6 +81,7 @@ function buildShell() {
     { key: 'notifications', href: '/notifications', icon: 'bell', label: 'Activité', badge: 'notifications' },
     { key: 'messages', href: '/messages', icon: 'mail', label: 'Messages', badge: 'messages' },
     { key: 'profil', href: `/@${u.username}`, icon: 'user', label: 'Profil' },
+    { key: 'enregistres', href: '/enregistres', icon: 'bookmark', label: 'Enregistrés' },
     { key: 'reglages', href: '/reglages', icon: 'settings', label: 'Réglages' },
   ];
   if (u.isAdmin) links.push({ key: 'admin', href: '/admin', icon: 'chart', label: 'Direction' });

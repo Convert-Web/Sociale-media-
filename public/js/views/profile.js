@@ -1,8 +1,9 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, memberChip, founderBadge, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox } from '../dom.js';
+import { h, icon, avatar, memberChip, founderBadge, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox, popMenu, confirmDialog } from '../dom.js';
 import { postList, backHead } from './feed.js';
+import { reportDialog } from '../components/report.js';
 
 export function userRow(u, { follow = true } = {}) {
   const btn = follow && !u.isMe ? followButton(u, 'btn-sm') : null;
@@ -78,12 +79,52 @@ export async function profileView(ctx) {
   ctx.title = `${user.displayName} (@${user.username}) — AURUM`;
 
   const followersEl = h('b', null, num(user.stats.followers));
+  const moreBtn = h('button', { class: 'btn btn-ghost btn-icon', 'aria-label': 'Plus d’options', title: 'Options' }, icon('more'));
+  moreBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const items = [{ icon: 'link', label: 'Copier le lien du profil', action: () => navigator.clipboard?.writeText(`${location.origin}/@${user.username}`).then(() => toast('Lien copié.'), () => {}) }];
+    if (!user.isMe) {
+      items.push({ icon: 'flag', label: 'Signaler ce membre', action: () => reportDialog('user', user.id, 'Signaler ce membre') });
+      items.push(
+        user.blocked
+          ? { icon: 'ban', label: 'Débloquer', action: () => toggleBlock(false) }
+          : { icon: 'ban', label: `Bloquer ${user.displayName.split(/\s+/)[0]}`, danger: true, action: () => toggleBlock(true) },
+      );
+    }
+    popMenu(moreBtn, items);
+  });
+
+  async function toggleBlock(block) {
+    if (block) {
+      const ok = await confirmDialog(
+        `Bloquer ${user.displayName} ?`,
+        'Vous ne verrez plus ses publications et il ou elle ne pourra plus vous écrire ni voir votre profil. Vos abonnements mutuels seront retirés.',
+        'Bloquer',
+      );
+      if (!ok) return;
+    }
+    try {
+      if (block) await api.post(`/api/users/${enc(user.username)}/block`);
+      else await api.del(`/api/users/${enc(user.username)}/block`);
+      toast(block ? 'Membre bloqué.' : 'Membre débloqué.');
+      navigate(`/@${user.username}`, { replace: true });
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+
   const actions = user.isMe
-    ? [h('a', { href: '/reglages', class: 'btn btn-ghost' }, 'Modifier le profil')]
-    : [
-        h('a', { href: `/messages/${user.username}`, class: 'btn btn-ghost btn-icon', 'aria-label': 'Envoyer un message', title: 'Message' }, icon('mail')),
-        followButton(user),
-      ];
+    ? [
+        h('a', { href: '/enregistres', class: 'btn btn-ghost btn-icon', 'aria-label': 'Enregistrés', title: 'Enregistrés' }, icon('bookmark')),
+        h('a', { href: '/reglages', class: 'btn btn-ghost' }, 'Modifier le profil'),
+      ]
+    : user.blocked
+      ? [moreBtn, h('button', { class: 'btn btn-secondary', onclick: () => toggleBlock(false) }, 'Débloquer')]
+      : [
+          moreBtn,
+          h('a', { href: `/messages/${user.username}`, class: 'btn btn-ghost btn-icon', 'aria-label': 'Envoyer un message', title: 'Message' }, icon('mail')),
+          followButton(user),
+        ];
   ctx.onCleanup(
     store.on('follow:changed', ({ username: un, following }) => {
       if (un.toLowerCase() !== user.username.toLowerCase()) return;
@@ -100,12 +141,48 @@ export async function profileView(ctx) {
   }
   meta.push(h('span', null, icon('calendar'), `Membre depuis ${monthYear(user.joinedAt)}`));
 
-  const list = postList((before) => api.get(`/api/users/${enc(user.username)}/posts${before ? `?before=${before}` : ''}`), {
-    empty: () =>
-      emptyState('pen', user.isMe ? 'Votre première publication' : 'Aucune publication', user.isMe ? 'Présentez-vous au cercle : le Salon vous écoute.' : `${user.displayName} n'a encore rien publié.`),
-  });
-  ctx.onCleanup(list.start());
-  if (user.isMe) ctx.onCleanup(store.on('post:created', (p) => list.prepend(p)));
+  // Onglets : publications / photos
+  const content = h('div');
+  const tabPosts = h('button', { class: 'tab active' }, icon('list', 'icon-sm'), 'Publications');
+  const tabPhotos = h('button', { class: 'tab' }, icon('grid', 'icon-sm'), 'Photos');
+  let stopList = () => {};
+  const showPosts = () => {
+    tabPosts.classList.add('active');
+    tabPhotos.classList.remove('active');
+    stopList();
+    const list = postList((before) => api.get(`/api/users/${enc(user.username)}/posts${before ? `?before=${before}` : ''}`), {
+      empty: () =>
+        emptyState('pen', user.isMe ? 'Votre première publication' : 'Aucune publication', user.isMe ? 'Présentez-vous au cercle : le Salon vous écoute.' : `${user.displayName} n'a encore rien publié.`),
+    });
+    content.replaceChildren(list.el);
+    stopList = list.start();
+  };
+  const showPhotos = async () => {
+    tabPhotos.classList.add('active');
+    tabPosts.classList.remove('active');
+    stopList();
+    stopList = () => {};
+    content.replaceChildren(spinner());
+    try {
+      const { photos } = await api.get(`/api/users/${enc(user.username)}/photos`);
+      content.replaceChildren(
+        photos.length
+          ? h('div', { class: 'photo-grid' }, photos.map((ph) => h('a', { href: `/p/${ph.postId}`, class: 'photo-cell' }, h('img', { src: ph.url, alt: '', loading: 'lazy', decoding: 'async' }))))
+          : emptyState('image', 'Aucune photo', user.isMe ? 'Vos photos publiées apparaîtront ici.' : 'Aucune photo publiée pour le moment.'),
+      );
+    } catch (err) {
+      content.replaceChildren(h('p', { class: 'muted', style: { padding: '20px' } }, err.message));
+    }
+  };
+  tabPosts.addEventListener('click', showPosts);
+  tabPhotos.addEventListener('click', showPhotos);
+  ctx.onCleanup(() => stopList());
+  if (user.blocked) {
+    content.replaceChildren(emptyState('ban', 'Membre bloqué', 'Vous ne voyez plus ses publications. Débloquez ce membre pour les afficher à nouveau.'));
+  } else {
+    showPosts();
+  }
+  if (user.isMe) ctx.onCleanup(store.on('post:created', () => tabPosts.classList.contains('active') && showPosts()));
 
   const coverEl = h('div', { class: 'cover' }, user.cover ? h('img', { src: user.cover, alt: '', style: { cursor: 'zoom-in' }, onclick: () => lightbox(user.cover) }) : null);
   const avatarEl = avatar(user, 'xl', { presence: !user.isMe });
@@ -130,6 +207,7 @@ export async function profileView(ctx) {
         h('span', null, `@${user.username}`),
         memberChip(user),
         user.followsYou ? h('span', { class: 'tag' }, 'Vous suit') : null,
+        user.blocked ? h('span', { class: 'tag' }, 'Bloqué') : null,
       ),
       user.bio ? h('p', { class: 'profile-bio' }, richText(user.bio)) : null,
       h('div', { class: 'profile-meta' }, meta),
@@ -138,10 +216,11 @@ export async function profileView(ctx) {
         { class: 'profile-stats' },
         h('button', { onclick: () => relationModal(user.username, 'following') }, h('b', null, num(user.stats.following)), user.stats.following > 1 ? 'abonnements' : 'abonnement'),
         h('button', { onclick: () => relationModal(user.username, 'followers') }, followersEl, user.stats.followers > 1 ? 'abonnés' : 'abonné'),
-        h('span', null, h('b', null, num(user.stats.likes)), "j'aime reçus"),
+        h('span', null, h('b', null, num(user.stats.likes)), user.stats.likes > 1 ? 'réactions reçues' : 'réaction reçue'),
       ),
     ),
-    list.el,
+    user.blocked ? null : h('div', { class: 'tabs profile-tabs' }, tabPosts, tabPhotos),
+    content,
   );
 }
 

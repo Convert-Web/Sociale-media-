@@ -111,6 +111,58 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, id);
 
+-- Version 2 : photos multiples, enregistrements, stories, signalements, blocages
+CREATE TABLE IF NOT EXISTS post_media (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id   INTEGER NOT NULL,
+  url       TEXT NOT NULL,
+  position  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id, position);
+
+CREATE TABLE IF NOT EXISTS bookmarks (
+  user_id     INTEGER NOT NULL,
+  post_id     INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (user_id, post_id)
+);
+
+CREATE TABLE IF NOT EXISTS stories (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL,
+  media       TEXT NOT NULL,
+  caption     TEXT NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL,
+  expires_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stories_expiry ON stories(expires_at);
+CREATE INDEX IF NOT EXISTS idx_stories_user ON stories(user_id, id);
+
+CREATE TABLE IF NOT EXISTS story_views (
+  story_id   INTEGER NOT NULL,
+  user_id    INTEGER NOT NULL,
+  viewed_at  INTEGER NOT NULL,
+  PRIMARY KEY (story_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS reports (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  reporter_id  INTEGER NOT NULL,
+  target_type  TEXT NOT NULL,
+  target_id    INTEGER NOT NULL,
+  reason       TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  resolved_at  INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_reports_open ON reports(resolved_at, id);
+
+CREATE TABLE IF NOT EXISTS blocks (
+  blocker_id  INTEGER NOT NULL,
+  blocked_id  INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (blocker_id, blocked_id)
+);
+
 -- Photos envoyées par les membres, stockées dans la base
 -- (les hébergeurs gratuits effacent leurs fichiers à chaque redémarrage).
 CREATE TABLE IF NOT EXISTS media (
@@ -142,6 +194,21 @@ function wrap(executor) {
   };
 }
 
+// Colonnes ajoutées après la mise en ligne : ajoutées seulement si absentes.
+const COLUMNS = [
+  ['likes', 'reaction', "TEXT NOT NULL DEFAULT 'love'"],
+  ['posts', 'edited_at', 'INTEGER'],
+];
+
+async function migrate(client) {
+  for (const [table, column, ddl] of COLUMNS) {
+    const { rows } = await client.execute({ sql: 'SELECT name FROM pragma_table_info(?)', args: [table] });
+    if (!rows.some((r) => r.name === column)) {
+      await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+    }
+  }
+}
+
 async function openDatabase({ url, authToken }) {
   const local = url.startsWith('file:');
   if (local) fs.mkdirSync(path.dirname(url.slice(5)), { recursive: true });
@@ -153,6 +220,7 @@ async function openDatabase({ url, authToken }) {
     await client.execute('PRAGMA busy_timeout = 5000');
   }
   await client.executeMultiple(SCHEMA);
+  await migrate(client);
 
   const db = wrap(client);
   // Transaction : fn reçoit un objet { get, all, run } lié à la transaction.

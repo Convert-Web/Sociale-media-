@@ -3,6 +3,66 @@ import { store, isPolling } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, clear, spinner, emptyState, infinite } from '../dom.js';
 import { postCard, composer } from '../components/post.js';
+import { storiesBar } from '../components/stories.js';
+
+// Carte d'accueil des nouveaux membres : 4 étapes, masquable.
+function onboardingCard() {
+  const host = h('div');
+  let hidden = false;
+  try {
+    hidden = localStorage.getItem('aurum:onboarding-done') === '1';
+  } catch {
+    /* stockage indisponible */
+  }
+  if (hidden) return host;
+  api
+    .get('/api/me/progress')
+    .then((p) => {
+      const steps = [
+        { done: p.avatar, label: 'Ajoutez une photo de profil', href: '/reglages' },
+        { done: p.bio, label: 'Présentez-vous en une phrase', href: '/reglages' },
+        { done: p.following > 0, label: 'Suivez au moins un membre', href: '/explorer' },
+        { done: p.posts > 0, label: 'Publiez votre premier message', href: null },
+      ];
+      const count = steps.filter((x) => x.done).length;
+      if (count === steps.length) return;
+      const dismiss = () => {
+        try {
+          localStorage.setItem('aurum:onboarding-done', '1');
+        } catch {
+          /* stockage indisponible */
+        }
+        host.replaceChildren();
+      };
+      host.replaceChildren(
+        h(
+          'section',
+          { class: 'onboarding' },
+          h(
+            'div',
+            { class: 'onboarding-head' },
+            h('div', null, h('h2', null, 'Bienvenue au cercle'), h('p', { class: 'muted small' }, `${count} sur ${steps.length} étapes`)),
+            h('button', { class: 'icon-btn', 'aria-label': 'Masquer', onclick: dismiss }, icon('x')),
+          ),
+          h('div', { class: 'onboarding-bar' }, h('i', { style: { width: `${(count / steps.length) * 100}%` } })),
+          h(
+            'ul',
+            null,
+            steps.map((step) =>
+              h(
+                'li',
+                { class: step.done ? 'done' : '' },
+                h('span', { class: 'check-dot' }, step.done ? icon('check') : null),
+                step.href && !step.done ? h('a', { href: step.href }, step.label) : h('span', null, step.label),
+              ),
+            ),
+          ),
+        ),
+      );
+    })
+    .catch(() => {});
+  return host;
+}
 
 // Liste paginée de publications (fil, profil…)
 export function postList(fetchPage, { empty } = {}) {
@@ -155,12 +215,15 @@ export function feedView(ctx) {
   );
 
   load();
+  const stories = storiesBar();
   ctx.title = 'Le Salon — AURUM';
   return h(
     'div',
     null,
     h('header', { class: 'page-head' }, h('div', { class: 'grow' }, h('h1', null, 'Le Salon'), h('div', { class: 'sub' }, 'Le fil du cercle, sans algorithme ni publicité'))),
+    stories.el,
     h('div', { class: 'tabs' }, tabAll, tabFollow),
+    onboardingCard(),
     composer(),
     pill,
     host,
@@ -195,4 +258,14 @@ export function backHead(title, sub, extra) {
     h('div', { class: 'grow' }, h('h1', null, title), sub ? h('div', { class: 'sub' }, sub) : null),
     extra || null,
   );
+}
+
+// Publications enregistrées
+export function savedView(ctx) {
+  const list = postList((before) => api.get(`/api/saved${before ? `?before=${before}` : ''}`), {
+    empty: () => emptyState('bookmark', 'Rien d’enregistré', 'Touchez le signet sous une publication pour la retrouver ici.'),
+  });
+  ctx.onCleanup(list.start());
+  ctx.title = 'Enregistrés — AURUM';
+  return h('div', null, backHead('Enregistrés', 'Visibles par vous seul'), list.el);
 }

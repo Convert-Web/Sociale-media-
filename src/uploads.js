@@ -100,6 +100,23 @@ function mediaHandler(ctx) {
   };
 }
 
+function readable(handler) {
+  return (req, res, next) => {
+    handler(req, res, (err) => {
+      if (!err) return next();
+      if (err.code === 'LIMIT_FILE_SIZE') return next(Object.assign(new Error('Image trop lourde (4 Mo maximum).'), { status: 413 }));
+      if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') return next(Object.assign(new Error('6 photos maximum par publication.'), { status: 400 }));
+      return next(Object.assign(new Error('Envoi du fichier impossible.'), { status: 400 }));
+    });
+  };
+}
+
+// Plusieurs photos (champ « images ») ou une seule (champ « image »).
+const multi = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_SIZE, files: 6, fields: 10 } });
+function photos() {
+  return readable(multi.fields([{ name: 'images', maxCount: 6 }, { name: 'image', maxCount: 1 }]));
+}
+
 // Transforme les erreurs multer en messages lisibles.
 function single(field) {
   const handler = upload.single(field);
@@ -112,4 +129,4 @@ function single(field) {
   };
 }
 
-module.exports = { single, saveImage, deleteUpload, detectImage, mediaHandler };
+module.exports = { single, photos, saveImage, deleteUpload, detectImage, mediaHandler };

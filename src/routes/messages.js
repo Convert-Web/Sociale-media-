@@ -2,7 +2,7 @@
 const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam } = require('../http');
-const { authorOf, counters, pushCounters } = require('../social');
+const { authorOf, counters, pushCounters, isBlocked } = require('../social');
 
 module.exports = function messageRoutes(ctx) {
   const r = express.Router();
@@ -38,8 +38,9 @@ module.exports = function messageRoutes(ctx) {
        FROM conv
        JOIN messages m ON m.id = conv.last_id
        JOIN users u ON u.id = conv.other_id
+       WHERE conv.other_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)
        ORDER BY conv.last_id DESC LIMIT 100`,
-      me, me, me, me,
+      me, me, me, me, me, me,
     );
     res.json({
       conversations: rows.map((row) => ({
@@ -90,12 +91,14 @@ module.exports = function messageRoutes(ctx) {
       messages: rows.reverse().map(serializeMessage),
       hasMore: !after && rows.length === limit,
       seenUpTo: seen,
+      blocked: await isBlocked(ctx, me, other.id),
     });
   });
 
   r.post('/conversations/:username', async (req, res) => {
     const other = await findMember(req.params.username);
     if (other.id === req.user.id) fail(400, 'Vous ne pouvez pas vous écrire à vous-même.');
+    if (await isBlocked(ctx, req.user.id, other.id)) fail(403, 'Vous ne pouvez pas écrire à ce membre.');
     const body = text(req.body.body, { field: 'Message', max: 2000, required: true });
     const { lastInsertRowid } = await db.run(
       'INSERT INTO messages (sender_id, recipient_id, body, created_at) VALUES (?, ?, ?, ?)',

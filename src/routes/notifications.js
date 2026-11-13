@@ -13,8 +13,11 @@ module.exports = function notificationRoutes(ctx) {
     const before = intParam(req.query.before);
     const limit = 30;
     const rows = await db.all(
-      `${NOTIF_SELECT} WHERE n.user_id = ? AND (? IS NULL OR n.id < ?) ORDER BY n.id DESC LIMIT ?`,
-      req.user.id, before, before, limit,
+      `${NOTIF_SELECT}
+       WHERE n.user_id = ? AND (? IS NULL OR n.id < ?)
+         AND n.actor_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ?)
+       ORDER BY n.id DESC LIMIT ?`,
+      req.user.id, before, before, req.user.id, limit,
     );
     res.json({ notifications: rows.map((row) => serializeNotification(ctx, row)), hasMore: rows.length === limit });
   });

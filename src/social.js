@@ -44,25 +44,60 @@ function selfUser(ctx, u) {
   };
 }
 
+// Réactions disponibles (la première est celle d'un simple toucher).
+const REACTIONS = ['love', 'like', 'bravo', 'fire', 'haha', 'wow'];
+
+// Le seul paramètre de POST_SELECT est l'identifiant du membre qui consulte (v.id) ;
+// il précède tous les paramètres de la clause WHERE ajoutée par l'appelant.
 const POST_SELECT = `
-  SELECT p.id, p.body, p.image, p.created_at, p.user_id,
+  SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id,
          u.username, u.display_name, u.avatar, u.member_number,
          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count,
+         (SELECT GROUP_CONCAT(l.reaction) FROM likes l WHERE l.post_id = p.id) AS reactions,
          (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
-         EXISTS(SELECT 1 FROM likes l WHERE l.post_id = p.id AND l.user_id = ?) AS liked
-  FROM posts p JOIN users u ON u.id = p.user_id`;
+         (SELECT l.reaction FROM likes l WHERE l.post_id = p.id AND l.user_id = v.id) AS my_reaction,
+         EXISTS(SELECT 1 FROM bookmarks b WHERE b.post_id = p.id AND b.user_id = v.id) AS saved,
+         (SELECT GROUP_CONCAT(pm.url, '|') FROM post_media pm WHERE pm.post_id = p.id) AS media
+  FROM (SELECT ? AS id) v
+  CROSS JOIN posts p
+  JOIN users u ON u.id = p.user_id`;
+
+// À ajouter dans la clause WHERE d'une requête POST_SELECT : masque les membres bloqués.
+const NOT_BLOCKED = `p.user_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = v.id
+                                       UNION SELECT blocker_id FROM blocks WHERE blocked_id = v.id)`;
+
+// Vrai si l'un des deux membres a bloqué l'autre.
+async function isBlocked(ctx, a, b) {
+  return Boolean(
+    await ctx.db.get('SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)', a, b, b, a),
+  );
+}
+
+function reactionSummary(list) {
+  const counts = {};
+  for (const r of (list || '').split(',').filter(Boolean)) counts[r] = (counts[r] || 0) + 1;
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, count]) => ({ type, count }));
+}
 
 function serializePost(ctx, row, viewer) {
   const mine = row.user_id === viewer.id;
+  const images = [row.image, ...(row.media ? row.media.split('|') : [])].filter(Boolean);
   return {
     id: row.id,
     body: row.body,
-    image: row.image || null,
+    image: images[0] || null,
+    images,
     createdAt: row.created_at,
+    editedAt: row.edited_at || null,
     author: authorOf(ctx, row),
     likeCount: row.like_count,
+    reactions: reactionSummary(row.reactions),
+    myReaction: row.my_reaction || null,
+    liked: Boolean(row.my_reaction),
+    saved: Boolean(row.saved),
     commentCount: row.comment_count,
-    liked: Boolean(row.liked),
     mine,
     canDelete: mine || Boolean(viewer.is_admin),
   };
@@ -174,6 +209,10 @@ module.exports = {
   POST_SELECT,
   serializePost,
   getPost,
+  REACTIONS,
+  NOT_BLOCKED,
+  reactionSummary,
+  isBlocked,
   COMMENT_SELECT,
   serializeComment,
   NOTIF_SELECT,

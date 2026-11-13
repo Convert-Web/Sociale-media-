@@ -14,8 +14,13 @@ Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (bar
 |---|---|
 | **Droit d'entrée (optionnel)** | Désactivé par défaut. Avec `PAID_ENTRY=true` : paiement unique via **Stripe Checkout** (carte bancaire, et Apple Pay / Google Pay selon votre configuration Stripe), vérifié côté serveur + webhook signé. Case de renonciation au droit de rétractation (art. L221-28 du Code de la consommation). |
 | **Carte de membre** | Numéro unique attribué dans l'ordre d'arrivée et **jamais réattribué**. Carte en titane clair, en **or** pour les 100 premiers « Fondateurs ». Cérémonie d'accueil à l'inscription. Le premier compte créé devient administrateur. |
-| **Le Salon** | Fil chronologique « Tout le cercle » / « Mes abonnements », publication texte + photo, j'aime, commentaires, #hashtags, @mentions, défilement infini, bandeau « nouvelles publications » en direct. |
-| **Profils** | Photo, couverture, bio, profession, ville, site web, statistiques, abonnés / abonnements. |
+| **Le Salon** | Fil chronologique « Tout le cercle » / « Mes abonnements », publications avec jusqu'à 6 photos (carrousel), modification, commentaires, #hashtags, @mentions avec suggestions, défilement infini, bandeau « nouvelles publications ». |
+| **Réactions** | ❤️ 👍 👏 🔥 😂 😮 : un toucher pour ❤️, appui long (ou survol) pour choisir, liste des membres qui ont réagi. |
+| **Stories** | Photos éphémères (24 h) avec légende, lecteur plein écran (progression, toucher pour avancer, appui long pour pause, glisser pour fermer), vues, réponse en message privé. |
+| **Enregistrés** | Mettre une publication de côté et la retrouver dans « Enregistrés ». |
+| **Sécurité** | Signaler une publication, un commentaire ou un membre ; bloquer un membre (contenus masqués, messages impossibles) ; file des signalements dans « Direction ». |
+| **Application** | Installable sur l'écran d'accueil (icône, plein écran), accueil guidé des nouveaux membres. |
+| **Profils** | Photo, couverture, bio, profession, ville, site web, statistiques, abonnés / abonnements, onglet « Photos » en grille. |
 | **Messagerie privée** | Conversations entre membres **en temps réel**, accusés de lecture « Vu », compteurs de non-lus. |
 | **Notifications** | J'aime, commentaires, nouveaux abonnés, mentions — en temps réel. |
 | **Explorer** | Recherche (membres, métiers, villes, #sujets), tendances, suggestions, derniers arrivés. |
@@ -118,7 +123,7 @@ En production (`NODE_ENV=production`) : cookies sécurisés (HTTPS obligatoire),
 npm test
 ```
 
-22 tests d'intégration couvrent l'inscription (gratuite et payante), le paiement (démo, retour Stripe, webhook signé, rejeu), l'unicité des numéros de membre, les publications et images, j'aime, commentaires, abonnements, messagerie, mentions, recherche, réinitialisation du mot de passe, administration, export RGPD et suppression de compte.
+31 tests d'intégration couvrent l'inscription (gratuite et payante), le paiement (démo, retour Stripe, webhook signé, rejeu), l'unicité des numéros de membre, les publications et images, j'aime, commentaires, abonnements, messagerie, mentions, recherche, réinitialisation du mot de passe, administration, export RGPD, suppression de compte, réactions, photos multiples, stories, enregistrements, signalements et blocages.
 
 ## Architecture
 

@@ -186,15 +186,23 @@ test('mention : notification envoyée au membre cité', async () => {
   assert.ok(r.data.notifications.some((n) => n.type === 'mention' && n.actor.username === 'alice'));
 });
 
-test("j'aime : compteur, notification puis retrait", async () => {
+test("réactions : compteur, changement d'émotion, notification puis retrait", async () => {
   let r = await bob.post(`/api/posts/${postId}/like`);
-  assert.deepEqual(r.data, { liked: true, likeCount: 1 });
-  r = await bob.post(`/api/posts/${postId}/like`);
+  assert.equal(r.data.liked, true);
+  assert.equal(r.data.myReaction, 'love');
   assert.equal(r.data.likeCount, 1);
+  r = await bob.post(`/api/posts/${postId}/like`, { reaction: 'bravo' });
+  assert.equal(r.data.likeCount, 1);
+  assert.deepEqual(r.data.reactions, [{ type: 'bravo', count: 1 }]);
+  r = await bob.post(`/api/posts/${postId}/like`, { reaction: 'pirate' });
+  assert.equal(r.data.myReaction, 'love', 'réaction inconnue remplacée par la réaction par défaut');
   let n = await alice.get('/api/notifications');
   assert.equal(n.data.notifications.filter((x) => x.type === 'like').length, 1);
+  const post = await bob.get(`/api/posts/${postId}`);
+  assert.equal(post.data.post.myReaction, 'love');
   r = await bob.del(`/api/posts/${postId}/like`);
-  assert.deepEqual(r.data, { liked: false, likeCount: 0 });
+  assert.equal(r.data.liked, false);
+  assert.equal(r.data.likeCount, 0);
   n = await alice.get('/api/notifications');
   assert.equal(n.data.notifications.filter((x) => x.type === 'like').length, 0);
 });

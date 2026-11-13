@@ -45,7 +45,15 @@ async function deleteUser(ctx, userId) {
     if (!user) return;
     media.push(user.avatar, user.cover);
     for (const p of await t.all('SELECT image FROM posts WHERE user_id = ? AND image IS NOT NULL', userId)) media.push(p.image);
+    for (const m of await t.all('SELECT url FROM post_media WHERE post_id IN (SELECT id FROM posts WHERE user_id = ?)', userId)) media.push(m.url);
+    for (const st of await t.all('SELECT media FROM stories WHERE user_id = ?', userId)) media.push(st.media);
     const mine = 'SELECT id FROM posts WHERE user_id = ?';
+    await t.run(`DELETE FROM post_media WHERE post_id IN (${mine})`, userId);
+    await t.run(`DELETE FROM bookmarks WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
+    await t.run("DELETE FROM reports WHERE reporter_id = ? OR (target_type = 'user' AND target_id = ?) OR (target_type = 'post' AND target_id IN (" + mine + '))', userId, userId, userId);
+    await t.run('DELETE FROM story_views WHERE user_id = ? OR story_id IN (SELECT id FROM stories WHERE user_id = ?)', userId, userId);
+    await t.run('DELETE FROM stories WHERE user_id = ?', userId);
+    await t.run('DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?', userId, userId);
     await t.run(`DELETE FROM likes WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
     await t.run(`DELETE FROM comments WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
     await t.run(`DELETE FROM notifications WHERE user_id = ? OR actor_id = ? OR post_id IN (${mine})`, userId, userId, userId);
@@ -61,11 +69,16 @@ async function deleteUser(ctx, userId) {
 }
 
 async function deletePost(ctx, postId) {
-  await ctx.db.transaction(async (t) => {
+  return ctx.db.transaction(async (t) => {
+    const media = (await t.all('SELECT url FROM post_media WHERE post_id = ?', postId)).map((m) => m.url);
+    await t.run('DELETE FROM post_media WHERE post_id = ?', postId);
+    await t.run('DELETE FROM bookmarks WHERE post_id = ?', postId);
+    await t.run("DELETE FROM reports WHERE target_type = 'post' AND target_id = ?", postId);
     await t.run('DELETE FROM likes WHERE post_id = ?', postId);
     await t.run('DELETE FROM comments WHERE post_id = ?', postId);
     await t.run('DELETE FROM notifications WHERE post_id = ?', postId);
     await t.run('DELETE FROM posts WHERE id = ?', postId);
+    return media;
   });
 }
 

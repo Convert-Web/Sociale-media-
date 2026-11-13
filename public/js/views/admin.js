@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { h, avatar, nameLine, memberChip, money, num, timeAgo, toast, confirmDialog, emptyState } from '../dom.js';
+import { h, icon, avatar, nameLine, memberChip, money, num, timeAgo, toast, confirmDialog, emptyState } from '../dom.js';
 import { backHead } from './feed.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -42,8 +42,64 @@ function signupChart(days) {
   return root;
 }
 
+// File des signalements
+async function reportsSection() {
+  const host = h('div', { class: 'reports' });
+  const { reports } = await api.get('/api/admin/reports');
+  if (!reports.length) {
+    host.append(h('div', { class: 'reports-empty' }, icon('shield', 'icon-sm'), 'Aucun signalement à traiter.'));
+    return host;
+  }
+  const LABEL = { post: 'Publication', comment: 'Commentaire', user: 'Membre' };
+  const REMOVE = { post: 'Supprimer la publication', comment: 'Supprimer le commentaire', user: 'Exclure le membre' };
+  for (const r of reports) {
+    const resolve = async (action) => {
+      if (action === 'remove' && !(await confirmDialog(`${REMOVE[r.type]} ?`, 'Cette action est définitive.', REMOVE[r.type]))) return;
+      try {
+        await api.post(`/api/admin/reports/${r.id}/resolve`, { action });
+        card.remove();
+        toast(action === 'remove' ? 'Contenu retiré.' : 'Signalement classé.');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    };
+    const card = h(
+      'article',
+      { class: 'report-card' },
+      h(
+        'div',
+        { class: 'report-head' },
+        h('span', { class: 'tag' }, LABEL[r.type] || r.type),
+        h('b', null, r.reason),
+        r.total > 1 ? h('span', { class: 'report-count' }, `${r.total} signalements`) : null,
+        h('span', { class: 'muted small' }, timeAgo(r.createdAt)),
+      ),
+      r.target
+        ? h(
+            'a',
+            { href: r.target.link, class: 'report-target' },
+            h('small', null, `${r.target.authorName} · @${r.target.author}`),
+            r.target.text ? h('p', null, r.target.text.slice(0, 220)) : null,
+            r.target.image ? h('img', { src: r.target.image, alt: '' }) : null,
+          )
+        : h('p', { class: 'muted small' }, 'Le contenu a déjà été supprimé.'),
+      r.details ? h('p', { class: 'report-details' }, `« ${r.details} »`) : null,
+      h('p', { class: 'muted small' }, `Signalé par @${r.reporter || 'membre supprimé'}`),
+      h(
+        'div',
+        { class: 'row-end' },
+        h('button', { class: 'btn btn-ghost btn-sm', onclick: () => resolve('dismiss') }, 'Classer sans suite'),
+        r.target ? h('button', { class: 'btn btn-danger btn-sm', onclick: () => resolve('remove') }, REMOVE[r.type]) : null,
+      ),
+    );
+    host.append(card);
+  }
+  return host;
+}
+
 export async function adminView(ctx) {
   const data = await api.get('/api/admin/overview');
+  const reports = await reportsSection();
   const t = data.totals;
   const conversion = t.members + t.pending ? Math.round((t.members / (t.members + t.pending)) * 100) : 0;
 
@@ -98,17 +154,26 @@ export async function adminView(ctx) {
   return h(
     'div',
     null,
-    backHead('Direction du cercle', data.config.stripeEnabled ? 'Paiements Stripe actifs' : 'Paiements en mode démonstration'),
+    backHead(
+      'Direction du cercle',
+      !data.config.paidEntry ? 'Inscription gratuite' : data.config.stripeEnabled ? 'Paiements Stripe actifs' : 'Paiements en mode démonstration',
+    ),
     h(
       'div',
       { class: 'kpis' },
       kpi('Membres', num(t.members), true),
-      kpi("Droits d'entrée encaissés", money(t.revenue), true, t.demoRevenue ? `+ ${money(t.demoRevenue)} simulés` : null),
-      kpi('Conversion', `${conversion} %`, false, `${num(t.pending)} inscrit${t.pending > 1 ? 's' : ''} sans paiement`),
+      data.config.paidEntry
+        ? kpi("Droits d'entrée encaissés", money(t.revenue), true, t.demoRevenue ? `+ ${money(t.demoRevenue)} simulés` : null)
+        : kpi('Signalements à traiter', num(t.openReports || 0), Boolean(t.openReports)),
+      data.config.paidEntry
+        ? kpi('Conversion', `${conversion} %`, false, `${num(t.pending)} inscrit${t.pending > 1 ? 's' : ''} sans paiement`)
+        : kpi('Réactions', num(t.likes)),
       kpi('Publications', num(t.posts)),
       kpi('Commentaires', num(t.comments)),
       kpi('Messages privés', num(t.messages)),
     ),
+    h('div', { class: 'section-title' }, 'Signalements'),
+    reports,
     h('div', { class: 'section-title' }, 'Nouveaux membres — 14 jours'),
     h('div', { class: 'chart' }, signupChart(data.signups)),
     h('div', { class: 'section-title' }, 'Derniers inscrits'),

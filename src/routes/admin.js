@@ -21,7 +21,8 @@ module.exports = function adminRoutes(ctx) {
          (SELECT COUNT(*) FROM posts) AS posts,
          (SELECT COUNT(*) FROM comments) AS comments,
          (SELECT COUNT(*) FROM messages) AS messages,
-         (SELECT COUNT(*) FROM likes) AS likes`,
+         (SELECT COUNT(*) FROM likes) AS likes,
+         (SELECT COUNT(DISTINCT target_type || ':' || target_id) FROM reports WHERE resolved_at IS NULL) AS openReports`,
     );
     const dayMs = 24 * 3600 * 1000;
     const start = new Date();
@@ -48,7 +49,7 @@ module.exports = function adminRoutes(ctx) {
       signups: days,
       recentMembers,
       recentPayments,
-      config: { stripeEnabled: Boolean(ctx.stripe), demoPayments: config.demoPayments, priceCents: config.priceCents },
+      config: { stripeEnabled: Boolean(ctx.stripe), demoPayments: config.demoPayments, priceCents: config.priceCents, paidEntry: config.paidEntry },
     });
   });
 

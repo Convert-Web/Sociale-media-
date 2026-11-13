@@ -80,7 +80,7 @@ async function createApp(config, overrides = {}) {
     );
   }
 
-  const routes = ['auth', 'billing', 'public', 'posts', 'users', 'messages', 'notifications', 'me', 'admin'];
+  const routes = ['auth', 'billing', 'public', 'posts', 'stories', 'moderation', 'users', 'messages', 'notifications', 'me', 'admin'];
   for (const name of routes) app.use('/api', require(`./routes/${name}`)(ctx));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ressource introuvable.' }));
 

@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["fra1"],
   "rewrites": [
-    { "source": "/((?!api/|media/|fonts/|js/|css/|img/|seed/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|media/|fonts/|js/|css/|img/|seed/|manifest\\.webmanifest).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
