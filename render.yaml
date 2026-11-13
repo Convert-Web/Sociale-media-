@@ -4,6 +4,7 @@ services:
   - type: web
     name: aurum
     runtime: node
+    region: frankfurt
     plan: starter
     buildCommand: npm ci --omit=dev
     startCommand: npm start
