@@ -49,9 +49,35 @@ export const store = {
 
 let source = null;
 let retryTimer = null;
+let pollTimer = null;
+
+// Mode « rafraîchissement régulier » (hébergeurs serverless) : les compteurs sont
+// relus toutes les 20 s et un signal « rt:tick » permet aux pages de se mettre à jour.
+export const isPolling = () => store.config?.realtime === 'poll';
+
+async function poll() {
+  if (document.hidden || !store.isMember) return;
+  try {
+    store.setCounters(await api.get('/api/counters'));
+  } catch {
+    /* nouvel essai au prochain tour */
+  }
+  store.emit('rt:tick');
+}
+
+function onVisible() {
+  if (!document.hidden) poll();
+}
 
 export function connectRealtime() {
-  if (source || !store.isMember) return;
+  if (!store.isMember) return;
+  if (isPolling()) {
+    if (pollTimer) return;
+    pollTimer = setInterval(poll, 20000);
+    document.addEventListener('visibilitychange', onVisible);
+    return;
+  }
+  if (source) return;
   source = new EventSource('/api/events');
   const relay = (name) =>
     source.addEventListener(name, (e) => {
@@ -70,6 +96,9 @@ export function connectRealtime() {
 }
 
 export function disconnectRealtime() {
+  clearInterval(pollTimer);
+  pollTimer = null;
+  document.removeEventListener('visibilitychange', onVisible);
   clearTimeout(retryTimer);
   source?.close();
   source = null;

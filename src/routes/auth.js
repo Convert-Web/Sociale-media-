@@ -28,6 +28,7 @@ module.exports = function authRoutes(ctx) {
         stripeEnabled: Boolean(ctx.stripe),
         demoPayments: config.demoPayments,
         founderLimit: config.founderLimit,
+        realtime: config.realtime,
       },
     });
   });

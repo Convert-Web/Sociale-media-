@@ -9,7 +9,7 @@ const Stripe = require('stripe');
 
 process.env.NODE_ENV = 'test';
 const config = require('../src/config');
-const { createApp } = require('../src/app');
+const { createApp } = require('../src/application');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'aurum-test-'));
 const WEBHOOK_SECRET = 'whsec_test_secret';

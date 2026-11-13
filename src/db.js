@@ -1,7 +1,6 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const { createClient } = require('@libsql/client');
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -146,6 +145,8 @@ function wrap(executor) {
 async function openDatabase({ url, authToken }) {
   const local = url.startsWith('file:');
   if (local) fs.mkdirSync(path.dirname(url.slice(5)), { recursive: true });
+  // Base distante : client HTTP pur (aucun module natif) ; fichier local : client complet.
+  const { createClient } = local ? require('@libsql/client') : require('@libsql/client/web');
   const client = createClient({ url, authToken: authToken || undefined, intMode: 'number' });
   if (local) {
     await client.execute('PRAGMA journal_mode = WAL');

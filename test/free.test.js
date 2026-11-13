@@ -8,7 +8,7 @@ const path = require('node:path');
 
 process.env.NODE_ENV = 'test';
 const config = require('../src/config');
-const { createApp } = require('../src/app');
+const { createApp } = require('../src/application');
 const { openDatabase } = require('../src/db');
 const { hashPassword } = require('../src/security');
 

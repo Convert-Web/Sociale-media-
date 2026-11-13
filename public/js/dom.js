@@ -400,4 +400,4 @@ export async function shrinkImage(file, maxDim = 1600, quality = 0.85) {
   return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file;
 }
 
-export const TOO_BIG_GIF = 6 * 1024 * 1024;
+export const TOO_BIG_GIF = 4 * 1024 * 1024;

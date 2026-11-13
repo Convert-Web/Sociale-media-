@@ -14,7 +14,7 @@ function imagePicker(onFile) {
     const f = input.files[0];
     input.value = '';
     if (!f) return;
-    if (f.type === 'image/gif' && f.size > TOO_BIG_GIF) return toast('GIF trop lourd (6 Mo maximum).', 'error');
+    if (f.type === 'image/gif' && f.size > TOO_BIG_GIF) return toast('GIF trop lourd (4 Mo maximum).', 'error');
     onFile(f);
   });
   return input;

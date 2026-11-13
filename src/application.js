@@ -86,13 +86,11 @@ async function createApp(config, overrides = {}) {
 
   // Photos envoyées par les membres (stockées dans la base)
   app.use('/media', mediaHandler(ctx));
-  // Polices auto-hébergées (aucun appel à un service tiers, conforme RGPD)
-  app.use('/vendor/fonts', express.static(path.join(ROOT, 'node_modules', '@fontsource'), { maxAge: '30d' }));
   app.use(express.static(PUBLIC_DIR, { maxAge: config.isProd ? '1h' : 0, index: false }));
 
   // Application monopage : toute route « propre » renvoie index.html.
   // Attention : les noms d'utilisateur peuvent contenir un point (/@alexandre.v).
-  const STATIC_PREFIX = /^\/(api|media|vendor|js|css|img|seed)\//;
+  const STATIC_PREFIX = /^\/(api|media|fonts|js|css|img|seed)\//;
   const ASSET_EXT = /\.(js|mjs|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i;
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();

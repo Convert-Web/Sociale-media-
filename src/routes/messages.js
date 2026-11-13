@@ -54,14 +54,25 @@ module.exports = function messageRoutes(ctx) {
     const other = await findMember(req.params.username);
     const me = req.user.id;
     const before = intParam(req.query.before);
+    const after = intParam(req.query.after);
     const limit = 50;
-    const rows = await db.all(
-      `SELECT * FROM messages
-       WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?))
-         AND (? IS NULL OR id < ?)
-       ORDER BY id DESC LIMIT ?`,
-      me, other.id, other.id, me, before, before, limit,
-    );
+    // « after » : uniquement les messages arrivés depuis (rafraîchissement régulier)
+    const rows = after
+      ? (
+          await db.all(
+            `SELECT * FROM messages
+             WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)) AND id > ?
+             ORDER BY id ASC LIMIT 200`,
+            me, other.id, other.id, me, after,
+          )
+        ).reverse()
+      : await db.all(
+          `SELECT * FROM messages
+           WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?))
+             AND (? IS NULL OR id < ?)
+           ORDER BY id DESC LIMIT ?`,
+          me, other.id, other.id, me, before, before, limit,
+        );
     const { changes } = await db.run(
       'UPDATE messages SET read_at = ? WHERE sender_id = ? AND recipient_id = ? AND read_at IS NULL',
       Date.now(), other.id, me,
@@ -70,10 +81,15 @@ module.exports = function messageRoutes(ctx) {
       await pushCounters(ctx, me);
       ctx.hub.send(other.id, 'read', { by: me });
     }
+    const { seen } = await db.get(
+      'SELECT COALESCE(MAX(id), 0) AS seen FROM messages WHERE sender_id = ? AND recipient_id = ? AND read_at IS NOT NULL',
+      me, other.id,
+    );
     res.json({
       user: { ...authorOf(ctx, { ...other, user_id: other.id }), online: ctx.hub.isOnline(other.id) },
       messages: rows.reverse().map(serializeMessage),
-      hasMore: rows.length === limit,
+      hasMore: !after && rows.length === limit,
+      seenUpTo: seen,
     });
   });
 

@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { store } from '../store.js';
+import { store, isPolling } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, clear, spinner, emptyState, infinite } from '../dom.js';
 import { postCard, composer } from '../components/post.js';
@@ -96,6 +96,42 @@ export function feedView(ctx) {
 
   ctx.onCleanup(() => stopList());
   ctx.onCleanup(store.on('post:created', (post) => current?.prepend(post)));
+  const showPill = () => {
+    clear(pill);
+    pill.append(
+      h(
+        'button',
+        {
+          class: 'btn btn-primary btn-sm',
+          onclick: () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            load();
+          },
+        },
+        icon('sparkles'),
+        pending > 1 ? `${pending} nouvelles publications` : 'Nouvelle publication',
+      ),
+    );
+    pill.hidden = false;
+  };
+  // Rafraîchissement régulier : on vérifie s'il y a des publications plus récentes
+  if (isPolling()) {
+    ctx.onCleanup(
+      store.on('rt:tick', async () => {
+        const top = Number(host.querySelector('.post')?.dataset.id || 0);
+        try {
+          const { posts } = await api.get(`/api/feed?scope=${scope}&limit=20`);
+          const fresh = posts.filter((p) => p.id > top && !p.mine).length;
+          if (fresh) {
+            pending = fresh;
+            showPill();
+          }
+        } catch {
+          /* nouvel essai au prochain tour */
+        }
+      }),
+    );
+  }
   ctx.onCleanup(
     store.on('rt:post', () => {
       pending++;

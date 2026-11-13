@@ -85,7 +85,7 @@ export function postCard(post, { expanded = false } = {}) {
   const shareBtn = h('button', { class: 'act', 'aria-label': 'Copier le lien' }, icon('link'));
   shareBtn.addEventListener('click', () => copy(`${location.origin}${link}`));
 
-  const el = h('article', { class: `post${expanded ? ' big' : ''}` });
+  const el = h('article', { class: `post${expanded ? ' big' : ''}`, dataset: { id: post.id } });
   const menuBtn = h('button', { class: 'icon-btn menu-btn', 'aria-label': 'Options' }, icon('more'));
   menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -275,7 +275,7 @@ export function composer({ onPosted, placeholder } = {}) {
     file = f;
     if (f) {
       if (f.type === 'image/gif' && f.size > TOO_BIG_GIF) {
-        toast('GIF trop lourd (6 Mo maximum).', 'error');
+        toast('GIF trop lourd (4 Mo maximum).', 'error');
         file = null;
       } else {
         const url = URL.createObjectURL(f);

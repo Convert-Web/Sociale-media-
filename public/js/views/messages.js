@@ -1,5 +1,5 @@
 import { api, enc } from '../api.js';
-import { store } from '../store.js';
+import { store, isPolling } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, nameLine, memberChip, clear, spinner, emptyState, timeAgo, clock, dayLabel, richText, autosize, toast } from '../dom.js';
 import { pickMember } from './profile.js';
@@ -65,7 +65,9 @@ export function messagesView(ctx) {
     let lastDay = null;
     let lastMine = null;
 
+    let lastId = 0;
     const addMessage = (m, { animate = true } = {}) => {
+      lastId = Math.max(lastId, m.id);
       if (box.querySelector(`[data-id="${m.id}"]`)) return;
       const day = dayLabel(m.createdAt);
       if (day !== lastDay) {
@@ -85,6 +87,10 @@ export function messagesView(ctx) {
     };
     box.append(seen);
     for (const m of data.messages) addMessage(m, { animate: false });
+    const applySeen = (upTo) => {
+      if (lastMine && upTo >= lastMine.id) seen.hidden = false;
+    };
+    applySeen(data.seenUpTo || 0);
     if (!data.messages.length) {
       box.prepend(h('div', { class: 'day-sep', style: { textTransform: 'none', letterSpacing: '0' } }, `Début de votre conversation avec ${peer.displayName}.`));
     }
@@ -138,6 +144,28 @@ export function messagesView(ctx) {
         }
       }),
     );
+    // Rafraîchissement régulier (hébergement serverless) : nouveaux messages toutes les 4 s
+    if (isPolling()) {
+      let busy = false;
+      const timer = setInterval(async () => {
+        if (document.hidden || busy) return;
+        busy = true;
+        try {
+          const upd = await api.get(`/api/conversations/${enc(peer.username)}?after=${lastId}`);
+          for (const m of upd.messages) addMessage(m);
+          if (upd.messages.length) {
+            scrollDown();
+            loadList();
+          }
+          applySeen(upd.seenUpTo || 0);
+        } catch {
+          /* nouvel essai au prochain tour */
+        } finally {
+          busy = false;
+        }
+      }, 4000);
+      ctx.onCleanup(() => clearInterval(timer));
+    }
     ctx.onCleanup(
       store.on('rt:read', ({ by }) => {
         if (by === peer.id && lastMine) seen.hidden = false;
@@ -167,6 +195,7 @@ export function messagesView(ctx) {
 
   // Rafraîchit la liste quand un message arrive ailleurs
   ctx.onCleanup(store.on('rt:message', () => loadList()));
+  ctx.onCleanup(store.on('rt:tick', () => loadList()));
 
   loadList();
   loadThread();

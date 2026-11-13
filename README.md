@@ -4,7 +4,7 @@ Réseau social privé : chaque membre reçoit une carte numérotée, à vie. Pas
 
 L'inscription est **gratuite** par défaut. Un droit d'entrée payant (9,99 € via Stripe) est prêt à l'emploi : il s'active avec `PAID_ENTRY=true`.
 
-Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (barre d'onglets, feuilles, contrôles natifs), clair ou sombre selon l'appareil, entièrement en français. Typographie système (SF Pro sur iPhone et Mac, Inter ailleurs).
+Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (barre d'onglets, feuilles, contrôles natifs), clair ou sombre selon l'appareil, entièrement en français. Typographie système (SF Pro sur iPhone et Mac, Inter ailleurs, hébergée avec le site).
 
 ---
 
@@ -23,25 +23,28 @@ Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (bar
 | **RGPD** | Export de toutes ses données en un clic, suppression du compte, aucun traceur, polices hébergées localement. |
 | **Sécurité** | Mots de passe chiffrés (scrypt), sessions httpOnly, protection CSRF, limitation des tentatives, CSP stricte, vérification binaire des images envoyées. |
 
-## Mettre le site en ligne gratuitement (Render + Turso)
+## Mettre le site en ligne gratuitement (Vercel + Turso)
 
-Deux services gratuits, sans carte bancaire, avec connexion par GitHub :
+Deux services gratuits, **sans carte bancaire**, avec connexion par GitHub :
 
 - **Turso** garde les données (comptes, publications, messages, photos) : 5 Go gratuits.
-- **Render** fait tourner le site (offre *Free*).
+- **Vercel** fait tourner le site (offre *Hobby*), serveur à Francfort (`vercel.json`).
 
 **1. La base de données (Turso)**
 1. Créez un compte sur [turso.tech](https://turso.tech) avec GitHub.
-2. Créez une base nommée `aurum` (choisissez une région en Europe).
-3. Copiez son **adresse** (elle commence par `libsql://`) et créez un **jeton** (*token*) : copiez-le aussi.
+2. Créez une base nommée `aurum` en Europe.
+3. Copiez son **adresse** (`libsql://…`) et créez un **jeton** (lecture et écriture, sans expiration).
 
-**2. Le site (Render)**
-1. Créez un compte sur [render.com](https://render.com) avec GitHub et autorisez l'accès à ce dépôt.
-2. **New → Blueprint**, choisissez ce dépôt et sa branche, puis collez l'adresse Turso dans `TURSO_DATABASE_URL` et le jeton dans `TURSO_AUTH_TOKEN`.
-3. Validez : le site est en ligne quelques minutes plus tard à une adresse `https://aurum-xxxx.onrender.com`.
-4. Ouvrez-la et **créez votre compte en premier** : vous devenez Fondateur N° 0001 et administrateur.
+**2. Le site (Vercel)**
+1. Créez un compte sur [vercel.com](https://vercel.com) avec GitHub (offre *Hobby*, gratuite).
+2. **Add New → Project**, puis importez ce dépôt (le code doit être sur la branche principale).
+3. Dans **Environment Variables**, ajoutez `TURSO_DATABASE_URL` (l'adresse) et `TURSO_AUTH_TOKEN` (le jeton).
+4. **Deploy** : le site est en ligne à une adresse `https://…vercel.app`.
+5. Ouvrez-la et **créez votre compte en premier** : vous devenez Fondateur N° 0001 et administrateur.
 
-Bon à savoir sur l'offre gratuite de Render : après 15 minutes sans visite, le site se met en veille et la visite suivante prend environ une minute à s'afficher. Les données, elles, sont en sécurité chez Turso.
+Sur Vercel, les messages, notifications et nouvelles publications sont rafraîchis automatiquement toutes les quelques secondes (pas de connexion permanente sur ce type d'hébergement). Sur un serveur classique, ils arrivent instantanément.
+
+Autre possibilité : [Render](https://render.com) avec le fichier `render.yaml` (Render demande une carte bancaire, même pour l'offre gratuite).
 
 ## Lancer sur son ordinateur
 
@@ -82,6 +85,7 @@ Toutes les options sont décrites dans [`.env.example`](.env.example). Les princ
 | `SMTP_URL` | Envoi des e-mails « mot de passe oublié » | console |
 | `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Base de données en ligne (Turso) | fichier local |
 | `DATA_DIR` | Dossier du fichier local (sans Turso) | `./data` |
+| `REALTIME` | `sse` (instantané) ou `poll` (rafraîchissement régulier) | `poll` sur Vercel, `sse` ailleurs |
 
 ## Autres hébergeurs
 
@@ -119,9 +123,10 @@ npm test
 ## Architecture
 
 ```
-server.js               Démarrage du serveur
+server.js               Point d'entrée (Vercel ou serveur classique)
+vercel.json             Région, routes des pages et en-têtes de sécurité sur Vercel
 src/
-  app.js                Application Express (sécurité, routes, fichiers statiques)
+  application.js        Application Express (sécurité, routes, fichiers statiques)
   db.js                 Schéma et accès à la base (libSQL : fichier local ou Turso)
   auth.js, security.js  Sessions, mots de passe, CSRF
   membership.js         Attribution des cartes de membre

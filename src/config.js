@@ -48,6 +48,9 @@ const config = {
   cookieSecure: bool(env.COOKIE_SECURE, isProd),
   trustProxy: bool(env.TRUST_PROXY, isProd),
   rateLimit: bool(env.RATE_LIMIT, true),
+  // « sse » : connexion permanente ; « poll » : rafraîchissement régulier
+  // (obligatoire sur les hébergeurs « serverless » comme Vercel).
+  realtime: env.REALTIME === 'sse' || env.REALTIME === 'poll' ? env.REALTIME : env.VERCEL ? 'poll' : 'sse',
 };
 
 if (!config.databasePath) config.databasePath = path.join(config.dataDir, 'aurum.db');

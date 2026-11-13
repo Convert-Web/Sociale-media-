@@ -5,7 +5,8 @@ const { fail } = require('./http');
 
 // Les photos sont redimensionnées par le navigateur avant l'envoi ;
 // cette limite ne concerne que les cas exceptionnels (GIF animés).
-const MAX_SIZE = 6 * 1024 * 1024;
+// Vercel refuse les requêtes de plus de 4,5 Mo.
+const MAX_SIZE = 4 * 1024 * 1024;
 const MIME = { jpg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp' };
 
 const upload = multer({
@@ -105,7 +106,7 @@ function single(field) {
   return (req, res, next) => {
     handler(req, res, (err) => {
       if (!err) return next();
-      if (err.code === 'LIMIT_FILE_SIZE') return next(Object.assign(new Error('Image trop lourde (6 Mo maximum).'), { status: 413 }));
+      if (err.code === 'LIMIT_FILE_SIZE') return next(Object.assign(new Error('Image trop lourde (4 Mo maximum).'), { status: 413 }));
       return next(Object.assign(new Error('Envoi du fichier impossible.'), { status: 400 }));
     });
   };
