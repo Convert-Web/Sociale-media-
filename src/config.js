@@ -22,12 +22,15 @@ const config = {
   isProd,
   port,
   appName: env.APP_NAME || 'AURUM',
-  baseUrl: (env.BASE_URL || `http://localhost:${port}`).replace(/\/$/, ''),
+  baseUrl: (env.BASE_URL || env.RENDER_EXTERNAL_URL || `http://localhost:${port}`).replace(/\/$/, ''),
   dataDir: path.resolve(env.DATA_DIR || path.join(__dirname, '..', 'data')),
   databasePath: env.DATABASE_PATH || '',
   priceCents: Number(env.ENTRY_PRICE_CENTS) || 999,
   currency: (env.CURRENCY || 'eur').toLowerCase(),
   founderLimit: Number(env.FOUNDER_LIMIT) || 100,
+  // Droit d'entrée payant : désactivé par défaut (inscription gratuite).
+  // Passez PAID_ENTRY=true pour exiger le paiement à l'inscription.
+  paidEntry: bool(env.PAID_ENTRY, false),
   stripe: {
     secretKey: stripeSecretKey,
     webhookSecret: env.STRIPE_WEBHOOK_SECRET || '',

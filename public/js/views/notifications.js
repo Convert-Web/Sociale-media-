@@ -27,7 +27,7 @@ function notifEl(n) {
 }
 
 export function notificationsView(ctx) {
-  const list = h('div');
+  const list = h('div', { class: 'notif-list' });
   const sentinel = h('div', { style: { height: '1px' } });
   const loader = spinner();
   let before = null;
@@ -50,7 +50,7 @@ export function notificationsView(ctx) {
       }
       if (first) {
         first = false;
-        if (!notifications.length) list.append(emptyState('bell', 'Tout est calme', 'Les mentions, réponses et nouveaux abonnés apparaîtront ici.'));
+        if (!notifications.length) list.replaceWith(emptyState('bell', 'Tout est calme', 'Les mentions, réponses et nouveaux abonnés apparaîtront ici.'));
         if (notifications.some((n) => !n.read)) {
           await api.post('/api/notifications/read');
           store.setCounters({ notifications: 0 });
@@ -79,7 +79,7 @@ export function notificationsView(ctx) {
   return h(
     'div',
     null,
-    h('header', { class: 'page-head' }, h('div', { class: 'grow' }, h('h1', null, 'Notifications'), h('div', { class: 'sub' }, 'Ce qui se passe autour de vous'))),
+    h('header', { class: 'page-head' }, h('div', { class: 'grow' }, h('h1', null, 'Activité'), h('div', { class: 'sub' }, 'Ce qui se passe autour de vous'))),
     list,
     loader,
     sentinel,

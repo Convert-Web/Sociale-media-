@@ -24,7 +24,7 @@ export function userRow(u, { follow = true } = {}) {
 export function followButton(u, size = '') {
   const btn = h('button', { class: `btn ${size}` });
   const paint = () => {
-    btn.className = `btn ${size} ${u.isFollowing ? 'btn-ghost' : 'btn-outline-gold'}`;
+    btn.className = `btn ${size} ${u.isFollowing ? 'btn-ghost' : 'btn-secondary'}`;
     btn.textContent = u.isFollowing ? 'Suivi' : 'Suivre';
   };
   btn.addEventListener('mouseenter', () => {
@@ -136,7 +136,7 @@ export async function profileView(ctx) {
       h(
         'div',
         { class: 'profile-stats' },
-        h('button', { onclick: () => relationModal(user.username, 'following') }, h('b', null, num(user.stats.following)), 'abonnements'),
+        h('button', { onclick: () => relationModal(user.username, 'following') }, h('b', null, num(user.stats.following)), user.stats.following > 1 ? 'abonnements' : 'abonnement'),
         h('button', { onclick: () => relationModal(user.username, 'followers') }, followersEl, user.stats.followers > 1 ? 'abonnés' : 'abonné'),
         h('span', null, h('b', null, num(user.stats.likes)), "j'aime reçus"),
       ),

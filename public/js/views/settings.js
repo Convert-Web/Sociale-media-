@@ -63,7 +63,7 @@ export function settingsView(ctx) {
   const website = h('input', { class: 'input', value: u.website, maxlength: 120, placeholder: 'votre-site.com' });
   const bio = h('textarea', { class: 'textarea', maxlength: 280, placeholder: 'Quelques mots pour vous présenter au cercle.' });
   bio.value = u.bio;
-  const saveBtn = h('button', { class: 'btn btn-gold', type: 'submit' }, 'Enregistrer');
+  const saveBtn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Enregistrer');
 
   const profileForm = h(
     'form',
@@ -160,7 +160,7 @@ export function settingsView(ctx) {
   const deleteAccount = async () => {
     const ok = await confirmDialog(
       'Quitter définitivement le cercle ?',
-      'Votre profil, vos publications, vos messages et votre numéro seront supprimés. Le droit d’entrée ne sera pas remboursé. Cette action est irréversible.',
+      `Votre profil, vos publications, vos messages et votre numéro seront supprimés.${store.config.paidEntry ? ' Le droit d’entrée ne sera pas remboursé.' : ''} Cette action est irréversible.`,
       'Continuer',
     );
     if (!ok) return;

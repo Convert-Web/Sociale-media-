@@ -75,9 +75,9 @@ function buildShell() {
   };
 
   const links = [
-    { key: 'salon', href: '/salon', icon: 'home', label: 'Le Salon' },
+    { key: 'salon', href: '/salon', icon: 'home', label: 'Salon' },
     { key: 'explorer', href: '/explorer', icon: 'compass', label: 'Explorer' },
-    { key: 'notifications', href: '/notifications', icon: 'bell', label: 'Notifications', badge: 'notifications' },
+    { key: 'notifications', href: '/notifications', icon: 'bell', label: 'Activité', badge: 'notifications' },
     { key: 'messages', href: '/messages', icon: 'mail', label: 'Messages', badge: 'messages' },
     { key: 'profil', href: `/@${u.username}`, icon: 'user', label: 'Profil' },
     { key: 'reglages', href: '/reglages', icon: 'settings', label: 'Réglages' },
@@ -89,7 +89,7 @@ function buildShell() {
     const me = store.user;
     if (!me) return;
     meCard.replaceChildren(
-      h('a', { href: `/@${me.username}`, style: { display: 'flex', alignItems: 'center', gap: '12px', minWidth: '0', flex: '1' } }, avatar(me), h('span', { class: 'meta' }, h('b', null, me.displayName), h('small', null, `@${me.username}`))),
+      h('a', { href: `/@${me.username}` }, avatar(me, 'sm'), h('span', { class: 'meta' }, h('b', null, me.displayName), h('small', null, `@${me.username}`))),
       h('button', { class: 'icon-btn', title: 'Se déconnecter', 'aria-label': 'Se déconnecter', onclick: logout }, icon('logout')),
     );
   };
@@ -106,7 +106,7 @@ function buildShell() {
         h('a', { href: l.href, class: 'nav-link' }, h('span', { class: 'icon-wrap' }, icon(l.icon), l.badge ? badge(l.badge) : null), h('span', { class: 'label' }, l.label)),
       ),
     ),
-    h('button', { class: 'btn btn-gold btn-lg', onclick: openComposer, title: 'Publier' }, icon('pen'), h('span', { class: 'label' }, 'Publier')),
+    h('button', { class: 'btn btn-primary', onclick: openComposer, title: 'Publier' }, icon('pen'), h('span', { class: 'label' }, 'Publier')),
     meCard,
   );
 
@@ -177,11 +177,11 @@ function buildShell() {
   const tabbar = h(
     'nav',
     { class: 'tabbar', 'aria-label': 'Navigation' },
-    register('salon', h('a', { href: '/salon', 'aria-label': 'Le Salon' }, icon('home'))),
-    register('explorer', h('a', { href: '/explorer', 'aria-label': 'Explorer' }, icon('compass'))),
+    register('salon', h('a', { href: '/salon' }, icon('home'), 'Salon')),
+    register('explorer', h('a', { href: '/explorer' }, icon('compass'), 'Explorer')),
     h('a', { href: '#', 'aria-label': 'Publier', onclick: (e) => (e.preventDefault(), openComposer()) }, h('span', { class: 'plus' }, icon('plus'))),
-    register('notifications', h('a', { href: '/notifications', 'aria-label': 'Notifications' }, icon('bell'), badge('notifications'))),
-    register('messages', h('a', { href: '/messages', 'aria-label': 'Messages' }, icon('mail'), badge('messages'))),
+    register('notifications', h('a', { href: '/notifications' }, h('span', { class: 'tab-icon' }, icon('bell'), badge('notifications')), 'Activité')),
+    register('messages', h('a', { href: '/messages' }, h('span', { class: 'tab-icon' }, icon('mail'), badge('messages')), 'Messages')),
   );
 
   const main = h('main', { class: 'main', id: 'main' });
@@ -228,7 +228,7 @@ function errorView(err) {
 }
 
 function notFoundView() {
-  return emptyState('compass', 'Page introuvable', "Cette page n'existe pas, ou plus.", h('a', { href: '/', class: 'btn btn-gold' }, "Retour à l'accueil"));
+  return emptyState('compass', 'Page introuvable', "Cette page n'existe pas, ou plus.", h('a', { href: '/', class: 'btn btn-primary' }, "Retour à l'accueil"));
 }
 
 function match(pathname) {

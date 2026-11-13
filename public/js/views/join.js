@@ -28,7 +28,7 @@ export function joinView(ctx) {
   const waiver = h('input', { type: 'checkbox' });
   const cgv = h('input', { type: 'checkbox' });
   const err = h('div', { class: 'form-error', role: 'alert', hidden: true });
-  const payBtn = h('button', { class: 'btn btn-gold btn-lg btn-block', type: 'submit' }, icon('lock'), `Payer ${price} et entrer`);
+  const payBtn = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'submit' }, icon('lock'), `Payer ${price} et entrer`);
   const canPay = cfg.stripeEnabled || cfg.demoPayments;
   if (!canPay) payBtn.disabled = true;
 
@@ -54,14 +54,14 @@ export function joinView(ctx) {
   };
 
   async function demoCheckout() {
-    const confirmBtn = h('button', { class: 'btn btn-gold btn-lg btn-block' }, `Simuler le paiement de ${price}`);
+    const confirmBtn = h('button', { class: 'btn btn-primary btn-lg btn-block' }, `Simuler le paiement de ${price}`);
     const m = modal(
       'Paiement simulé',
       h(
         'div',
         { class: 'modal-body', style: { display: 'grid', gap: '18px' } },
         h('div', { class: 'demo-banner' }, icon('info'), h('span', null, 'Aucune carte bancaire ne sera débitée. Ce mode sert à tester AURUM avant de brancher Stripe.')),
-        h('div', { class: 'join-total' }, h('span', { class: 'text-2' }, "Droit d'entrée AURUM"), h('b', { class: 'gold-text' }, price)),
+        h('div', { class: 'join-total' }, h('span', { class: 'text-2' }, "Droit d'entrée AURUM"), h('b', { class: 'accent' }, price)),
         confirmBtn,
       ),
     );
@@ -109,7 +109,7 @@ export function joinView(ctx) {
         }
       },
     },
-    h('div', { class: 'join-total' }, h('div', null, h('div', { class: 'eyebrow' }, "Droit d'entrée"), h('small', { class: 'muted' }, 'Paiement unique · accès à vie')), h('b', { class: 'gold-text' }, price)),
+    h('div', { class: 'join-total' }, h('div', null, h('div', { class: 'eyebrow' }, "Droit d'entrée"), h('small', { class: 'muted' }, 'Paiement unique · accès à vie')), h('b', { class: 'accent' }, price)),
     h(
       'ul',
       { class: 'price-list', style: { margin: '0' } },
@@ -165,7 +165,7 @@ export function joinView(ctx) {
         'div',
         { class: 'fade-up' },
         h('div', { class: 'steps' }, h('i', { class: 'on' }), h('i', { class: 'on' }), h('span', null, "Étape 2 sur 2 — Droit d'entrée")),
-        h('h1', null, `Plus qu'une porte à franchir, `, h('em', { class: 'gold-text' }, firstName), '.'),
+        h('h1', null, `Plus qu'une porte à franchir, `, h('em', { class: 'accent' }, firstName), '.'),
         h('p', { class: 'lead' }, 'Votre carte est prête. Il ne manque que le droit d’entrée pour y graver votre numéro.'),
         h('div', { style: { marginTop: '34px', maxWidth: '420px' } }, memberCard({ name: u.displayName, number: null, since: cardSince(Date.now()) })),
       ),
@@ -175,60 +175,8 @@ export function joinView(ctx) {
 }
 
 // ---------------------------------------------------------------------------
-// Cérémonie de bienvenue
+// Bienvenue : la carte apparaît, le numéro défile jusqu'au vôtre
 // ---------------------------------------------------------------------------
-function goldRain(canvas) {
-  const ctx2d = canvas.getContext('2d');
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  let w, hgt;
-  const resize = () => {
-    w = canvas.width = innerWidth * dpr;
-    hgt = canvas.height = innerHeight * dpr;
-  };
-  resize();
-  addEventListener('resize', resize);
-  const colors = ['#f6e7b0', '#d8b45a', '#a8822e', '#f0d68a', '#fff4d0'];
-  const parts = Array.from({ length: 160 }, () => ({
-    x: w / 2 + (Math.random() - 0.5) * w * 0.2,
-    y: hgt * 0.42,
-    vx: (Math.random() - 0.5) * 18 * dpr,
-    vy: (-Math.random() * 16 - 6) * dpr,
-    r: (Math.random() * 3 + 1.5) * dpr,
-    rot: Math.random() * Math.PI,
-    vr: (Math.random() - 0.5) * 0.3,
-    c: colors[Math.floor(Math.random() * colors.length)],
-    life: 1,
-  }));
-  let raf;
-  const tick = () => {
-    ctx2d.clearRect(0, 0, w, hgt);
-    let alive = 0;
-    for (const p of parts) {
-      p.vy += 0.32 * dpr;
-      p.vx *= 0.985;
-      p.x += p.vx;
-      p.y += p.vy;
-      p.rot += p.vr;
-      p.life -= 0.0045;
-      if (p.life <= 0 || p.y > hgt + 20) continue;
-      alive++;
-      ctx2d.save();
-      ctx2d.globalAlpha = Math.max(0, p.life);
-      ctx2d.translate(p.x, p.y);
-      ctx2d.rotate(p.rot);
-      ctx2d.fillStyle = p.c;
-      ctx2d.fillRect(-p.r, -p.r / 2.5, p.r * 2, p.r / 1.25);
-      ctx2d.restore();
-    }
-    if (alive) raf = requestAnimationFrame(tick);
-  };
-  setTimeout(() => (raf = requestAnimationFrame(tick)), 700);
-  return () => {
-    cancelAnimationFrame(raf);
-    removeEventListener('resize', resize);
-  };
-}
-
 export function welcomeView(ctx) {
   const u = store.user;
   const firstName = u.displayName.split(/\s+/)[0];
@@ -247,20 +195,16 @@ export function welcomeView(ctx) {
   };
   requestAnimationFrame(step);
 
-  const canvas = h('canvas', { 'aria-hidden': 'true' });
-  ctx.onCleanup(goldRain(canvas));
-
   ctx.title = 'Bienvenue — AURUM';
   return h(
     'div',
     { class: 'welcome' },
-    canvas,
     h(
       'div',
       { class: 'welcome-inner' },
       h('span', { class: 'eyebrow fade-up' }, 'Bienvenue dans le cercle'),
       card,
-      h('h1', { class: 'fade-up', style: { animationDelay: '1.2s' } }, 'Vous êtes membre, ', h('em', { class: 'gold-text' }, firstName), '.'),
+      h('h1', { class: 'fade-up', style: { animationDelay: '1.2s' } }, 'Vous êtes membre, ', h('em', { class: 'accent' }, firstName), '.'),
       h(
         'p',
         { class: 'text-2 fade-up', style: { animationDelay: '1.4s', fontSize: '17px' } },
@@ -272,7 +216,7 @@ export function welcomeView(ctx) {
         'div',
         { class: 'hero-cta fade-up', style: { animationDelay: '1.6s', justifyContent: 'center', margin: '8px 0 0' } },
         h('a', { href: '/reglages', class: 'btn btn-ghost btn-lg' }, 'Compléter mon profil'),
-        h('a', { href: '/salon', class: 'btn btn-gold btn-lg' }, 'Entrer dans le Salon', icon('arrow')),
+        h('a', { href: '/salon', class: 'btn btn-primary btn-lg' }, 'Entrer dans le Salon', icon('arrow')),
       ),
     ),
   );

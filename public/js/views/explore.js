@@ -42,7 +42,7 @@ export function exploreView(ctx) {
       );
     }
     if (suggested.length) {
-      results.append(h('div', { class: 'section-title' }, 'À découvrir'), h('div', { style: { padding: '0 10px' } }, suggested.map((u) => userRow(u))));
+      results.append(h('div', { class: 'section-title' }, 'À découvrir'), h('div', { class: 'explore-list' }, suggested.map((u) => userRow(u))));
     }
     results.append(h('div', { class: 'section-title' }, 'Derniers arrivés'), h('div', { class: 'member-grid' }, newest.map(memberCardSmall)));
   }
@@ -56,7 +56,7 @@ export function exploreView(ctx) {
       results.append(emptyState('search', 'Aucun résultat', `Rien ne correspond à « ${q} » pour le moment.`));
       return;
     }
-    if (users.length) results.append(h('div', { class: 'section-title' }, 'Membres'), h('div', { style: { padding: '0 10px' } }, users.map((u) => userRow(u))));
+    if (users.length) results.append(h('div', { class: 'section-title' }, 'Membres'), h('div', { class: 'explore-list' }, users.map((u) => userRow(u))));
     if (posts.length) results.append(h('div', { class: 'section-title' }, 'Publications'), posts.map((p) => postCard(p)));
   }
 

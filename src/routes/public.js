@@ -14,6 +14,7 @@ module.exports = function publicRoutes(ctx) {
       cities,
       founderSpotsLeft: Math.max(0, config.founderLimit - lastNumber),
       founderLimit: config.founderLimit,
+      paidEntry: config.paidEntry,
       priceCents: config.priceCents,
       currency: config.currency,
     });

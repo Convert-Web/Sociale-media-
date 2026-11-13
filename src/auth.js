@@ -1,6 +1,7 @@
 'use strict';
 const { newToken, sha256 } = require('./security');
 const { fail } = require('./http');
+const { admitMember } = require('./membership');
 
 const SESSION_COOKIE = 'aurum_sid';
 const SESSION_TTL = 30 * 24 * 3600 * 1000; // 30 jours
@@ -39,7 +40,7 @@ function loadUser(ctx) {
          WHERE s.id = ? AND s.expires_at > ?`,
         sha256(token), now,
       );
-      if (row) req.user = row;
+      if (row) req.user = row.paid_at || ctx.config.paidEntry ? row : admitMember(ctx, row.id);
       if (now - lastCleanup > 3600 * 1000) {
         lastCleanup = now;
         ctx.db.run('DELETE FROM sessions WHERE expires_at <= ?', now);

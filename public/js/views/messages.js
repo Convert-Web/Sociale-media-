@@ -19,7 +19,7 @@ export function messagesView(ctx) {
       clear(listItems);
       if (!conversations.length) {
         listItems.append(
-          emptyState('mail', 'Aucune conversation', 'Écrivez à un membre : vos échanges restent entre vous.', h('button', { class: 'btn btn-gold btn-sm', onclick: () => newBtn.click() }, 'Nouveau message')),
+          emptyState('mail', 'Aucune conversation', 'Écrivez à un membre : vos échanges restent entre vous.', h('button', { class: 'btn btn-primary btn-sm', onclick: () => newBtn.click() }, 'Nouveau message')),
         );
       }
       for (const c of conversations) {
@@ -47,7 +47,7 @@ export function messagesView(ctx) {
   // ---------------------------------------------------------------------
   async function loadThread() {
     if (!other) {
-      threadHost.append(h('div', { class: 'dm-empty' }, emptyState('mail', 'Vos messages', 'Choisissez une conversation, ou écrivez à un membre du cercle.', h('button', { class: 'btn btn-gold', onclick: () => newBtn.click() }, 'Nouveau message'))));
+      threadHost.append(h('div', { class: 'dm-empty' }, emptyState('mail', 'Vos messages', 'Choisissez une conversation, ou écrivez à un membre du cercle.', h('button', { class: 'btn btn-primary', onclick: () => newBtn.click() }, 'Nouveau message'))));
       return;
     }
     threadHost.append(spinner());
@@ -92,7 +92,7 @@ export function messagesView(ctx) {
 
     const ta = h('textarea', { placeholder: `Écrire à ${peer.displayName.split(' ')[0]}…`, rows: 1, maxlength: 2000, 'aria-label': 'Message' });
     autosize(ta);
-    const send = h('button', { class: 'btn btn-gold btn-icon', type: 'submit', 'aria-label': 'Envoyer' }, icon('send'));
+    const send = h('button', { class: 'btn btn-primary btn-icon', type: 'submit', 'aria-label': 'Envoyer' }, icon('send'));
     const form = h(
       'form',
       {
