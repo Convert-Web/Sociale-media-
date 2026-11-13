@@ -16,10 +16,10 @@ module.exports = function authRoutes(ctx) {
   const r = express.Router();
   const { db, config } = ctx;
 
-  r.get('/session', (req, res) => {
+  r.get('/session', async (req, res) => {
     res.json({
       user: req.user ? selfUser(ctx, req.user) : null,
-      counters: req.user && req.user.paid_at ? counters(ctx, req.user.id) : null,
+      counters: req.user && req.user.paid_at ? await counters(ctx, req.user.id) : null,
       config: {
         appName: config.appName,
         priceCents: config.priceCents,
@@ -43,51 +43,51 @@ module.exports = function authRoutes(ctx) {
     }
     if (RESERVED.has(username.toLowerCase())) fail(409, "Ce nom d'utilisateur est réservé.");
     if (!EMAIL_RE.test(email)) fail(400, 'Adresse e-mail invalide.');
-    if (db.get('SELECT 1 FROM users WHERE username = ?', username)) fail(409, "Ce nom d'utilisateur est déjà pris.");
-    if (db.get('SELECT 1 FROM users WHERE email = ?', email)) fail(409, 'Un compte existe déjà avec cet e-mail.');
+    if (await db.get('SELECT 1 FROM users WHERE username = ?', username)) fail(409, "Ce nom d'utilisateur est déjà pris.");
+    if (await db.get('SELECT 1 FROM users WHERE email = ?', email)) fail(409, 'Un compte existe déjà avec cet e-mail.');
 
     const hash = await hashPassword(password);
     // Sans ADMIN_EMAILS, le tout premier compte créé devient administrateur.
-    const firstAccount = !config.adminEmails.length && !db.get('SELECT 1 FROM users WHERE is_admin = 1');
+    const firstAccount = !config.adminEmails.length && !(await db.get('SELECT 1 FROM users WHERE is_admin = 1'));
     const isAdmin = config.adminEmails.includes(email) || firstAccount ? 1 : 0;
-    const { lastInsertRowid } = db.run(
+    const { lastInsertRowid } = await db.run(
       `INSERT INTO users (username, email, password_hash, display_name, is_admin, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
       username, email, hash, displayName, isAdmin, Date.now(),
     );
-    createSession(ctx, res, lastInsertRowid);
+    await createSession(ctx, res, lastInsertRowid);
     const user = config.paidEntry
-      ? db.get('SELECT * FROM users WHERE id = ?', lastInsertRowid)
-      : admitMember(ctx, lastInsertRowid);
+      ? await db.get('SELECT * FROM users WHERE id = ?', lastInsertRowid)
+      : await admitMember(ctx, lastInsertRowid);
     res.status(201).json({ user: selfUser(ctx, user) });
   });
 
   r.post('/auth/login', async (req, res) => {
     const login = text(req.body.login, { field: 'Identifiant', required: true, max: 120 }).replace(/^@/, '');
     const password = typeof req.body.password === 'string' ? req.body.password : '';
-    const user = db.get('SELECT * FROM users WHERE email = ? OR username = ?', login, login);
+    const user = await db.get('SELECT * FROM users WHERE email = ? OR username = ?', login, login);
     const ok = user ? await verifyPassword(password, user.password_hash) : await burnPasswordCheck(password);
     if (!ok) fail(401, 'Identifiants incorrects.');
     if (!user.is_admin && config.adminEmails.includes(user.email.toLowerCase())) {
-      db.run('UPDATE users SET is_admin = 1 WHERE id = ?', user.id);
-      user.is_admin = 1;
+      await db.run('UPDATE users SET is_admin = 1 WHERE id = ?', user.id);
     }
-    createSession(ctx, res, user.id);
-    res.json({ user: selfUser(ctx, user.paid_at || config.paidEntry ? user : admitMember(ctx, user.id)) });
+    await createSession(ctx, res, user.id);
+    const fresh = user.paid_at || config.paidEntry ? await db.get('SELECT * FROM users WHERE id = ?', user.id) : await admitMember(ctx, user.id);
+    res.json({ user: selfUser(ctx, fresh) });
   });
 
-  r.post('/auth/logout', (req, res) => {
-    destroySession(ctx, req, res);
+  r.post('/auth/logout', async (req, res) => {
+    await destroySession(ctx, req, res);
     res.json({ ok: true });
   });
 
   r.post('/auth/forgot', async (req, res) => {
     const email = text(req.body.email, { field: 'E-mail', required: true, max: 120 }).toLowerCase();
-    const user = db.get('SELECT * FROM users WHERE email = ?', email);
+    const user = await db.get('SELECT * FROM users WHERE email = ?', email);
     if (user) {
       const token = newToken();
-      db.run('DELETE FROM password_resets WHERE user_id = ?', user.id);
-      db.run(
+      await db.run('DELETE FROM password_resets WHERE user_id = ?', user.id);
+      await db.run(
         'INSERT INTO password_resets (id, user_id, expires_at) VALUES (?, ?, ?)',
         sha256(token), user.id, Date.now() + 3600 * 1000,
       );
@@ -107,19 +107,19 @@ module.exports = function authRoutes(ctx) {
   r.post('/auth/reset', async (req, res) => {
     const token = typeof req.body.token === 'string' ? req.body.token : '';
     const password = validatePassword(req.body.password);
-    const row = db.get(
+    const row = await db.get(
       'SELECT * FROM password_resets WHERE id = ? AND used_at IS NULL AND expires_at > ?',
       sha256(token), Date.now(),
     );
     if (!row) fail(400, 'Ce lien a expiré ou a déjà été utilisé.');
     const hash = await hashPassword(password);
-    db.transaction(() => {
-      db.run('UPDATE users SET password_hash = ? WHERE id = ?', hash, row.user_id);
-      db.run('UPDATE password_resets SET used_at = ? WHERE id = ?', Date.now(), row.id);
-      db.run('DELETE FROM sessions WHERE user_id = ?', row.user_id);
+    await db.transaction(async (t) => {
+      await t.run('UPDATE users SET password_hash = ? WHERE id = ?', hash, row.user_id);
+      await t.run('UPDATE password_resets SET used_at = ? WHERE id = ?', Date.now(), row.id);
+      await t.run('DELETE FROM sessions WHERE user_id = ?', row.user_id);
     });
-    createSession(ctx, res, row.user_id);
-    const user = config.paidEntry ? db.get('SELECT * FROM users WHERE id = ?', row.user_id) : admitMember(ctx, row.user_id);
+    await createSession(ctx, res, row.user_id);
+    const user = config.paidEntry ? await db.get('SELECT * FROM users WHERE id = ?', row.user_id) : await admitMember(ctx, row.user_id);
     res.json({ user: selfUser(ctx, user) });
   });
 
@@ -128,11 +128,11 @@ module.exports = function authRoutes(ctx) {
     const next = validatePassword(req.body.next);
     if (!(await verifyPassword(current, req.user.password_hash))) fail(400, 'Mot de passe actuel incorrect.');
     const hash = await hashPassword(next);
-    db.transaction(() => {
-      db.run('UPDATE users SET password_hash = ? WHERE id = ?', hash, req.user.id);
-      db.run('DELETE FROM sessions WHERE user_id = ?', req.user.id);
+    await db.transaction(async (t) => {
+      await t.run('UPDATE users SET password_hash = ? WHERE id = ?', hash, req.user.id);
+      await t.run('DELETE FROM sessions WHERE user_id = ?', req.user.id);
     });
-    createSession(ctx, res, req.user.id);
+    await createSession(ctx, res, req.user.id);
     res.json({ ok: true });
   });
 

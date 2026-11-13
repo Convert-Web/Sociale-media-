@@ -68,8 +68,8 @@ function serializePost(ctx, row, viewer) {
   };
 }
 
-function getPost(ctx, postId, viewer) {
-  const row = ctx.db.get(`${POST_SELECT} WHERE p.id = ?`, viewer.id, postId);
+async function getPost(ctx, postId, viewer) {
+  const row = await ctx.db.get(`${POST_SELECT} WHERE p.id = ?`, viewer.id, postId);
   return row ? serializePost(ctx, row, viewer) : null;
 }
 
@@ -110,56 +110,59 @@ function serializeNotification(ctx, row) {
   };
 }
 
-function counters(ctx, userId) {
-  const n = ctx.db.get('SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND read_at IS NULL', userId).c;
-  const m = ctx.db.get('SELECT COUNT(*) AS c FROM messages WHERE recipient_id = ? AND read_at IS NULL', userId).c;
-  return { notifications: n, messages: m };
+async function counters(ctx, userId) {
+  const row = await ctx.db.get(
+    `SELECT (SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL) AS n,
+            (SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND read_at IS NULL) AS m`,
+    userId, userId,
+  );
+  return { notifications: row.n, messages: row.m };
 }
 
-function pushCounters(ctx, userId) {
-  if (ctx.hub.isOnline(userId)) ctx.hub.send(userId, 'counters', counters(ctx, userId));
+async function pushCounters(ctx, userId) {
+  if (ctx.hub.isOnline(userId)) ctx.hub.send(userId, 'counters', await counters(ctx, userId));
 }
 
-function notify(ctx, { userId, actorId, type, postId = null }) {
+async function notify(ctx, { userId, actorId, type, postId = null }) {
   if (!userId || userId === actorId) return;
   if (type === 'like' || type === 'follow') {
     // Pas de doublon pour une même action répétée
-    const existing = ctx.db.get(
+    const existing = await ctx.db.get(
       'SELECT id FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ?',
       userId, actorId, type, postId,
     );
     if (existing) return;
   }
-  const { lastInsertRowid } = ctx.db.run(
+  const { lastInsertRowid } = await ctx.db.run(
     'INSERT INTO notifications (user_id, actor_id, type, post_id, created_at) VALUES (?, ?, ?, ?, ?)',
     userId, actorId, type, postId, Date.now(),
   );
   if (ctx.hub.isOnline(userId)) {
-    const row = ctx.db.get(`${NOTIF_SELECT} WHERE n.id = ?`, lastInsertRowid);
+    const row = await ctx.db.get(`${NOTIF_SELECT} WHERE n.id = ?`, lastInsertRowid);
     ctx.hub.send(userId, 'notification', serializeNotification(ctx, row));
-    pushCounters(ctx, userId);
+    await pushCounters(ctx, userId);
   }
 }
 
-function retractNotification(ctx, { userId, actorId, type, postId = null }) {
-  ctx.db.run(
+async function retractNotification(ctx, { userId, actorId, type, postId = null }) {
+  await ctx.db.run(
     'DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ?',
     userId, actorId, type, postId,
   );
-  pushCounters(ctx, userId);
+  await pushCounters(ctx, userId);
 }
 
 const MENTION_RE = /(^|[^\w@.])@([a-z0-9_.]{3,20})/gi;
 
-function notifyMentions(ctx, text, actorId, postId) {
+async function notifyMentions(ctx, text, actorId, postId) {
   const names = new Set();
   for (const m of text.matchAll(MENTION_RE)) {
     names.add(m[2].replace(/\.+$/, '').toLowerCase());
     if (names.size >= 10) break;
   }
   for (const name of names) {
-    const u = ctx.db.get('SELECT id FROM users WHERE username = ? AND paid_at IS NOT NULL', name);
-    if (u) notify(ctx, { userId: u.id, actorId, type: 'mention', postId });
+    const u = await ctx.db.get('SELECT id FROM users WHERE username = ? AND paid_at IS NOT NULL', name);
+    if (u) await notify(ctx, { userId: u.id, actorId, type: 'mention', postId });
   }
 }
 

@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { store, disconnectRealtime } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, toast, memberCard, cardSince, fullDate, memberNo, confirmDialog, modal } from '../dom.js';
+import { h, icon, avatar, toast, memberCard, cardSince, fullDate, memberNo, confirmDialog, modal, shrinkImage, TOO_BIG_GIF } from '../dom.js';
 import { backHead } from './feed.js';
 
 function field(label, input, hint) {
@@ -14,7 +14,7 @@ function imagePicker(onFile) {
     const f = input.files[0];
     input.value = '';
     if (!f) return;
-    if (f.size > 8 * 1024 * 1024) return toast('Image trop lourde (8 Mo maximum).', 'error');
+    if (f.type === 'image/gif' && f.size > TOO_BIG_GIF) return toast('GIF trop lourd (6 Mo maximum).', 'error');
     onFile(f);
   });
   return input;
@@ -34,7 +34,8 @@ export function settingsView(ctx) {
 
   const upload = async (kind, file) => {
     const fd = new FormData();
-    fd.append('image', file);
+    const small = await shrinkImage(file, kind === 'avatar' ? 800 : 2000);
+    fd.append('image', small, small.name || 'photo');
     try {
       const { user } = await api.post(`/api/me/${kind}`, fd);
       store.setUser(user);

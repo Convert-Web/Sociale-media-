@@ -1,7 +1,7 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
+const { createClient } = require('@libsql/client');
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -111,51 +111,66 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at     INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, id);
+
+-- Photos envoyées par les membres, stockées dans la base
+-- (les hébergeurs gratuits effacent leurs fichiers à chaque redémarrage).
+CREATE TABLE IF NOT EXISTS media (
+  id          TEXT PRIMARY KEY,
+  mime        TEXT NOT NULL,
+  data        BLOB NOT NULL,
+  size        INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL
+);
 `;
 
-function openDatabase(filePath) {
-  if (filePath !== ':memory:') fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const db = new DatabaseSync(filePath);
-  db.exec('PRAGMA journal_mode = WAL;');
-  db.exec('PRAGMA foreign_keys = ON;');
-  db.exec('PRAGMA busy_timeout = 5000;');
-  db.exec(SCHEMA);
-
-  // Cache des requêtes préparées
-  const cache = new Map();
-  const stmt = (sql) => {
-    let s = cache.get(sql);
-    if (!s) {
-      s = db.prepare(sql);
-      cache.set(sql, s);
-    }
-    return s;
-  };
-
-  let depth = 0;
+// Accès à la base : fichier SQLite local en développement, Turso (libSQL) en ligne.
+// Toutes les fonctions renvoient des promesses.
+function wrap(executor) {
+  const args = (params) => params.map((v) => (v === undefined ? null : typeof v === 'boolean' ? Number(v) : v));
   return {
-    raw: db,
-    get: (sql, ...params) => stmt(sql).get(...params),
-    all: (sql, ...params) => stmt(sql).all(...params),
-    run: (sql, ...params) => stmt(sql).run(...params),
-    exec: (sql) => db.exec(sql),
-    transaction(fn) {
-      if (depth > 0) return fn();
-      depth++;
-      db.exec('BEGIN IMMEDIATE');
-      try {
-        const result = fn();
-        db.exec('COMMIT');
-        return result;
-      } catch (err) {
-        db.exec('ROLLBACK');
-        throw err;
-      } finally {
-        depth--;
-      }
+    async get(sql, ...params) {
+      const r = await executor.execute({ sql, args: args(params) });
+      return r.rows[0];
     },
-    close: () => db.close(),
+    async all(sql, ...params) {
+      const r = await executor.execute({ sql, args: args(params) });
+      return r.rows;
+    },
+    async run(sql, ...params) {
+      const r = await executor.execute({ sql, args: args(params) });
+      return { changes: r.rowsAffected, lastInsertRowid: r.lastInsertRowid == null ? undefined : Number(r.lastInsertRowid) };
+    },
   };
+}
+
+async function openDatabase({ url, authToken }) {
+  const local = url.startsWith('file:');
+  if (local) fs.mkdirSync(path.dirname(url.slice(5)), { recursive: true });
+  const client = createClient({ url, authToken: authToken || undefined, intMode: 'number' });
+  if (local) {
+    await client.execute('PRAGMA journal_mode = WAL');
+    await client.execute('PRAGMA busy_timeout = 5000');
+  }
+  await client.executeMultiple(SCHEMA);
+
+  const db = wrap(client);
+  // Transaction : fn reçoit un objet { get, all, run } lié à la transaction.
+  db.transaction = async (fn) => {
+    const tx = await client.transaction('write');
+    try {
+      const result = await fn(wrap(tx));
+      await tx.commit();
+      return result;
+    } catch (err) {
+      await tx.rollback().catch(() => {});
+      throw err;
+    } finally {
+      tx.close();
+    }
+  };
+  db.close = () => client.close();
+  db.remote = !local;
+  return db;
 }
 
 module.exports = { openDatabase };

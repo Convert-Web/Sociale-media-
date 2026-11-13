@@ -372,3 +372,32 @@ export function debounce(fn, ms) {
     t = setTimeout(() => fn(...args), ms);
   };
 }
+
+// Réduit une photo dans le navigateur avant l'envoi (une photo de téléphone
+// de 4 Mo devient ~300 Ko). Les GIF animés sont envoyés tels quels.
+export async function shrinkImage(file, maxDim = 1600, quality = 0.85) {
+  if (!file || file.type === 'image/gif' || typeof createImageBitmap !== 'function') return file;
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    return file;
+  }
+  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+  if (scale === 1 && file.size < 900 * 1024) {
+    bitmap.close?.();
+    return file;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+  return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file;
+}
+
+export const TOO_BIG_GIF = 6 * 1024 * 1024;

@@ -73,8 +73,8 @@ async function main() {
     console.error('Refusé : les membres fictifs ne doivent jamais être installés sur le site en ligne.');
     process.exit(1);
   }
-  const db = openDatabase(config.databasePath);
-  if (db.get('SELECT 1 FROM users WHERE username = ?', 'victoire')) {
+  const db = await openDatabase(config.database);
+  if (await db.get('SELECT 1 FROM users WHERE username = ?', 'victoire')) {
     console.log('Les données de démonstration sont déjà présentes.');
     return;
   }
@@ -85,34 +85,35 @@ async function main() {
 
   for (const [i, m] of MEMBERS.entries()) {
     const created = now - (140 - i * 3) * H;
-    const { lastInsertRowid } = db.run(
+    const { lastInsertRowid } = await db.run(
       `INSERT INTO users (username, email, password_hash, display_name, bio, city, profession, is_admin, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       m.username, `${m.username.replace('.', '')}@aurum.demo`, hash, m.name, m.bio, m.city, m.profession, m.admin ? 1 : 0, created,
     );
     ids[m.username] = lastInsertRowid;
-    admitMember(ctx, lastInsertRowid);
-    db.run('UPDATE users SET paid_at = ? WHERE id = ?', created + 60000, lastInsertRowid);
+    await admitMember(ctx, lastInsertRowid);
+    await db.run('UPDATE users SET paid_at = ? WHERE id = ?', created + 60000, lastInsertRowid);
   }
 
-  const postIds = POSTS.map(([user, body, image, hoursAgo]) => {
-    const { lastInsertRowid } = db.run(
+  const postIds = [];
+  for (const [user, body, image, hoursAgo] of POSTS) {
+    const { lastInsertRowid } = await db.run(
       'INSERT INTO posts (user_id, body, image, created_at) VALUES (?, ?, ?, ?)',
       ids[user], body, image ? `/seed/${image}` : null, now - hoursAgo * H,
     );
-    return { id: lastInsertRowid, at: now - hoursAgo * H, author: ids[user] };
-  });
+    postIds.push({ id: lastInsertRowid, at: now - hoursAgo * H, author: ids[user] });
+  }
 
   for (const [idx, user, body] of COMMENTS) {
     const p = postIds[idx];
     const at = p.at + (1 + Math.random() * 5) * H;
-    db.run('INSERT INTO comments (post_id, user_id, body, created_at) VALUES (?, ?, ?, ?)', p.id, ids[user], body, Math.min(at, now - 60000));
-    db.run('INSERT INTO notifications (user_id, actor_id, type, post_id, created_at, read_at) VALUES (?, ?, ?, ?, ?, ?)', p.author, ids[user], 'comment', p.id, Math.min(at, now - 60000), now);
+    await db.run('INSERT INTO comments (post_id, user_id, body, created_at) VALUES (?, ?, ?, ?)', p.id, ids[user], body, Math.min(at, now - 60000));
+    await db.run('INSERT INTO notifications (user_id, actor_id, type, post_id, created_at, read_at) VALUES (?, ?, ?, ?, ?, ?)', p.author, ids[user], 'comment', p.id, Math.min(at, now - 60000), now);
   }
 
   for (const [follower, followees] of Object.entries(FOLLOWS)) {
     for (const f of followees) {
-      db.run('INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)', ids[follower], ids[f], now - 100 * H);
+      await db.run('INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)', ids[follower], ids[f], now - 100 * H);
     }
   }
 
@@ -120,13 +121,13 @@ async function main() {
   for (const p of postIds) {
     for (const u of usernames) {
       if (ids[u] !== p.author && Math.random() < 0.55) {
-        db.run('INSERT OR IGNORE INTO likes (user_id, post_id, created_at) VALUES (?, ?, ?)', ids[u], p.id, p.at + H);
+        await db.run('INSERT OR IGNORE INTO likes (user_id, post_id, created_at) VALUES (?, ?, ?)', ids[u], p.id, p.at + H);
       }
     }
   }
 
   for (const [from, to, body, hoursAgo] of MESSAGES) {
-    db.run(
+    await db.run(
       'INSERT INTO messages (sender_id, recipient_id, body, created_at, read_at) VALUES (?, ?, ?, ?, ?)',
       ids[from], ids[to], body, now - hoursAgo * H, hoursAgo > 10 ? now - (hoursAgo - 1) * H : null,
     );

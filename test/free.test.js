@@ -20,8 +20,8 @@ let ctx;
 before(async () => {
   const dbPath = path.join(tmp, 'free.db');
   // Un compte créé du temps où l'entrée était payante, jamais réglé
-  const pre = openDatabase(dbPath);
-  pre.run(
+  const pre = await openDatabase({ url: `file:${dbPath}` });
+  await pre.run(
     'INSERT INTO users (username, email, password_hash, display_name, created_at) VALUES (?, ?, ?, ?, ?)',
     'ancien', 'ancien@aurum.test', await hashPassword('motdepasse-solide'), 'Ancien Inscrit', Date.now(),
   );
@@ -30,15 +30,14 @@ before(async () => {
   const cfg = {
     ...config,
     dataDir: tmp,
-    databasePath: dbPath,
-    uploadsDir: path.join(tmp, 'uploads'),
+    database: { url: `file:${dbPath}`, authToken: '' },
     paidEntry: false,
     demoPayments: false,
     rateLimit: false,
     adminEmails: [],
     stripe: { secretKey: '', webhookSecret: '' },
   };
-  const created = createApp(cfg, { stripe: null, mailer: { send: async () => {} } });
+  const created = await createApp(cfg, { stripe: null, mailer: { send: async () => {} } });
   ctx = created.ctx;
   await new Promise((resolve) => {
     server = created.app.listen(0, resolve);
@@ -76,7 +75,7 @@ test('inscription : accès immédiat, numéro attribué, premier compte administ
   assert.equal(r.data.user.isAdmin, true);
   const feed = await call('GET', '/api/feed', null, r.cookie);
   assert.equal(feed.status, 200);
-  assert.equal(ctx.db.get('SELECT COUNT(*) AS c FROM payments').c, 0);
+  assert.equal((await ctx.db.get('SELECT COUNT(*) AS c FROM payments')).c, 0);
 
   const second = await call('POST', '/api/auth/signup', { displayName: 'Second', username: 'second', email: 's@aurum.test', password: 'motdepasse-solide' });
   assert.equal(second.data.user.memberNumber, 2);

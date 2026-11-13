@@ -23,23 +23,29 @@ Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (bar
 | **RGPD** | Export de toutes ses données en un clic, suppression du compte, aucun traceur, polices hébergées localement. |
 | **Sécurité** | Mots de passe chiffrés (scrypt), sessions httpOnly, protection CSRF, limitation des tentatives, CSP stricte, vérification binaire des images envoyées. |
 
-## Mettre le site en ligne (Render)
+## Mettre le site en ligne gratuitement (Render + Turso)
 
-Le site a besoin d'un hébergeur Node.js avec un **disque permanent** (pour garder les comptes, publications et photos). Le dépôt contient déjà la configuration pour [Render](https://render.com) (`render.yaml`).
+Deux services gratuits, sans carte bancaire, avec connexion par GitHub :
 
-1. Créez un compte sur [render.com](https://render.com) en vous connectant **avec GitHub**, et autorisez l'accès à ce dépôt.
-2. Dans Render : **New → Blueprint**, choisissez ce dépôt, puis **Apply**.
-3. Quelques minutes plus tard, le site est en ligne à une adresse du type `https://aurum-xxxx.onrender.com`.
+- **Turso** garde les données (comptes, publications, messages, photos) : 5 Go gratuits.
+- **Render** fait tourner le site (offre *Free*).
+
+**1. La base de données (Turso)**
+1. Créez un compte sur [turso.tech](https://turso.tech) avec GitHub.
+2. Créez une base nommée `aurum` (choisissez une région en Europe).
+3. Copiez son **adresse** (elle commence par `libsql://`) et créez un **jeton** (*token*) : copiez-le aussi.
+
+**2. Le site (Render)**
+1. Créez un compte sur [render.com](https://render.com) avec GitHub et autorisez l'accès à ce dépôt.
+2. **New → Blueprint**, choisissez ce dépôt et sa branche, puis collez l'adresse Turso dans `TURSO_DATABASE_URL` et le jeton dans `TURSO_AUTH_TOKEN`.
+3. Validez : le site est en ligne quelques minutes plus tard à une adresse `https://aurum-xxxx.onrender.com`.
 4. Ouvrez-la et **créez votre compte en premier** : vous devenez Fondateur N° 0001 et administrateur.
-5. Facultatif : ajoutez votre nom de domaine dans Render → *Settings → Custom Domains*.
 
-Coût : offre *Starter* de Render (environ 7 $/mois) + 1 Go de disque (environ 0,25 $/mois). L'offre gratuite de Render ne garde pas les fichiers : les données seraient effacées à chaque redémarrage.
-
-Le site démarre **vide** : aucune donnée fictive n'est installée en production.
+Bon à savoir sur l'offre gratuite de Render : après 15 minutes sans visite, le site se met en veille et la visite suivante prend environ une minute à s'afficher. Les données, elles, sont en sécurité chez Turso.
 
 ## Lancer sur son ordinateur
 
-Prérequis : **Node.js 22.5 ou plus récent** (aucune base de données à installer : SQLite est intégré à Node).
+Prérequis : **Node.js 20 ou plus récent**. Sans configuration Turso, les données sont enregistrées dans un fichier local (`data/aurum.db`).
 
 ```bash
 npm install
@@ -74,11 +80,12 @@ Toutes les options sont décrites dans [`.env.example`](.env.example). Les princ
 | `FOUNDER_LIMIT` | Nombre de Fondateurs | `100` |
 | `ADMIN_EMAILS` | Accès au tableau de bord | premier compte créé |
 | `SMTP_URL` | Envoi des e-mails « mot de passe oublié » | console |
-| `DATA_DIR` | Base SQLite + images envoyées | `./data` |
+| `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Base de données en ligne (Turso) | fichier local |
+| `DATA_DIR` | Dossier du fichier local (sans Turso) | `./data` |
 
 ## Autres hébergeurs
 
-N'importe quel hébergeur Node.js avec un **disque persistant** convient (Railway, Fly.io, un VPS…).
+N'importe quel hébergeur Node.js convient (Railway, Fly.io, un VPS…), avec Turso ou avec un disque persistant pour le fichier local.
 
 ```bash
 NODE_ENV=production BASE_URL=https://votre-domaine.fr npm start
@@ -99,7 +106,7 @@ En production (`NODE_ENV=production`) : cookies sécurisés (HTTPS obligatoire),
 - [ ] Créer votre compte en premier (ou renseigner `ADMIN_EMAILS`).
 - [ ] Configurer `SMTP_URL` pour les e-mails de réinitialisation.
 - [ ] Si l'entrée devient payante : clé Stripe `sk_live_…` et webhook de production.
-- [ ] Sauvegarder régulièrement le dossier `DATA_DIR` (base `aurum.db` + `uploads/`).
+- [ ] Sauvegarder régulièrement la base (Turso propose des sauvegardes ; en local : le fichier `aurum.db`).
 
 ## Tests
 
@@ -115,7 +122,7 @@ npm test
 server.js               Démarrage du serveur
 src/
   app.js                Application Express (sécurité, routes, fichiers statiques)
-  db.js                 Schéma SQLite (node:sqlite)
+  db.js                 Schéma et accès à la base (libSQL : fichier local ou Turso)
   auth.js, security.js  Sessions, mots de passe, CSRF
   membership.js         Attribution des cartes de membre
   realtime.js           Temps réel (Server-Sent Events)

@@ -36,15 +36,14 @@ before(async () => {
   const cfg = {
     ...config,
     dataDir: tmp,
-    databasePath: path.join(tmp, 'test.db'),
-    uploadsDir: path.join(tmp, 'uploads'),
+    database: { url: `file:${path.join(tmp, 'test.db')}`, authToken: '' },
     paidEntry: true,
     demoPayments: true,
     rateLimit: false,
     adminEmails: ['admin@aurum.test'],
     stripe: { secretKey: 'sk_test_dummy', webhookSecret: WEBHOOK_SECRET },
   };
-  const created = createApp(cfg, { stripe, mailer: { send: async (m) => mails.push(m) } });
+  const created = await createApp(cfg, { stripe, mailer: { send: async (m) => mails.push(m) } });
   ctx = created.ctx;
   await new Promise((resolve) => {
     server = created.app.listen(0, resolve);
@@ -166,7 +165,7 @@ test('publication avec image, rejet des faux fichiers image', async () => {
   fd.append('image', new Blob([PNG], { type: 'image/png' }), 'photo.png');
   const r = await alice.post('/api/posts', fd);
   assert.equal(r.status, 201, JSON.stringify(r.data));
-  assert.match(r.data.post.image, /^\/uploads\/[a-f0-9]{32}\.png$/);
+  assert.match(r.data.post.image, /^\/media\/[a-f0-9]{32}\.png$/);
   postId = r.data.post.id;
   const img = await fetch(base + r.data.post.image);
   assert.equal(img.status, 200);
@@ -291,7 +290,7 @@ test('Stripe : session de paiement, retour vérifié et webhook signé', async (
   await fetch(`${base}/api/billing/webhook`, { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': header }, body: payload });
   const eve = (await e.get('/api/session')).data.user;
   assert.equal(eve.isMember, true);
-  assert.equal(ctx.db.get("SELECT COUNT(*) AS c FROM payments WHERE provider_ref = 'cs_webhook_1'").c, 1);
+  assert.equal((await ctx.db.get("SELECT COUNT(*) AS c FROM payments WHERE provider_ref = 'cs_webhook_1'")).c, 1);
 });
 
 test('mot de passe oublié : lien unique, sessions révoquées', async () => {

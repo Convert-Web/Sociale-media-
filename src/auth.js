@@ -6,10 +6,10 @@ const { admitMember } = require('./membership');
 const SESSION_COOKIE = 'aurum_sid';
 const SESSION_TTL = 30 * 24 * 3600 * 1000; // 30 jours
 
-function createSession(ctx, res, userId) {
+async function createSession(ctx, res, userId) {
   const token = newToken();
   const now = Date.now();
-  ctx.db.run(
+  await ctx.db.run(
     'INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
     sha256(token), userId, now, now + SESSION_TTL,
   );
@@ -22,28 +22,28 @@ function createSession(ctx, res, userId) {
   });
 }
 
-function destroySession(ctx, req, res) {
+async function destroySession(ctx, req, res) {
   const token = req.cookies?.[SESSION_COOKIE];
-  if (token) ctx.db.run('DELETE FROM sessions WHERE id = ?', sha256(token));
+  if (token) await ctx.db.run('DELETE FROM sessions WHERE id = ?', sha256(token));
   res.clearCookie(SESSION_COOKIE, { path: '/' });
 }
 
 function loadUser(ctx) {
   let lastCleanup = 0;
-  return (req, _res, next) => {
+  return async (req, _res, next) => {
     req.user = null;
     const token = req.cookies?.[SESSION_COOKIE];
     if (token && typeof token === 'string' && token.length < 100) {
       const now = Date.now();
-      const row = ctx.db.get(
+      const row = await ctx.db.get(
         `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id
          WHERE s.id = ? AND s.expires_at > ?`,
         sha256(token), now,
       );
-      if (row) req.user = row.paid_at || ctx.config.paidEntry ? row : admitMember(ctx, row.id);
+      if (row) req.user = row.paid_at || ctx.config.paidEntry ? row : await admitMember(ctx, row.id);
       if (now - lastCleanup > 3600 * 1000) {
         lastCleanup = now;
-        ctx.db.run('DELETE FROM sessions WHERE expires_at <= ?', now);
+        ctx.db.run('DELETE FROM sessions WHERE expires_at <= ?', now).catch(() => {});
       }
     }
     next();

@@ -3,7 +3,7 @@ import { store } from '../store.js';
 import { navigate } from '../router.js';
 import {
   h, icon, avatar, nameLine, memberChip, timeAgo, fullDate, richText, toast, popMenu,
-  confirmDialog, lightbox, autosize, spinner, clear,
+  confirmDialog, lightbox, autosize, spinner, clear, shrinkImage, TOO_BIG_GIF,
 } from '../dom.js';
 
 const MAX_POST = 2000;
@@ -274,8 +274,8 @@ export function composer({ onPosted, placeholder } = {}) {
     clear(previewHost);
     file = f;
     if (f) {
-      if (f.size > 8 * 1024 * 1024) {
-        toast('Image trop lourde (8 Mo maximum).', 'error');
+      if (f.type === 'image/gif' && f.size > TOO_BIG_GIF) {
+        toast('GIF trop lourd (6 Mo maximum).', 'error');
         file = null;
       } else {
         const url = URL.createObjectURL(f);
@@ -302,11 +302,14 @@ export function composer({ onPosted, placeholder } = {}) {
         e.preventDefault();
         if (submit.disabled) return;
         const fd = new FormData();
-        fd.append('body', ta.value);
-        if (file) fd.append('image', file);
         submit.disabled = true;
         submit.textContent = 'Publication…';
         try {
+          fd.append('body', ta.value);
+          if (file) {
+            const small = await shrinkImage(file, 1600);
+            fd.append('image', small, small.name || 'photo');
+          }
           const { post } = await api.post('/api/posts', fd);
           ta.value = '';
           setFile(null);

@@ -10,6 +10,7 @@ const { Hub } = require('./realtime');
 const { createMailer } = require('./mailer');
 const { loadUser, csrfGuard } = require('./auth');
 const { webhookHandler } = require('./routes/billing');
+const { mediaHandler } = require('./uploads');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -39,10 +40,10 @@ function securityHeaders(config) {
   };
 }
 
-function createApp(config, overrides = {}) {
+async function createApp(config, overrides = {}) {
   const ctx = {
     config,
-    db: overrides.db || openDatabase(config.databasePath),
+    db: overrides.db || (await openDatabase(config.database)),
     hub: overrides.hub || new Hub(),
     mailer: overrides.mailer || createMailer(config),
     stripe: 'stripe' in overrides ? overrides.stripe : config.stripe.secretKey ? new Stripe(config.stripe.secretKey) : null,
@@ -83,22 +84,15 @@ function createApp(config, overrides = {}) {
   for (const name of routes) app.use('/api', require(`./routes/${name}`)(ctx));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ressource introuvable.' }));
 
-  // Fichiers envoyés par les membres
-  app.use(
-    '/uploads',
-    express.static(config.uploadsDir, {
-      maxAge: '30d',
-      immutable: true,
-      setHeaders: (res) => res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox"),
-    }),
-  );
+  // Photos envoyées par les membres (stockées dans la base)
+  app.use('/media', mediaHandler(ctx));
   // Polices auto-hébergées (aucun appel à un service tiers, conforme RGPD)
   app.use('/vendor/fonts', express.static(path.join(ROOT, 'node_modules', '@fontsource'), { maxAge: '30d' }));
   app.use(express.static(PUBLIC_DIR, { maxAge: config.isProd ? '1h' : 0, index: false }));
 
   // Application monopage : toute route « propre » renvoie index.html.
   // Attention : les noms d'utilisateur peuvent contenir un point (/@alexandre.v).
-  const STATIC_PREFIX = /^\/(api|uploads|vendor|js|css|img|seed)\//;
+  const STATIC_PREFIX = /^\/(api|media|vendor|js|css|img|seed)\//;
   const ASSET_EXT = /\.(js|mjs|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i;
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();

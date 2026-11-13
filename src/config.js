@@ -51,6 +51,10 @@ const config = {
 };
 
 if (!config.databasePath) config.databasePath = path.join(config.dataDir, 'aurum.db');
-config.uploadsDir = path.join(config.dataDir, 'uploads');
+// Base de données : Turso (gratuit, en ligne) si configuré, sinon fichier SQLite local.
+config.database = {
+  url: env.TURSO_DATABASE_URL || env.DATABASE_URL || `file:${config.databasePath}`,
+  authToken: env.TURSO_AUTH_TOKEN || env.DATABASE_AUTH_TOKEN || '',
+};
 
 module.exports = config;

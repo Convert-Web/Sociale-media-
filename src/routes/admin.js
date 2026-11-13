@@ -4,14 +4,15 @@ const { requireAdmin } = require('../auth');
 const { fail, intParam } = require('../http');
 const { deleteUpload } = require('../uploads');
 const { authorOf } = require('../social');
+const { deleteUser } = require('../membership');
 
 module.exports = function adminRoutes(ctx) {
   const r = express.Router();
   const { db, config } = ctx;
   r.use('/admin', requireAdmin);
 
-  r.get('/admin/overview', (_req, res) => {
-    const totals = db.get(
+  r.get('/admin/overview', async (_req, res) => {
+    const totals = await db.get(
       `SELECT
          (SELECT COUNT(*) FROM users WHERE paid_at IS NOT NULL) AS members,
          (SELECT COUNT(*) FROM users WHERE paid_at IS NULL) AS pending,
@@ -26,19 +27,19 @@ module.exports = function adminRoutes(ctx) {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
     const from = start.getTime() - 13 * dayMs;
-    const paidRows = db.all('SELECT paid_at FROM users WHERE paid_at >= ?', from);
+    const paidRows = await db.all('SELECT paid_at FROM users WHERE paid_at >= ?', from);
     const days = Array.from({ length: 14 }, (_, i) => ({ date: from + i * dayMs, count: 0 }));
     for (const { paid_at } of paidRows) {
       const idx = Math.floor((paid_at - from) / dayMs);
       if (days[idx]) days[idx].count++;
     }
-    const recentMembers = db
-      .all(
+    const recentMembers = (
+      await db.all(
         `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.email, u.paid_at, u.created_at
          FROM users u ORDER BY u.created_at DESC LIMIT 25`,
       )
-      .map((row) => ({ ...authorOf(ctx, row), email: row.email, paidAt: row.paid_at, createdAt: row.created_at }));
-    const recentPayments = db.all(
+    ).map((row) => ({ ...authorOf(ctx, row), email: row.email, paidAt: row.paid_at, createdAt: row.created_at }));
+    const recentPayments = await db.all(
       `SELECT p.provider, p.amount_cents, p.currency, p.status, p.created_at, u.username
        FROM payments p LEFT JOIN users u ON u.id = p.user_id ORDER BY p.id DESC LIMIT 15`,
     );
@@ -51,18 +52,13 @@ module.exports = function adminRoutes(ctx) {
     });
   });
 
-  r.delete('/admin/users/:id', (req, res) => {
+  r.delete('/admin/users/:id', async (req, res) => {
     const id = intParam(req.params.id);
-    const user = id && db.get('SELECT * FROM users WHERE id = ?', id);
+    const user = id && await db.get('SELECT * FROM users WHERE id = ?', id);
     if (!user) fail(404, 'Membre introuvable.');
     if (user.id === req.user.id) fail(400, 'Vous ne pouvez pas supprimer votre propre compte ici.');
-    const images = [
-      user.avatar,
-      user.cover,
-      ...db.all('SELECT image FROM posts WHERE user_id = ? AND image IS NOT NULL', user.id).map((p) => p.image),
-    ];
-    db.run('DELETE FROM users WHERE id = ?', user.id);
-    for (const img of images) deleteUpload(config.uploadsDir, img);
+    const images = await deleteUser(ctx, user.id);
+    for (const img of images) deleteUpload(ctx, img);
     res.json({ ok: true });
   });
 

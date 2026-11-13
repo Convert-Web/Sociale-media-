@@ -1,22 +1,22 @@
-# Déploiement sur Render (https://render.com) : New → Blueprint → choisir ce dépôt.
-# Le disque persistant garde la base de données et les photos entre les redémarrages.
+# Déploiement GRATUIT sur Render (https://render.com) : New → Blueprint → choisir ce dépôt.
+# Les données (comptes, publications, photos) sont stockées chez Turso (gratuit),
+# car l'offre gratuite de Render efface ses fichiers à chaque mise en veille.
 services:
   - type: web
     name: aurum
     runtime: node
     region: frankfurt
-    plan: starter
+    plan: free
     buildCommand: npm ci --omit=dev
     startCommand: npm start
     healthCheckPath: /api/public/stats
-    disk:
-      name: aurum-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DATA_DIR
-        value: /var/data
       - key: PAID_ENTRY
         value: "false"
+      # Render vous demandera ces deux valeurs (à copier depuis Turso)
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false

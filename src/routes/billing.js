@@ -5,7 +5,7 @@ const { fail } = require('../http');
 const { selfUser } = require('../social');
 const { grantMembership } = require('../membership');
 
-function grantFromCheckoutSession(ctx, session) {
+async function grantFromCheckoutSession(ctx, session) {
   if (!session || session.payment_status !== 'paid') return null;
   const userId = Number(session.client_reference_id || session.metadata?.user_id);
   if (!Number.isSafeInteger(userId) || userId <= 0) return null;
@@ -21,7 +21,7 @@ function grantFromCheckoutSession(ctx, session) {
 function webhookHandler(ctx) {
   return [
     express.raw({ type: 'application/json', limit: '1mb' }),
-    (req, res) => {
+    async (req, res) => {
       if (!ctx.stripe || !ctx.config.stripe.webhookSecret) return res.status(404).end();
       let event;
       try {
@@ -38,7 +38,7 @@ function webhookHandler(ctx) {
         event.type === 'checkout.session.completed' ||
         event.type === 'checkout.session.async_payment_succeeded'
       ) {
-        const user = grantFromCheckoutSession(ctx, event.data.object);
+        const user = await grantFromCheckoutSession(ctx, event.data.object);
         if (user) console.log(`[stripe] accès accordé à @${user.username} (membre n°${user.member_number})`);
       }
       res.json({ received: true });
@@ -97,7 +97,7 @@ module.exports = function billingRoutes(ctx) {
     if (!ctx.stripe || !/^cs_[A-Za-z0-9_]+$/.test(id)) return res.redirect('/rejoindre');
     try {
       const session = await ctx.stripe.checkout.sessions.retrieve(id);
-      const user = grantFromCheckoutSession(ctx, session);
+      const user = await grantFromCheckoutSession(ctx, session);
       return res.redirect(user ? '/bienvenue' : '/rejoindre?statut=attente');
     } catch (err) {
       console.error('[stripe] vérification impossible :', err.message);
@@ -106,12 +106,12 @@ module.exports = function billingRoutes(ctx) {
   });
 
   // Paiement simulé (développement / démonstration uniquement)
-  r.post('/billing/demo', requireAuth, (req, res) => {
+  r.post('/billing/demo', requireAuth, async (req, res) => {
     if (!config.demoPayments) fail(404, 'Indisponible.');
     if (req.body.waiver !== true) {
       fail(400, "Merci de confirmer votre demande d'accès immédiat pour continuer.");
     }
-    const user = grantMembership(ctx, req.user.id, {
+    const user = await grantMembership(ctx, req.user.id, {
       provider: 'demo',
       ref: `demo_${req.user.id}`,
       amountCents: config.priceCents,
