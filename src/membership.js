@@ -94,6 +94,7 @@ async function deleteUser(ctx, userId) {
     await t.run('DELETE FROM places WHERE author_id = ?', userId);
     await t.run('DELETE FROM invitations WHERE inviter_id = ? AND used_by IS NULL', userId);
     await t.run('UPDATE users SET invited_by = NULL WHERE invited_by = ?', userId);
+    await t.run('DELETE FROM journal_items WHERE author_id = ?', userId);
     await t.run(`DELETE FROM likes WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
     await t.run(`DELETE FROM comments WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
     await t.run(`DELETE FROM notifications WHERE user_id = ? OR actor_id = ? OR post_id IN (${mine})`, userId, userId, userId);

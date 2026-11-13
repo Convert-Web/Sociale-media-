@@ -262,6 +262,40 @@ CREATE TABLE IF NOT EXISTS place_endorsements (
   PRIMARY KEY (place_id, user_id)
 );
 
+-- v5 : le Journal (actualités, podcasts, vidéos)
+CREATE TABLE IF NOT EXISTS journal_sources (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind             TEXT NOT NULL,
+  title            TEXT NOT NULL,
+  url              TEXT NOT NULL UNIQUE,
+  site_url         TEXT,
+  image            TEXT,
+  created_at       INTEGER NOT NULL,
+  last_fetched_at  INTEGER,
+  last_error       TEXT
+);
+
+CREATE TABLE IF NOT EXISTS journal_items (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id     INTEGER,
+  kind          TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  summary       TEXT NOT NULL DEFAULT '',
+  url           TEXT NOT NULL UNIQUE,
+  image         TEXT,
+  audio_url     TEXT,
+  embed_url     TEXT,
+  duration      INTEGER,
+  site_name     TEXT NOT NULL DEFAULT '',
+  note          TEXT NOT NULL DEFAULT '',
+  author_id     INTEGER,
+  featured_at   INTEGER,
+  published_at  INTEGER NOT NULL,
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_journal_items_kind ON journal_items(kind, published_at);
+CREATE INDEX IF NOT EXISTS idx_journal_items_source ON journal_items(source_id, published_at);
+
 -- Photos envoyées par les membres, stockées dans la base
 -- (les hébergeurs gratuits effacent leurs fichiers à chaque redémarrage).
 CREATE TABLE IF NOT EXISTS media (

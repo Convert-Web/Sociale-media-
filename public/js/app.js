@@ -20,7 +20,10 @@ import { groupsView, groupView } from './views/groups.js';
 import { invitationLanding, invitationsView } from './views/invite.js';
 import { agendaView, eventView } from './views/events.js';
 import { carnetView, placeView } from './views/places.js';
+import { journalView, journalItemView } from './views/journal.js';
+import { stop as stopPlayer } from './components/player.js';
 import { registerServiceWorker, syncPush } from './push.js';
+document.addEventListener('aurum:logout', () => stopPlayer());
 
 const ROUTES = [
   { path: '/', view: landingView, access: 'public', home: true },
@@ -42,6 +45,8 @@ const ROUTES = [
   { path: '/amis', view: friendsView, access: 'member', layout: 'app', nav: 'amis' },
   { path: '/groupes', view: groupsView, access: 'member', layout: 'app', nav: 'groupes' },
   { path: '/groupes/:id', view: groupView, access: 'member', layout: 'app', nav: 'groupes' },
+  { path: '/journal', view: journalView, access: 'member', layout: 'app', nav: 'journal' },
+  { path: '/journal/:id', view: journalItemView, access: 'member', layout: 'app', nav: 'journal' },
   { path: '/agenda', view: agendaView, access: 'member', layout: 'app', nav: 'agenda' },
   { path: '/agenda/:id', view: eventView, access: 'member', layout: 'app', nav: 'agenda' },
   { path: '/carnet', view: carnetView, access: 'member', layout: 'app', nav: 'carnet' },
@@ -82,6 +87,7 @@ function openMeMenu() {
   const item = (href, ic, label, count) =>
     h('a', { href, class: 'me-item', onclick: go }, h('span', { class: 'me-item-icon' }, icon(ic)), h('span', { class: 'grow' }, label), count ? h('span', { class: 'badge-dot' }, count > 99 ? '99+' : String(count)) : null, icon('chevron', 'icon-sm'));
   const items = [
+    item('/journal', 'newspaper', 'Journal'),
     item('/amis', 'users', 'Amis', c.requests),
     item('/groupes', 'groups', 'Groupes'),
     item('/agenda', 'calendar', 'Agenda'),
@@ -123,6 +129,7 @@ function buildShell() {
   const links = [
     { key: 'salon', href: '/salon', icon: 'home', label: 'Salon' },
     { key: 'explorer', href: '/explorer', icon: 'compass', label: 'Explorer' },
+    { key: 'journal', href: '/journal', icon: 'newspaper', label: 'Journal' },
     { key: 'notifications', href: '/notifications', icon: 'bell', label: 'Activité', badge: 'notifications' },
     { key: 'messages', href: '/messages', icon: 'mail', label: 'Messages', badge: 'messages' },
     { key: 'profil', href: `/@${u.username}`, icon: 'user', label: 'Profil' },

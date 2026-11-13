@@ -19,7 +19,10 @@ const INDEX_HTML = path.join(PUBLIC_DIR, 'index.html');
 function securityHeaders(config) {
   const csp = [
     "default-src 'self'",
-    "img-src 'self' data: blob:",
+    // Journal : images des articles, podcasts joués depuis leur hébergeur, lecteurs vidéo intégrés
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' blob: https:",
+    'frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://www.dailymotion.com https://geo.dailymotion.com https://open.spotify.com https://embed.podcasts.apple.com https://w.soundcloud.com https://widget.deezer.com',
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     "script-src 'self'",
@@ -81,7 +84,7 @@ async function createApp(config, overrides = {}) {
     );
   }
 
-  const routes = ['auth', 'billing', 'public', 'invitations', 'posts', 'stories', 'moderation', 'push', 'friends', 'groups', 'events', 'places', 'users', 'messages', 'notifications', 'me', 'admin'];
+  const routes = ['auth', 'billing', 'public', 'invitations', 'posts', 'stories', 'moderation', 'push', 'friends', 'groups', 'events', 'places', 'journal', 'users', 'messages', 'notifications', 'me', 'admin'];
   for (const name of routes) app.use('/api', require(`./routes/${name}`)(ctx));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ressource introuvable.' }));
 

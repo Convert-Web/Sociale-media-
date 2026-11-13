@@ -84,12 +84,12 @@ export function exploreView(ctx) {
   const shortcuts = h(
     'div',
     { class: 'shortcuts' },
+    shortcut('/journal', 'newspaper', 'Journal', 'Actu, podcasts'),
     shortcut('/agenda', 'calendar', 'Agenda', 'Événements'),
     shortcut('/carnet', 'book', 'Carnet', 'Adresses'),
     shortcut('/invitations', 'ticket', 'Inviter', 'Vos proches'),
     shortcut('/amis', 'users', 'Amis', 'Vos relations', reqBadge),
     shortcut('/groupes', 'groups', 'Groupes', 'Cercles privés'),
-    shortcut('/enregistres', 'bookmark', 'Enregistrés', 'Vos favoris'),
   );
 
   ctx.title = 'Explorer — AURUM';

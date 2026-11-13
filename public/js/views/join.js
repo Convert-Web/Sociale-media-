@@ -6,6 +6,7 @@ import { h, icon, memberCard, money, cardSince, modal, toast, memberNo } from '.
 import { redeemCode, rememberedInvitation } from './invite.js';
 
 export async function logout() {
+  document.dispatchEvent(new CustomEvent('aurum:logout'));
   await detachPush();
   try {
     await api.post('/api/auth/logout');
