@@ -18,18 +18,7 @@ function signupChart(days) {
   const max = Math.max(1, ...days.map((d) => d.count));
   const bw = (W - pad.l - pad.r) / days.length;
   const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Nouveaux membres sur 14 jours' });
-  const defs = svg(
-    'defs',
-    {},
-    svg(
-      'linearGradient',
-      { id: 'bar', x1: '0', y1: '0', x2: '0', y2: '1' },
-      svg('stop', { offset: '0', 'stop-color': '#f3dc9a' }),
-      svg('stop', { offset: '1', 'stop-color': '#a8822e' }),
-    ),
-  );
-  root.append(defs);
-  root.append(svg('line', { x1: pad.l, x2: W - pad.r, y1: H - pad.b, y2: H - pad.b, stroke: 'rgba(255,255,255,.12)' }));
+  root.append(svg('line', { x1: pad.l, x2: W - pad.r, y1: H - pad.b, y2: H - pad.b, class: 'chart-axis' }));
   days.forEach((d, i) => {
     const hgt = ((H - pad.t - pad.b) * d.count) / max;
     const x = pad.l + i * bw + bw * 0.18;
@@ -37,14 +26,14 @@ function signupChart(days) {
     const y = H - pad.b - hgt;
     const g = svg('g', {});
     g.append(svg('title', {}, `${new Date(d.date).toLocaleDateString('fr-FR')} : ${d.count}`));
-    g.append(svg('rect', { x, y: d.count ? y : H - pad.b - 2, width: w, height: d.count ? hgt : 2, rx: 4, fill: d.count ? 'url(#bar)' : 'rgba(255,255,255,.08)' }));
+    g.append(svg('rect', { x, y: d.count ? y : H - pad.b - 2, width: w, height: d.count ? hgt : 2, rx: 4, class: d.count ? 'chart-bar' : 'chart-bar-empty' }));
     if (d.count) {
-      const t = svg('text', { x: x + w / 2, y: y - 5, 'text-anchor': 'middle', fill: '#f3dc9a', 'font-size': '11' });
+      const t = svg('text', { x: x + w / 2, y: y - 5, 'text-anchor': 'middle', class: 'chart-value', 'font-size': '11' });
       t.textContent = d.count;
       g.append(t);
     }
     if (i % 2 === 0 || i === days.length - 1) {
-      const lbl = svg('text', { x: x + w / 2, y: H - 8, 'text-anchor': 'middle', fill: '#7f796d', 'font-size': '10.5' });
+      const lbl = svg('text', { x: x + w / 2, y: H - 8, 'text-anchor': 'middle', class: 'chart-label', 'font-size': '10.5' });
       lbl.textContent = new Date(d.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
       g.append(lbl);
     }
@@ -58,7 +47,7 @@ export async function adminView(ctx) {
   const t = data.totals;
   const conversion = t.members + t.pending ? Math.round((t.members / (t.members + t.pending)) * 100) : 0;
 
-  const kpi = (label, value, gold, sub) => h('div', { class: `kpi${gold ? ' gold' : ''}` }, h('small', null, label), h('b', { class: gold ? 'gold-text' : '' }, value), sub ? h('span', { class: 'muted small' }, sub) : null);
+  const kpi = (label, value, gold, sub) => h('div', { class: `kpi${gold ? ' gold' : ''}` }, h('small', null, label), h('b', { class: gold ? 'accent' : '' }, value), sub ? h('span', { class: 'muted small' }, sub) : null);
 
   const memberRows = data.recentMembers.map((m) => {
     const row = h(

@@ -1,10 +1,10 @@
 'use strict';
-// Remplit la base avec des membres fictifs pour tester AURUM.
+// Remplit une base LOCALE avec des membres fictifs pour tester AURUM (jamais en production).
 // Usage : npm run seed   (mot de passe de tous les comptes : aurum-demo-2026)
 const config = require('../src/config');
 const { openDatabase } = require('../src/db');
 const { hashPassword } = require('../src/security');
-const { grantMembership } = require('../src/membership');
+const { admitMember } = require('../src/membership');
 
 const PASSWORD = 'aurum-demo-2026';
 const H = 3600 * 1000;
@@ -69,6 +69,10 @@ const MESSAGES = [
 ];
 
 async function main() {
+  if (config.isProd) {
+    console.error('Refusé : les membres fictifs ne doivent jamais être installés sur le site en ligne.');
+    process.exit(1);
+  }
   const db = openDatabase(config.databasePath);
   if (db.get('SELECT 1 FROM users WHERE username = ?', 'victoire')) {
     console.log('Les données de démonstration sont déjà présentes.');
@@ -87,9 +91,8 @@ async function main() {
       m.username, `${m.username.replace('.', '')}@aurum.demo`, hash, m.name, m.bio, m.city, m.profession, m.admin ? 1 : 0, created,
     );
     ids[m.username] = lastInsertRowid;
-    grantMembership(ctx, lastInsertRowid, { provider: 'demo', ref: `seed_${m.username}`, amountCents: config.priceCents, currency: config.currency });
+    admitMember(ctx, lastInsertRowid);
     db.run('UPDATE users SET paid_at = ? WHERE id = ?', created + 60000, lastInsertRowid);
-    db.run('UPDATE payments SET created_at = ? WHERE provider_ref = ?', created + 60000, `seed_${m.username}`);
   }
 
   const postIds = POSTS.map(([user, body, image, hoursAgo]) => {

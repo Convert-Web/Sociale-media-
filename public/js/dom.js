@@ -10,7 +10,12 @@ export function h(tag, props, ...children) {
     for (const [k, v] of Object.entries(props)) {
       if (v === null || v === undefined || v === false) continue;
       if (k === 'class') el.className = v;
-      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k === 'style' && typeof v === 'object') {
+        for (const [prop, val] of Object.entries(v)) {
+          if (prop.startsWith('--')) el.style.setProperty(prop, val);
+          else el.style[prop] = val;
+        }
+      }
       else if (k === 'dataset') Object.assign(el.dataset, v);
       else if (k === 'ref') v(el);
       else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
@@ -132,9 +137,7 @@ export function avatar(user, size = '', { presence = false } = {}) {
         'span',
         {
           class: 'avatar-initials',
-          style: {
-            background: `radial-gradient(120% 120% at 20% 10%, hsl(${hue} 22% 22%), hsl(${(hue + 40) % 360} 18% 9%))`,
-          },
+          style: { '--h': String(hue) },
         },
         initials(user?.displayName),
       ),
@@ -332,7 +335,7 @@ export async function confirmDialog(title, text, confirmLabel = 'Confirmer', dan
           'div',
           { class: 'row-end' },
           h('button', { class: 'btn btn-ghost', onclick: () => done(false) }, 'Annuler'),
-          h('button', { class: `btn ${danger ? 'btn-danger' : 'btn-gold'}`, onclick: () => done(true) }, confirmLabel),
+          h('button', { class: `btn ${danger ? 'btn-danger' : 'btn-primary'}`, onclick: () => done(true) }, confirmLabel),
         ),
       ),
       { onClose: () => done(false) },

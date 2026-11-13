@@ -11,15 +11,10 @@ function authLayout(content) {
       'aside',
       { class: 'auth-art' },
       h('a', { href: '/', class: 'logo' }, 'AURUM'),
-      memberCard({ name: store.user?.displayName || 'Votre nom ici', number: null, since: cardSince(Date.now()) }),
-      h(
-        'blockquote',
-        null,
-        h('p', null, '« Dis-moi qui tu fréquentes, je te dirai qui tu es. »'),
-        h('footer', null, 'Proverbe — et raison d’être d’AURUM'),
-      ),
+      memberCard({ name: store.user?.displayName || 'Votre nom', number: null, since: cardSince(Date.now()) }),
+      h('blockquote', null, h('p', null, 'Dis-moi qui tu fréquentes, je te dirai qui tu es.'), h('footer', null, 'Proverbe')),
     ),
-    h('main', { class: 'auth-form' }, h('div', { class: 'auth-box fade-up' }, content)),
+    h('main', { class: 'auth-form' }, h('a', { href: '/', class: 'logo' }, 'AURUM'), h('div', { class: 'auth-box fade-up' }, content)),
   );
 }
 
@@ -65,7 +60,7 @@ export function loginView(ctx) {
   const err = errorBox();
   const login = h('input', { class: 'input', name: 'login', autocomplete: 'username', required: true, placeholder: 'vous@exemple.com ou @pseudo' });
   const password = h('input', { class: 'input', type: 'password', name: 'password', autocomplete: 'current-password', required: true, placeholder: '••••••••' });
-  const btn = h('button', { class: 'btn btn-gold btn-lg btn-block', type: 'submit' }, 'Entrer dans le cercle');
+  const btn = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'submit' }, 'Entrer dans le cercle');
   const form = h(
     'form',
     {
@@ -86,7 +81,7 @@ export function loginView(ctx) {
     err.el,
     field('Identifiant', login),
     field('Mot de passe', password),
-    h('div', { style: { textAlign: 'right', marginTop: '-6px' } }, h('a', { href: '/mot-de-passe-oublie', class: 'small', style: { color: 'var(--gold-light)' } }, 'Mot de passe oublié ?')),
+    h('div', { style: { textAlign: 'right', marginTop: '-6px' } }, h('a', { href: '/mot-de-passe-oublie', class: 'small', style: { color: 'var(--link)' } }, 'Mot de passe oublié ?')),
     btn,
   );
   ctx.title = 'Connexion — AURUM';
@@ -129,7 +124,7 @@ export function signupView(ctx) {
   const password = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minlength: 8, placeholder: '8 caractères minimum' });
   const meter = h('div', { class: 'pw-meter', dataset: { score: '0' } }, h('i'), h('i'), h('i'), h('i'));
   const consent = h('input', { type: 'checkbox', required: true });
-  const btn = h('button', { class: 'btn btn-gold btn-lg btn-block', type: 'submit' }, 'Continuer', icon('arrow'));
+  const btn = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'submit' }, store.config.paidEntry ? 'Continuer' : 'Créer mon compte', icon('arrow'));
 
   displayName.addEventListener('input', () => {
     if (!usernameTouched) username.value = slugify(displayName.value);
@@ -154,7 +149,7 @@ export function signupView(ctx) {
             email: email.value,
             password: password.value,
           });
-          afterAuth(user, '/rejoindre');
+          afterAuth(user, '/bienvenue');
         } catch (e2) {
           err.show(e2.message);
           busy(btn, false);
@@ -184,10 +179,11 @@ export function signupView(ctx) {
   );
 
   ctx.title = 'Inscription — AURUM';
+  const paid = store.config.paidEntry;
   return authLayout([
-    h('div', { class: 'steps' }, h('i', { class: 'on' }), h('i'), h('span', null, 'Étape 1 sur 2 — Votre identité')),
+    paid ? h('div', { class: 'steps' }, h('i', { class: 'on' }), h('i'), h('span', null, 'Étape 1 sur 2 — Votre identité')) : null,
     h('h1', null, 'Demandez votre carte.'),
-    h('p', { class: 'sub' }, "Quelques informations, puis le droit d'entrée. Deux minutes, pas plus."),
+    h('p', { class: 'sub' }, paid ? "Quelques informations, puis le droit d'entrée. Deux minutes, pas plus." : 'Quelques informations et votre carte de membre est à vous. Gratuit.'),
     form,
     h('p', { class: 'auth-alt' }, 'Déjà membre ? ', h('a', { href: '/connexion' }, 'Se connecter')),
   ]);
@@ -198,7 +194,7 @@ export function forgotView(ctx) {
   const err = errorBox();
   const ok = h('div', { class: 'form-ok', hidden: true });
   const email = h('input', { class: 'input', type: 'email', autocomplete: 'email', required: true, placeholder: 'vous@exemple.com' });
-  const btn = h('button', { class: 'btn btn-gold btn-lg btn-block', type: 'submit' }, 'Recevoir un lien');
+  const btn = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'submit' }, 'Recevoir un lien');
   const form = h(
     'form',
     {
@@ -237,7 +233,7 @@ export function resetView(ctx) {
   const err = errorBox();
   const pw = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minlength: 8, placeholder: '8 caractères minimum' });
   const pw2 = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minlength: 8, placeholder: 'Confirmez' });
-  const btn = h('button', { class: 'btn btn-gold btn-lg btn-block', type: 'submit' }, 'Enregistrer');
+  const btn = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'submit' }, 'Enregistrer');
   const form = h(
     'form',
     {

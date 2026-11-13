@@ -8,6 +8,7 @@ const todo = (t) => h('span', { class: 'todo' }, `[${t}]`);
 
 function pages() {
   const price = money(store.config.priceCents, store.config.currency);
+  const paid = store.config.paidEntry;
   return {
     'mentions-legales': {
       title: 'Mentions légales',
@@ -25,15 +26,26 @@ function pages() {
       title: 'Conditions générales de vente et d’utilisation',
       body: [
         h('h2', null, '1. Objet'),
-        h('p', null, "Les présentes conditions régissent l'accès au réseau social privé AURUM, réservé aux personnes majeures s'étant acquittées du droit d'entrée."),
-        h('h2', null, "2. Droit d'entrée"),
-        h('p', null, `L'accès au cercle est subordonné au paiement d'un droit d'entrée unique de ${price} TTC. Il ne s'agit pas d'un abonnement : aucun prélèvement ultérieur n'est effectué. Le paiement est traité par la société Stripe ; AURUM n'a jamais accès à vos coordonnées bancaires.`),
-        h('h2', null, '3. Droit de rétractation'),
-        h('p', null, "Conformément à l'article L221-28 13° du Code de la consommation, le membre qui demande l'accès immédiat au service, avant la fin du délai de rétractation de quatorze jours, reconnaît expressément perdre son droit de rétractation dès l'activation de son accès."),
+        h('p', null, paid
+          ? "Les présentes conditions régissent l'accès au réseau social privé AURUM, réservé aux personnes majeures s'étant acquittées du droit d'entrée."
+          : "Les présentes conditions régissent l'accès au réseau social privé AURUM, réservé aux personnes majeures."),
+        paid
+          ? [
+              h('h2', null, "2. Droit d'entrée"),
+              h('p', null, `L'accès au cercle est subordonné au paiement d'un droit d'entrée unique de ${price} TTC. Il ne s'agit pas d'un abonnement : aucun prélèvement ultérieur n'est effectué. Le paiement est traité par la société Stripe ; AURUM n'a jamais accès à vos coordonnées bancaires.`),
+              h('h2', null, '3. Droit de rétractation'),
+              h('p', null, "Conformément à l'article L221-28 13° du Code de la consommation, le membre qui demande l'accès immédiat au service, avant la fin du délai de rétractation de quatorze jours, reconnaît expressément perdre son droit de rétractation dès l'activation de son accès."),
+            ]
+          : [
+              h('h2', null, '2. Inscription'),
+              h('p', null, "L'inscription est gratuite. Le membre s'engage à fournir des informations exactes et à garder son mot de passe confidentiel."),
+              h('h2', null, '3. Évolution du service'),
+              h('p', null, "AURUM pourra proposer à l'avenir des offres payantes. Aucun paiement ne sera jamais demandé sans l'accord exprès du membre."),
+            ],
         h('h2', null, '4. Règles de conduite'),
         h('p', null, "Le membre s'engage à publier sous son identité réelle, à respecter la courtoisie et la discrétion propres au cercle, et à ne publier aucun contenu illicite, haineux, diffamatoire ou portant atteinte aux droits de tiers."),
         h('h2', null, '5. Exclusion'),
-        h('p', null, "En cas de manquement grave, AURUM peut suspendre ou supprimer un compte. Le droit d'entrée reste acquis."),
+        h('p', null, paid ? "En cas de manquement grave, AURUM peut suspendre ou supprimer un compte. Le droit d'entrée reste acquis." : 'En cas de manquement grave, AURUM peut suspendre ou supprimer un compte.'),
         h('h2', null, '6. Résiliation'),
         h('p', null, 'Le membre peut supprimer son compte à tout moment depuis ses réglages.'),
         h('h2', null, '7. Droit applicable'),
@@ -52,7 +64,7 @@ function pages() {
         h('h2', null, 'Cookies'),
         h('p', null, "AURUM n'utilise qu'un cookie strictement nécessaire à votre connexion. Aucun traceur publicitaire ni outil de mesure tiers. Les polices de caractères sont hébergées localement."),
         h('h2', null, 'Sous-traitants'),
-        h('p', null, 'Stripe (paiement), ', todo('hébergeur'), ', ', todo("prestataire d'envoi d'e-mails"), '.'),
+        h('p', null, paid ? 'Stripe (paiement), ' : '', todo('hébergeur'), ', ', todo("prestataire d'envoi d'e-mails"), '.'),
         h('h2', null, 'Durée de conservation'),
         h('p', null, 'Les données sont conservées tant que le compte est actif, puis supprimées. Les justificatifs de paiement sont conservés dix ans (obligation comptable).'),
         h('h2', null, 'Vos droits'),
@@ -71,7 +83,7 @@ export function legalView(ctx) {
     'div',
     null,
     siteTopbar(),
-    h('div', { class: 'container', style: { paddingTop: '40px' } }, h('h1', { class: 'serif', style: { fontSize: '48px', fontWeight: '500', lineHeight: '1.1' } }, page.title), content),
+    h('div', { class: 'container narrow legal-page' }, h('h1', null, page.title), content),
     siteFooter(),
   );
 }

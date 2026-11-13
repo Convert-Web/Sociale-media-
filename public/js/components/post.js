@@ -192,7 +192,7 @@ function commentsSection(post, onCount) {
   let count = post.commentCount;
   const ta = h('textarea', { placeholder: 'Écrire un commentaire…', rows: 1, maxlength: 1000, 'aria-label': 'Commentaire' });
   autosize(ta);
-  const send = h('button', { class: 'btn btn-gold btn-sm', type: 'submit' }, 'Répondre');
+  const send = h('button', { class: 'btn btn-primary btn-sm', type: 'submit' }, 'Répondre');
   const removeComment = (c) => {
     list.querySelector(`[data-id="${c.id}"]`)?.remove();
     onCount(--count);
@@ -260,7 +260,7 @@ export function composer({ onPosted, placeholder } = {}) {
   const counter = h('span', { class: 'char-count' });
   const previewHost = h('div');
   const fileInput = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true });
-  const submit = h('button', { class: 'btn btn-gold btn-sm', type: 'submit', disabled: true }, 'Publier');
+  const submit = h('button', { class: 'btn btn-primary btn-sm', type: 'submit', disabled: true }, 'Publier');
 
   const update = () => {
     const len = ta.value.length;

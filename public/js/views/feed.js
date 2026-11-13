@@ -76,7 +76,7 @@ export function feedView(ctx) {
     current = postList((before) => api.get(`/api/feed?scope=${scope}${before ? `&before=${before}` : ''}`), {
       empty: () =>
         scope === 'following'
-          ? emptyState('users', 'Votre fil est encore calme', 'Suivez quelques membres pour voir leurs publications ici.', h('a', { href: '/explorer', class: 'btn btn-gold' }, 'Découvrir des membres'))
+          ? emptyState('users', 'Votre fil est encore calme', 'Suivez quelques membres pour voir leurs publications ici.', h('a', { href: '/explorer', class: 'btn btn-primary' }, 'Découvrir des membres'))
           : emptyState('sparkles', 'Le Salon vous attend', 'Soyez le premier à prendre la parole. Les premiers mots donnent le ton.'),
     });
     host.append(current.el);
@@ -104,7 +104,7 @@ export function feedView(ctx) {
         h(
           'button',
           {
-            class: 'btn btn-gold btn-sm',
+            class: 'btn btn-primary btn-sm',
             onclick: () => {
               window.scrollTo({ top: 0, behavior: 'smooth' });
               load();

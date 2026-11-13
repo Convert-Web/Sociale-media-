@@ -5,7 +5,9 @@ const { createApp } = require('./src/app');
 const { app, ctx } = createApp(config);
 
 const server = app.listen(config.port, () => {
-  const payment = ctx.stripe
+  const payment = !config.paidEntry
+    ? 'aucun — inscription gratuite (PAID_ENTRY=true pour exiger le paiement)'
+    : ctx.stripe
     ? `Stripe (${config.stripe.secretKey.startsWith('sk_live') ? 'PRODUCTION' : 'mode test'})`
     : config.demoPayments
       ? 'SIMULÉ (mode démo — aucun encaissement réel)'
@@ -15,10 +17,10 @@ const server = app.listen(config.port, () => {
   ─────────────────────────────────────────
   Adresse   : ${config.baseUrl}
   Paiement  : ${payment}
-  Entrée    : ${(config.priceCents / 100).toFixed(2).replace('.', ',')} ${config.currency.toUpperCase()}
+  Entrée    : ${config.paidEntry ? `${(config.priceCents / 100).toFixed(2).replace('.', ',')} ${config.currency.toUpperCase()}` : 'gratuite'}
   Données   : ${config.dataDir}
 `);
-  if (ctx.stripe && !config.stripe.webhookSecret) {
+  if (config.paidEntry && ctx.stripe && !config.stripe.webhookSecret) {
     console.warn('  ⚠ STRIPE_WEBHOOK_SECRET absent : le webhook est désactivé (le retour de paiement reste vérifié).\n');
   }
 });

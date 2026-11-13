@@ -4,6 +4,7 @@ const { hashPassword, verifyPassword, burnPasswordCheck, newToken, sha256 } = re
 const { createSession, destroySession, requireAuth } = require('../auth');
 const { fail, text, USERNAME_RE, EMAIL_RE, RESERVED } = require('../http');
 const { selfUser, counters } = require('../social');
+const { admitMember } = require('../membership');
 
 function validatePassword(pw) {
   if (typeof pw !== 'string' || pw.length < 8) fail(400, 'Le mot de passe doit contenir au moins 8 caractères.');
@@ -23,6 +24,7 @@ module.exports = function authRoutes(ctx) {
         appName: config.appName,
         priceCents: config.priceCents,
         currency: config.currency,
+        paidEntry: config.paidEntry,
         stripeEnabled: Boolean(ctx.stripe),
         demoPayments: config.demoPayments,
         founderLimit: config.founderLimit,
@@ -45,14 +47,18 @@ module.exports = function authRoutes(ctx) {
     if (db.get('SELECT 1 FROM users WHERE email = ?', email)) fail(409, 'Un compte existe déjà avec cet e-mail.');
 
     const hash = await hashPassword(password);
-    const isAdmin = config.adminEmails.includes(email) ? 1 : 0;
+    // Sans ADMIN_EMAILS, le tout premier compte créé devient administrateur.
+    const firstAccount = !config.adminEmails.length && !db.get('SELECT 1 FROM users WHERE is_admin = 1');
+    const isAdmin = config.adminEmails.includes(email) || firstAccount ? 1 : 0;
     const { lastInsertRowid } = db.run(
       `INSERT INTO users (username, email, password_hash, display_name, is_admin, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
       username, email, hash, displayName, isAdmin, Date.now(),
     );
     createSession(ctx, res, lastInsertRowid);
-    const user = db.get('SELECT * FROM users WHERE id = ?', lastInsertRowid);
+    const user = config.paidEntry
+      ? db.get('SELECT * FROM users WHERE id = ?', lastInsertRowid)
+      : admitMember(ctx, lastInsertRowid);
     res.status(201).json({ user: selfUser(ctx, user) });
   });
 
@@ -67,7 +73,7 @@ module.exports = function authRoutes(ctx) {
       user.is_admin = 1;
     }
     createSession(ctx, res, user.id);
-    res.json({ user: selfUser(ctx, user) });
+    res.json({ user: selfUser(ctx, user.paid_at || config.paidEntry ? user : admitMember(ctx, user.id)) });
   });
 
   r.post('/auth/logout', (req, res) => {
@@ -113,7 +119,7 @@ module.exports = function authRoutes(ctx) {
       db.run('DELETE FROM sessions WHERE user_id = ?', row.user_id);
     });
     createSession(ctx, res, row.user_id);
-    const user = db.get('SELECT * FROM users WHERE id = ?', row.user_id);
+    const user = config.paidEntry ? db.get('SELECT * FROM users WHERE id = ?', row.user_id) : admitMember(ctx, row.user_id);
     res.json({ user: selfUser(ctx, user) });
   });
 

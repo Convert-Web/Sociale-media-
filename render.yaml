@@ -1,0 +1,21 @@
+# Déploiement sur Render (https://render.com) : New → Blueprint → choisir ce dépôt.
+# Le disque persistant garde la base de données et les photos entre les redémarrages.
+services:
+  - type: web
+    name: aurum
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/public/stats
+    disk:
+      name: aurum-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+      - key: PAID_ENTRY
+        value: "false"
