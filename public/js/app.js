@@ -15,6 +15,9 @@ import { notificationsView } from './views/notifications.js';
 import { settingsView } from './views/settings.js';
 import { adminView } from './views/admin.js';
 import { legalView } from './views/legal.js';
+import { friendsView } from './views/friends.js';
+import { groupsView, groupView } from './views/groups.js';
+import { registerServiceWorker, syncPush } from './push.js';
 
 const ROUTES = [
   { path: '/', view: landingView, access: 'public', home: true },
@@ -33,6 +36,9 @@ const ROUTES = [
   { path: '/@:username', view: profileView, access: 'member', layout: 'app', nav: 'profil' },
   { path: '/reglages', view: settingsView, access: 'member', layout: 'app', nav: 'reglages' },
   { path: '/enregistres', view: savedView, access: 'member', layout: 'app', nav: 'enregistres' },
+  { path: '/amis', view: friendsView, access: 'member', layout: 'app', nav: 'amis' },
+  { path: '/groupes', view: groupsView, access: 'member', layout: 'app', nav: 'groupes' },
+  { path: '/groupes/:id', view: groupView, access: 'member', layout: 'app', nav: 'groupes' },
   { path: '/admin', view: adminView, access: 'admin', layout: 'app', nav: 'admin' },
   { path: '/cgv', view: legalView, access: 'public', layout: 'auto', page: 'cgv' },
   { path: '/confidentialite', view: legalView, access: 'public', layout: 'auto', page: 'confidentialite' },
@@ -46,7 +52,8 @@ const appEl = document.getElementById('app');
 // ---------------------------------------------------------------------------
 let baseTitle = 'AURUM';
 function paintTitle() {
-  const n = store.user?.isMember ? store.counters.notifications + store.counters.messages : 0;
+  const c = store.counters;
+  const n = store.user?.isMember ? (c.notifications || 0) + (c.messages || 0) + (c.requests || 0) : 0;
   document.title = n ? `(${n}) ${baseTitle}` : baseTitle;
 }
 store.on('counters', paintTitle);
@@ -62,7 +69,7 @@ function buildShell() {
   const u = store.user;
   const unsub = [];
   const navEls = new Map();
-  const badges = { notifications: [], messages: [] };
+  const badges = { notifications: [], messages: [], requests: [], activity: [] };
 
   const register = (key, el) => {
     if (!navEls.has(key)) navEls.set(key, []);
@@ -81,6 +88,8 @@ function buildShell() {
     { key: 'notifications', href: '/notifications', icon: 'bell', label: 'Activité', badge: 'notifications' },
     { key: 'messages', href: '/messages', icon: 'mail', label: 'Messages', badge: 'messages' },
     { key: 'profil', href: `/@${u.username}`, icon: 'user', label: 'Profil' },
+    { key: 'amis', href: '/amis', icon: 'users', label: 'Amis', badge: 'requests' },
+    { key: 'groupes', href: '/groupes', icon: 'groups', label: 'Groupes' },
     { key: 'enregistres', href: '/enregistres', icon: 'bookmark', label: 'Enregistrés' },
     { key: 'reglages', href: '/reglages', icon: 'settings', label: 'Réglages' },
   ];
@@ -182,7 +191,7 @@ function buildShell() {
     register('salon', h('a', { href: '/salon' }, icon('home'), 'Salon')),
     register('explorer', h('a', { href: '/explorer' }, icon('compass'), 'Explorer')),
     h('a', { href: '#', 'aria-label': 'Publier', onclick: (e) => (e.preventDefault(), openComposer()) }, h('span', { class: 'plus' }, icon('plus'))),
-    register('notifications', h('a', { href: '/notifications' }, h('span', { class: 'tab-icon' }, icon('bell'), badge('notifications')), 'Activité')),
+    register('notifications', h('a', { href: '/notifications' }, h('span', { class: 'tab-icon' }, icon('bell'), badge('activity')), 'Activité')),
     register('messages', h('a', { href: '/messages' }, h('span', { class: 'tab-icon' }, icon('mail'), badge('messages')), 'Messages')),
   );
 
@@ -190,10 +199,12 @@ function buildShell() {
   const el = h('div', { class: 'shell' }, sidenav, main, rail, tabbar);
 
   const paintBadges = (c) => {
-    for (const kind of ['notifications', 'messages']) {
+    const values = { ...c, activity: (c.notifications || 0) + (c.requests || 0) };
+    for (const kind of Object.keys(badges)) {
+      const v = values[kind] || 0;
       for (const b of badges[kind]) {
-        b.hidden = !c[kind];
-        b.textContent = c[kind] > 99 ? '99+' : String(c[kind]);
+        b.hidden = !v;
+        b.textContent = v > 99 ? '99+' : String(v);
       }
     }
   };
@@ -320,7 +331,10 @@ async function render(opts = {}) {
     return;
   }
   cleanups = mine;
-  container.replaceChildren(el);
+  const swap = () => container.replaceChildren(el);
+  const smooth = !opts.same && layout === 'app' && document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (smooth) document.startViewTransition(swap);
+  else swap();
   baseTitle = ctx.title || 'AURUM';
   paintTitle();
   if (!location.hash) window.scrollTo(0, 0);
@@ -376,7 +390,18 @@ setRenderer(render);
     appEl.replaceChildren(errorView(err));
     return;
   }
-  if (store.isMember) connectRealtime();
+  if (store.isMember) {
+    connectRealtime();
+    syncPush();
+  }
+  registerServiceWorker();
+  // Toucher une notification ouvre la bonne page
+  navigator.serviceWorker?.addEventListener('message', (e) => {
+    if (e.data?.type === 'navigate' && typeof e.data.url === 'string') {
+      const url = new URL(e.data.url, location.origin);
+      if (url.origin === location.origin) navigate(url.pathname + url.search);
+    }
+  });
   render();
 })();
 

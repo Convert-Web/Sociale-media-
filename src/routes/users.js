@@ -1,8 +1,9 @@
 'use strict';
 const express = require('express');
 const { requireMember } = require('../auth');
+const { friendStatus } = require('./friends');
 const { fail, intParam } = require('../http');
-const { POST_SELECT, NOT_BLOCKED, serializePost, publicUser, authorOf, notify, retractNotification, isBlocked } = require('../social');
+const { POST_SELECT, NOT_BLOCKED, PUBLIC_POST, serializePost, publicUser, authorOf, notify, retractNotification, isBlocked } = require('../social');
 
 // Le premier paramètre de chaque requête USER_LIST est l'identifiant du membre qui consulte.
 const USER_LIST = `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.bio, u.profession, u.city,
@@ -44,20 +45,22 @@ module.exports = function userRoutes(ctx) {
     const me = req.user.id;
     const row = await db.get(
       `SELECT
-         (SELECT COUNT(*) FROM posts WHERE user_id = ?) AS posts,
+         (SELECT COUNT(*) FROM posts WHERE user_id = ? AND groupe_id IS NULL) AS posts,
          (SELECT COUNT(*) FROM follows f JOIN users x ON x.id = f.follower_id WHERE f.followee_id = ?) AS followers,
          (SELECT COUNT(*) FROM follows f JOIN users x ON x.id = f.followee_id WHERE f.follower_id = ?) AS following,
          (SELECT COUNT(*) FROM likes l JOIN posts p ON p.id = l.post_id WHERE p.user_id = ?) AS likes,
-         (SELECT COUNT(*) FROM posts p WHERE p.user_id = ? AND p.image IS NOT NULL) AS photos,
+         (SELECT COUNT(*) FROM posts p WHERE p.user_id = ? AND p.image IS NOT NULL AND p.groupe_id IS NULL) AS photos,
          EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS is_following,
          EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS follows_you,
-         EXISTS(SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_id = ?) AS blocked`,
-      u.id, u.id, u.id, u.id, u.id, me, u.id, u.id, me, me, u.id,
+         EXISTS(SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_id = ?) AS blocked,
+         (SELECT COUNT(*) FROM friend_requests WHERE (requester_id = ? OR addressee_id = ?) AND status = 'accepted') AS friends`,
+      u.id, u.id, u.id, u.id, u.id, me, u.id, u.id, me, me, u.id, u.id, u.id,
     );
     res.json({
       user: {
         ...publicUser(ctx, u),
-        stats: { posts: row.posts, followers: row.followers, following: row.following, likes: row.likes, photos: row.photos },
+        stats: { posts: row.posts, followers: row.followers, following: row.following, likes: row.likes, photos: row.photos, friends: row.friends },
+        friendStatus: u.id === me ? 'self' : await friendStatus(ctx, me, u.id),
         isMe: u.id === me,
         isFollowing: Boolean(row.is_following),
         followsYou: Boolean(row.follows_you),
@@ -71,7 +74,7 @@ module.exports = function userRoutes(ctx) {
     const before = intParam(req.query.before);
     const limit = 15;
     const rows = await db.all(
-      `${POST_SELECT} WHERE p.user_id = ? AND (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} ORDER BY p.id DESC LIMIT ?`,
+      `${POST_SELECT} WHERE p.user_id = ? AND (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${PUBLIC_POST} ORDER BY p.id DESC LIMIT ?`,
       req.user.id, u.id, before, before, limit,
     );
     res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)), hasMore: rows.length === limit });
@@ -83,9 +86,9 @@ module.exports = function userRoutes(ctx) {
     if (u.id !== req.user.id && (await isBlocked(ctx, req.user.id, u.id))) return res.json({ photos: [] });
     const rows = await db.all(
       `SELECT post_id, url FROM (
-         SELECT p.id AS post_id, p.image AS url, p.id * 100 AS k FROM posts p WHERE p.user_id = ? AND p.image IS NOT NULL
+         SELECT p.id AS post_id, p.image AS url, p.id * 100 AS k FROM posts p WHERE p.user_id = ? AND p.image IS NOT NULL AND p.groupe_id IS NULL
          UNION ALL
-         SELECT pm.post_id, pm.url, pm.post_id * 100 + pm.position FROM post_media pm JOIN posts p ON p.id = pm.post_id WHERE p.user_id = ?
+         SELECT pm.post_id, pm.url, pm.post_id * 100 + pm.position FROM post_media pm JOIN posts p ON p.id = pm.post_id WHERE p.user_id = ? AND p.groupe_id IS NULL
        ) ORDER BY k DESC LIMIT 90`,
       u.id, u.id,
     );
@@ -132,6 +135,7 @@ module.exports = function userRoutes(ctx) {
       await t.run('INSERT OR IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)', me, u.id, Date.now());
       await t.run('DELETE FROM follows WHERE (follower_id = ? AND followee_id = ?) OR (follower_id = ? AND followee_id = ?)', me, u.id, u.id, me);
       await t.run('DELETE FROM notifications WHERE (user_id = ? AND actor_id = ?) OR (user_id = ? AND actor_id = ?)', me, u.id, u.id, me);
+      await t.run('DELETE FROM friend_requests WHERE (requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?)', me, u.id, u.id, me);
     });
     res.json({ blocked: true });
   });
@@ -157,7 +161,7 @@ module.exports = function userRoutes(ctx) {
     const me = req.user.id;
     const row = await db.get(
       `SELECT (SELECT COUNT(*) FROM follows WHERE follower_id = ?) AS following,
-              (SELECT COUNT(*) FROM posts WHERE user_id = ?) AS posts`,
+              (SELECT COUNT(*) FROM posts WHERE user_id = ? AND groupe_id IS NULL) AS posts`,
       me, me,
     );
     res.json({
@@ -186,7 +190,7 @@ module.exports = function userRoutes(ctx) {
     if (req.query.only === 'users') return res.json({ users: users.map((row) => listUser(row, req.user)), posts: [] });
     const postLike = q.startsWith('#') ? `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : like;
     const posts = await db.all(
-      `${POST_SELECT} WHERE p.body LIKE ? ESCAPE '\\' AND ${NOT_BLOCKED} ORDER BY p.id DESC LIMIT 30`,
+      `${POST_SELECT} WHERE p.body LIKE ? ESCAPE '\\' AND ${NOT_BLOCKED} AND ${PUBLIC_POST} ORDER BY p.id DESC LIMIT 30`,
       me, postLike,
     );
     res.json({
@@ -221,7 +225,7 @@ module.exports = function userRoutes(ctx) {
 
   r.get('/trending', async (req, res) => {
     const since = Date.now() - 14 * 24 * 3600 * 1000;
-    const rows = await db.all("SELECT body FROM posts WHERE created_at > ? AND body LIKE '%#%' ORDER BY id DESC LIMIT 1000", since);
+    const rows = await db.all("SELECT body FROM posts WHERE created_at > ? AND groupe_id IS NULL AND body LIKE '%#%' ORDER BY id DESC LIMIT 1000", since);
     const counts = new Map();
     for (const { body } of rows) {
       const tags = new Set();

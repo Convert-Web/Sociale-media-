@@ -1,4 +1,5 @@
 import { api, enc } from '../api.js';
+import { store } from '../store.js';
 import { h, icon, avatar, memberChip, clear, spinner, emptyState, debounce, num } from '../dom.js';
 import { postCard } from '../components/post.js';
 import { userRow, followButton } from './profile.js';
@@ -71,12 +72,30 @@ export function exploreView(ctx) {
   input.addEventListener('input', debounce(run, 300));
   run();
 
+  // Raccourcis (indispensables sur téléphone, où la barre d'onglets est limitée à 5 entrées)
+  const reqBadge = h('span', { class: 'badge-count', hidden: true });
+  const paintReq = (c) => {
+    reqBadge.hidden = !c.requests;
+    reqBadge.textContent = c.requests > 99 ? '99+' : String(c.requests || '');
+  };
+  paintReq(store.counters || {});
+  ctx.onCleanup(store.on('counters', paintReq));
+  const shortcut = (href, ic, label, sub, extra) => h('a', { href, class: 'shortcut' }, h('span', { class: 'shortcut-icon' }, icon(ic), extra || null), h('b', null, label), h('small', null, sub));
+  const shortcuts = h(
+    'div',
+    { class: 'shortcuts' },
+    shortcut('/amis', 'users', 'Amis', 'Vos relations', reqBadge),
+    shortcut('/groupes', 'groups', 'Groupes', 'Cercles privés'),
+    shortcut('/enregistres', 'bookmark', 'Enregistrés', 'Vos favoris'),
+  );
+
   ctx.title = 'Explorer — AURUM';
   return h(
     'div',
     null,
     h('header', { class: 'page-head' }, h('div', { class: 'grow' }, h('h1', null, 'Explorer'), h('div', { class: 'sub' }, 'Les membres et les sujets du cercle'))),
     h('div', { class: 'explore-search' }, h('div', { class: 'search-box' }, icon('search'), input)),
+    shortcuts,
     results,
   );
 }

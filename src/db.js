@@ -163,6 +163,52 @@ CREATE TABLE IF NOT EXISTS blocks (
   PRIMARY KEY (blocker_id, blocked_id)
 );
 
+-- Version 3 : notifications push, amis, groupes privés
+CREATE TABLE IF NOT EXISTS settings (
+  key    TEXT PRIMARY KEY,
+  value  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id     INTEGER NOT NULL,
+  endpoint    TEXT NOT NULL UNIQUE,
+  p256dh      TEXT NOT NULL,
+  auth        TEXT NOT NULL,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
+
+CREATE TABLE IF NOT EXISTS friend_requests (
+  requester_id  INTEGER NOT NULL,
+  addressee_id  INTEGER NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'pending',
+  created_at    INTEGER NOT NULL,
+  responded_at  INTEGER,
+  PRIMARY KEY (requester_id, addressee_id)
+);
+CREATE INDEX IF NOT EXISTS idx_friend_addressee ON friend_requests(addressee_id, status);
+
+CREATE TABLE IF NOT EXISTS groupes (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  description  TEXT NOT NULL DEFAULT '',
+  cover        TEXT,
+  owner_id     INTEGER NOT NULL,
+  created_at   INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS groupe_members (
+  groupe_id   INTEGER NOT NULL,
+  user_id     INTEGER NOT NULL,
+  role        TEXT NOT NULL DEFAULT 'member',
+  status      TEXT NOT NULL DEFAULT 'member',
+  invited_by  INTEGER,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (groupe_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_groupe_members_user ON groupe_members(user_id, status);
+
 -- Photos envoyées par les membres, stockées dans la base
 -- (les hébergeurs gratuits effacent leurs fichiers à chaque redémarrage).
 CREATE TABLE IF NOT EXISTS media (
@@ -198,6 +244,8 @@ function wrap(executor) {
 const COLUMNS = [
   ['likes', 'reaction', "TEXT NOT NULL DEFAULT 'love'"],
   ['posts', 'edited_at', 'INTEGER'],
+  ['posts', 'groupe_id', 'INTEGER'],
+  ['notifications', 'groupe_id', 'INTEGER'],
 ];
 
 async function migrate(client) {

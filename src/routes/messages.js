@@ -3,6 +3,7 @@ const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam } = require('../http');
 const { authorOf, counters, pushCounters, isBlocked } = require('../social');
+const { sendPush } = require('../push');
 
 module.exports = function messageRoutes(ctx) {
   const r = express.Router();
@@ -109,6 +110,13 @@ module.exports = function messageRoutes(ctx) {
     ctx.hub.send(other.id, 'message', { message, from });
     ctx.hub.send(req.user.id, 'message', { message, from, echo: true });
     await pushCounters(ctx, other.id);
+    // Notification sur le téléphone du destinataire
+    await sendPush(ctx, other.id, {
+      title: req.user.display_name,
+      body: body.length > 140 ? `${body.slice(0, 137)}…` : body,
+      url: `/messages/${req.user.username}`,
+      tag: `dm-${req.user.id}`,
+    });
     res.status(201).json({ message });
   });
 

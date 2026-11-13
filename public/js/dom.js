@@ -276,9 +276,61 @@ export function closeModal() {
   el._onClose?.();
 }
 
+// Visionneuse : ouverture zoomée, fermeture d'un geste vers le bas (comme Photos sur iPhone), Échap ou toucher.
 export function lightbox(src) {
-  const box = h('div', { class: 'lightbox', onclick: () => box.remove() }, h('img', { src, alt: '' }));
+  const img = h('img', { src, alt: '', draggable: 'false' });
+  const box = h('div', { class: 'lightbox', role: 'dialog', 'aria-label': 'Photo' }, img, h('button', { class: 'lightbox-close', 'aria-label': 'Fermer' }, icon('x')));
+  let closing = false;
+  const close = () => {
+    if (closing) return;
+    closing = true;
+    document.removeEventListener('keydown', onKey);
+    box.classList.add('closing');
+    setTimeout(() => box.remove(), 220);
+  };
+  const onKey = (e) => e.key === 'Escape' && close();
+  document.addEventListener('keydown', onKey);
+  let startY = null;
+  let dy = 0;
+  box.addEventListener('pointerdown', (e) => {
+    startY = e.clientY;
+    dy = 0;
+    img.style.transition = 'none';
+  });
+  box.addEventListener('pointermove', (e) => {
+    if (startY === null) return;
+    dy = e.clientY - startY;
+    const d = Math.max(0, dy);
+    img.style.transform = `translateY(${dy}px) scale(${Math.max(0.8, 1 - d / 1600)})`;
+    box.style.setProperty('--dim', String(Math.max(0.25, 1 - Math.abs(dy) / 420)));
+  });
+  const end = () => {
+    if (startY === null) return;
+    startY = null;
+    img.style.transition = '';
+    if (Math.abs(dy) > 90 || Math.abs(dy) < 6) return close();
+    img.style.transform = '';
+    box.style.removeProperty('--dim');
+  };
+  box.addEventListener('pointerup', end);
+  box.addEventListener('pointercancel', end);
   document.body.append(box);
+}
+
+// Squelettes de chargement (plus élégants qu'une roue)
+export function skeletonPosts(n = 3) {
+  return h(
+    'div',
+    { class: 'skeletons', 'aria-hidden': 'true' },
+    Array.from({ length: n }, (_, i) =>
+      h(
+        'div',
+        { class: 'sk-card' },
+        h('i', { class: 'sk sk-avatar' }),
+        h('div', { class: 'sk-main' }, h('i', { class: 'sk', style: { width: '42%' } }), h('i', { class: 'sk', style: { width: '92%' } }), h('i', { class: 'sk', style: { width: i % 2 ? '64%' : '78%' } }), i === 0 ? h('i', { class: 'sk sk-media' }) : null),
+      ),
+    ),
+  );
 }
 
 let openMenu = null;

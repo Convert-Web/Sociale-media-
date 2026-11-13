@@ -7,11 +7,17 @@ const TYPES = {
   comment: { icon: 'comment', text: 'a commenté votre publication' },
   follow: { icon: 'userPlus', text: 'a commencé à vous suivre' },
   mention: { icon: 'at', text: 'vous a mentionné' },
+  friend_request: { icon: 'userPlus', text: 'vous a envoyé une demande d’ami' },
+  friend_accept: { icon: 'userCheck', text: 'a accepté votre demande d’ami' },
+  group_invite: { icon: 'groups', text: (n) => `vous invite à rejoindre « ${n.group?.name || 'un groupe'} »` },
+  group_request: { icon: 'groups', text: (n) => `souhaite rejoindre « ${n.group?.name || 'votre groupe'} »` },
+  group_accept: { icon: 'groups', text: (n) => `vous a accueilli dans « ${n.group?.name || 'le groupe'} »` },
 };
 
 function notifEl(n) {
   const t = TYPES[n.type] || { icon: 'bell', text: 'a interagi avec vous' };
-  const href = n.post ? `/p/${n.post.id}` : `/@${n.actor.username}`;
+  const text = typeof t.text === 'function' ? t.text(n) : t.text;
+  const href = n.post ? `/p/${n.post.id}` : n.type === 'friend_request' ? '/amis' : n.group ? `/groupes/${n.group.id}` : `/@${n.actor.username}`;
   return h(
     'a',
     { href, class: `notif${n.read ? '' : ' unread'}` },
@@ -20,7 +26,7 @@ function notifEl(n) {
       'div',
       { class: 'notif-main' },
       avatar(n.actor, 'sm'),
-      h('div', { class: 'notif-text' }, h('b', null, n.actor.displayName), ` ${t.text}`, h('span', { class: 'muted' }, ` · ${timeAgo(n.createdAt)}`)),
+      h('div', { class: 'notif-text' }, h('b', null, n.actor.displayName), ` ${text}`, h('span', { class: 'muted' }, ` · ${timeAgo(n.createdAt)}`)),
       n.post && n.post.excerpt ? h('div', { class: 'notif-excerpt' }, n.post.excerpt) : null,
     ),
   );
@@ -75,11 +81,24 @@ export function notificationsView(ctx) {
   ctx.onCleanup(() => stop());
   more();
 
+  // Bandeau « Demandes d'ami » façon Facebook
+  const banner = h('div');
+  const paintBanner = (n) => {
+    banner.replaceChildren(
+      n
+        ? h('a', { href: '/amis', class: 'requests-banner' }, h('span', { class: 'requests-icon' }, icon('userPlus')), h('span', { class: 'grow' }, h('b', null, 'Demandes d’ami'), h('small', null, n > 1 ? `${n} personnes souhaitent vous ajouter` : 'Une personne souhaite vous ajouter')), h('span', { class: 'badge-dot' }, String(n)), icon('chevron', 'icon-sm'))
+        : '',
+    );
+  };
+  paintBanner(store.counters?.requests || 0);
+  ctx.onCleanup(store.on('counters', (c) => paintBanner(c.requests || 0)));
+
   ctx.title = 'Notifications — AURUM';
   return h(
     'div',
     null,
     h('header', { class: 'page-head' }, h('div', { class: 'grow' }, h('h1', null, 'Activité'), h('div', { class: 'sub' }, 'Ce qui se passe autour de vous'))),
+    banner,
     list,
     loader,
     sentinel,

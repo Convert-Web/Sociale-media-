@@ -7,6 +7,8 @@ const { photos, saveImage, deleteUpload } = require('../uploads');
 const {
   POST_SELECT,
   NOT_BLOCKED,
+  PUBLIC_POST,
+  VISIBLE_POST,
   REACTIONS,
   serializePost,
   getPost,
@@ -25,11 +27,18 @@ module.exports = function postRoutes(ctx) {
   const { db } = ctx;
   r.use(['/feed', '/posts', '/comments', '/saved'], requireMember);
 
+  // Publication accessible au lecteur : pas de blocage, et membre du groupe s'il s'agit d'un groupe privé.
   const loadPost = async (id, viewer) => {
     const postId = intParam(id);
     const post = postId && (await db.get('SELECT * FROM posts WHERE id = ?', postId));
-    if (!post || (viewer && post.user_id !== viewer.id && (await isBlocked(ctx, viewer.id, post.user_id)))) {
-      fail(404, 'Publication introuvable.');
+    if (!post) fail(404, 'Publication introuvable.');
+    if (viewer && post.user_id !== viewer.id && (await isBlocked(ctx, viewer.id, post.user_id))) fail(404, 'Publication introuvable.');
+    if (viewer && post.groupe_id && !viewer.is_admin) {
+      const member = await db.get(
+        "SELECT 1 FROM groupe_members WHERE groupe_id = ? AND user_id = ? AND status = 'member'",
+        post.groupe_id, viewer.id,
+      );
+      if (!member) fail(404, 'Publication introuvable.');
     }
     return post;
   };
@@ -48,14 +57,14 @@ module.exports = function postRoutes(ctx) {
       scope === 'following'
         ? await db.all(
             `${POST_SELECT}
-             WHERE (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED}
+             WHERE (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${PUBLIC_POST}
                AND (p.user_id = v.id OR p.user_id IN (SELECT followee_id FROM follows WHERE follower_id = v.id))
              ORDER BY p.id DESC LIMIT ?`,
             me, before, before, limit,
           )
         : await db.all(
             `${POST_SELECT}
-             WHERE (? IS NULL OR p.id < ?) AND u.paid_at IS NOT NULL AND ${NOT_BLOCKED}
+             WHERE (? IS NULL OR p.id < ?) AND u.paid_at IS NOT NULL AND ${NOT_BLOCKED} AND ${PUBLIC_POST}
              ORDER BY p.id DESC LIMIT ?`,
             me, before, before, limit,
           );
@@ -69,7 +78,7 @@ module.exports = function postRoutes(ctx) {
     const rows = await db.all(
       `${POST_SELECT}
        JOIN bookmarks bk ON bk.post_id = p.id AND bk.user_id = v.id
-       WHERE (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED}
+       WHERE (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${VISIBLE_POST}
        ORDER BY p.id DESC LIMIT ?`,
       req.user.id, before, before, limit,
     );
@@ -106,7 +115,7 @@ module.exports = function postRoutes(ctx) {
 
   // Modifier le texte d'une publication (auteur uniquement)
   r.patch('/posts/:id', async (req, res) => {
-    const post = await loadPost(req.params.id);
+    const post = await loadPost(req.params.id, req.user);
     if (post.user_id !== req.user.id) fail(403, 'Seul l’auteur peut modifier sa publication.');
     const body = text(req.body?.body, { field: 'Publication', max: 2000 });
     if (!body && !post.image) fail(400, 'Votre publication est vide.');
@@ -115,7 +124,7 @@ module.exports = function postRoutes(ctx) {
   });
 
   r.delete('/posts/:id', async (req, res) => {
-    const post = await loadPost(req.params.id);
+    const post = await loadPost(req.params.id, req.user);
     if (post.user_id !== req.user.id && !req.user.is_admin) fail(403, 'Action non autorisée.');
     const media = await deletePost(ctx, post.id);
     for (const url of [post.image, ...media]) deleteUpload(ctx, url);
@@ -140,7 +149,7 @@ module.exports = function postRoutes(ctx) {
   });
 
   r.delete('/posts/:id/like', async (req, res) => {
-    const post = await loadPost(req.params.id);
+    const post = await loadPost(req.params.id, req.user);
     const { changes } = await db.run('DELETE FROM likes WHERE user_id = ? AND post_id = ?', req.user.id, post.id);
     if (changes) await retractNotification(ctx, { userId: post.user_id, actorId: req.user.id, type: 'like', postId: post.id });
     res.json(await reactionState(post.id, null));
@@ -173,7 +182,7 @@ module.exports = function postRoutes(ctx) {
   });
 
   r.delete('/posts/:id/save', async (req, res) => {
-    const post = await loadPost(req.params.id);
+    const post = await loadPost(req.params.id, req.user);
     await db.run('DELETE FROM bookmarks WHERE user_id = ? AND post_id = ?', req.user.id, post.id);
     res.json({ saved: false });
   });

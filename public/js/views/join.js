@@ -1,9 +1,11 @@
 import { api } from '../api.js';
 import { store, connectRealtime, disconnectRealtime } from '../store.js';
+import { detachPush } from '../push.js';
 import { navigate } from '../router.js';
 import { h, icon, memberCard, money, cardSince, modal, toast, memberNo } from '../dom.js';
 
 export async function logout() {
+  await detachPush();
   try {
     await api.post('/api/auth/logout');
   } catch {

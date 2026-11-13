@@ -6,7 +6,7 @@ const listeners = new Map();
 export const store = {
   user: null,
   config: null,
-  counters: { notifications: 0, messages: 0 },
+  counters: { notifications: 0, messages: 0, requests: 0 },
 
   on(event, fn) {
     if (!listeners.has(event)) listeners.set(event, new Set());

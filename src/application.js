@@ -47,6 +47,7 @@ async function createApp(config, overrides = {}) {
     hub: overrides.hub || new Hub(),
     mailer: overrides.mailer || createMailer(config),
     stripe: 'stripe' in overrides ? overrides.stripe : config.stripe.secretKey ? new Stripe(config.stripe.secretKey) : null,
+    pushSender: overrides.pushSender, // remplacé dans les tests
   };
 
   const app = express();
@@ -80,7 +81,7 @@ async function createApp(config, overrides = {}) {
     );
   }
 
-  const routes = ['auth', 'billing', 'public', 'posts', 'stories', 'moderation', 'users', 'messages', 'notifications', 'me', 'admin'];
+  const routes = ['auth', 'billing', 'public', 'posts', 'stories', 'moderation', 'push', 'friends', 'groups', 'users', 'messages', 'notifications', 'me', 'admin'];
   for (const name of routes) app.use('/api', require(`./routes/${name}`)(ctx));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ressource introuvable.' }));
 

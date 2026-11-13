@@ -4,6 +4,7 @@ import { navigate } from '../router.js';
 import { h, icon, avatar, memberChip, founderBadge, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox, popMenu, confirmDialog } from '../dom.js';
 import { postList, backHead } from './feed.js';
 import { reportDialog } from '../components/report.js';
+import { friendButton } from './friends.js';
 
 export function userRow(u, { follow = true } = {}) {
   const btn = follow && !u.isMe ? followButton(u, 'btn-sm') : null;
@@ -54,13 +55,13 @@ export function followButton(u, size = '') {
 
 function relationModal(username, relation) {
   const body = h('div', { class: 'modal-body', style: { padding: '8px' } }, spinner());
-  modal(relation === 'followers' ? 'Abonnés' : 'Abonnements', body);
+  modal({ followers: 'Abonnés', following: 'Abonnements', friends: 'Amis' }[relation], body);
   api
     .get(`/api/users/${enc(username)}/${relation}`)
     .then(({ users }) => {
       clear(body);
       if (!users.length) body.append(emptyState('users', 'Personne pour l’instant', null));
-      for (const u of users) body.append(userRow(u));
+      for (const u of users) body.append(userRow(u, { follow: relation !== 'friends' }));
     })
     .catch((err) => {
       clear(body);
@@ -79,10 +80,29 @@ export async function profileView(ctx) {
   ctx.title = `${user.displayName} (@${user.username}) — AURUM`;
 
   const followersEl = h('b', null, num(user.stats.followers));
+  const friendsEl = h('b', null, num(user.stats.friends || 0));
   const moreBtn = h('button', { class: 'btn btn-ghost btn-icon', 'aria-label': 'Plus d’options', title: 'Options' }, icon('more'));
   moreBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     const items = [{ icon: 'link', label: 'Copier le lien du profil', action: () => navigator.clipboard?.writeText(`${location.origin}/@${user.username}`).then(() => toast('Lien copié.'), () => {}) }];
+    if (!user.isMe && !user.blocked) {
+      items.unshift({
+        icon: user.isFollowing ? 'x' : 'plus',
+        label: user.isFollowing ? 'Ne plus suivre' : 'Suivre ses publications',
+        action: async () => {
+          const was = user.isFollowing;
+          try {
+            if (was) await api.del(`/api/users/${enc(user.username)}/follow`);
+            else await api.post(`/api/users/${enc(user.username)}/follow`);
+            user.isFollowing = !was;
+            store.emit('follow:changed', { username: user.username, following: !was });
+            toast(was ? 'Vous ne suivez plus ce membre.' : 'Vous suivez désormais ses publications.');
+          } catch (err) {
+            toast(err.message, 'error');
+          }
+        },
+      });
+    }
     if (!user.isMe) {
       items.push({ icon: 'flag', label: 'Signaler ce membre', action: () => reportDialog('user', user.id, 'Signaler ce membre') });
       items.push(
@@ -123,7 +143,16 @@ export async function profileView(ctx) {
       : [
           moreBtn,
           h('a', { href: `/messages/${user.username}`, class: 'btn btn-ghost btn-icon', 'aria-label': 'Envoyer un message', title: 'Message' }, icon('mail')),
-          followButton(user),
+          friendButton(user, {
+            onChange: (s, prev) => {
+              user.stats.friends = Math.max(0, (user.stats.friends || 0) + (s === 'friends') - (prev === 'friends'));
+              friendsEl.textContent = num(user.stats.friends);
+              if (s === 'friends' && !user.isFollowing) {
+                user.isFollowing = true;
+                store.emit('follow:changed', { username: user.username, following: true });
+              }
+            },
+          }),
         ];
   ctx.onCleanup(
     store.on('follow:changed', ({ username: un, following }) => {
@@ -206,7 +235,7 @@ export async function profileView(ctx) {
         { class: 'profile-handle' },
         h('span', null, `@${user.username}`),
         memberChip(user),
-        user.followsYou ? h('span', { class: 'tag' }, 'Vous suit') : null,
+        user.friendStatus === 'friends' ? h('span', { class: 'tag tag-gold' }, 'Ami') : user.followsYou ? h('span', { class: 'tag' }, 'Vous suit') : null,
         user.blocked ? h('span', { class: 'tag' }, 'Bloqué') : null,
       ),
       user.bio ? h('p', { class: 'profile-bio' }, richText(user.bio)) : null,
@@ -214,6 +243,7 @@ export async function profileView(ctx) {
       h(
         'div',
         { class: 'profile-stats' },
+        h('button', { onclick: () => relationModal(user.username, 'friends') }, friendsEl, (user.stats.friends || 0) > 1 ? 'amis' : 'ami'),
         h('button', { onclick: () => relationModal(user.username, 'following') }, h('b', null, num(user.stats.following)), user.stats.following > 1 ? 'abonnements' : 'abonnement'),
         h('button', { onclick: () => relationModal(user.username, 'followers') }, followersEl, user.stats.followers > 1 ? 'abonnés' : 'abonné'),
         h('span', null, h('b', null, num(user.stats.likes)), user.stats.likes > 1 ? 'réactions reçues' : 'réaction reçue'),

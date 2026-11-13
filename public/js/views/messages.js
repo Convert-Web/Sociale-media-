@@ -3,6 +3,7 @@ import { store, isPolling } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, nameLine, memberChip, clear, spinner, emptyState, timeAgo, clock, dayLabel, richText, autosize, toast } from '../dom.js';
 import { pickMember } from './profile.js';
+import { pushBanner } from '../components/pushcard.js';
 
 export function messagesView(ctx) {
   const other = ctx.params.username || null;
@@ -204,7 +205,7 @@ export function messagesView(ctx) {
 
   ctx.title = 'Messages — AURUM';
   root.append(
-    h('section', { class: 'dm-list' }, h('header', { class: 'page-head' }, h('div', { class: 'grow' }, h('h1', null, 'Messages'), h('div', { class: 'sub' }, 'Privés, entre membres')), newBtn), listItems),
+    h('section', { class: 'dm-list' }, h('header', { class: 'page-head' }, h('div', { class: 'grow' }, h('h1', null, 'Messages'), h('div', { class: 'sub' }, 'Privés, entre membres')), newBtn), pushBanner(), listItems),
     threadHost,
   );
   return root;

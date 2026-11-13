@@ -37,9 +37,35 @@ function grantMembership(ctx, userId, { provider, ref, amountCents, currency, st
   });
 }
 
+// Suppression d'un groupe : publications, photos, membres, notifications.
+async function deleteGroup(ctx, groupId) {
+  return ctx.db.transaction(async (t) => {
+    const g = await t.get('SELECT cover FROM groupes WHERE id = ?', groupId);
+    if (!g) return [];
+    const media = [g.cover];
+    const posts = 'SELECT id FROM posts WHERE groupe_id = ?';
+    for (const p of await t.all('SELECT image FROM posts WHERE groupe_id = ? AND image IS NOT NULL', groupId)) media.push(p.image);
+    for (const m of await t.all(`SELECT url FROM post_media WHERE post_id IN (${posts})`, groupId)) media.push(m.url);
+    await t.run(`DELETE FROM post_media WHERE post_id IN (${posts})`, groupId);
+    await t.run(`DELETE FROM bookmarks WHERE post_id IN (${posts})`, groupId);
+    await t.run(`DELETE FROM reports WHERE target_type = 'post' AND target_id IN (${posts})`, groupId);
+    await t.run(`DELETE FROM likes WHERE post_id IN (${posts})`, groupId);
+    await t.run(`DELETE FROM comments WHERE post_id IN (${posts})`, groupId);
+    await t.run(`DELETE FROM notifications WHERE groupe_id = ? OR post_id IN (${posts})`, groupId, groupId);
+    await t.run('DELETE FROM posts WHERE groupe_id = ?', groupId);
+    await t.run('DELETE FROM groupe_members WHERE groupe_id = ?', groupId);
+    await t.run('DELETE FROM groupes WHERE id = ?', groupId);
+    return media.filter(Boolean);
+  });
+}
+
 // Suppression complète d'un compte, dans l'ordre (ne dépend pas des clés étrangères).
 async function deleteUser(ctx, userId) {
   const media = [];
+  // Les groupes créés par le membre disparaissent avec lui.
+  for (const g of await ctx.db.all('SELECT id FROM groupes WHERE owner_id = ?', userId)) {
+    media.push(...(await deleteGroup(ctx, g.id)));
+  }
   await ctx.db.transaction(async (t) => {
     const user = await t.get('SELECT avatar, cover FROM users WHERE id = ?', userId);
     if (!user) return;
@@ -54,6 +80,9 @@ async function deleteUser(ctx, userId) {
     await t.run('DELETE FROM story_views WHERE user_id = ? OR story_id IN (SELECT id FROM stories WHERE user_id = ?)', userId, userId);
     await t.run('DELETE FROM stories WHERE user_id = ?', userId);
     await t.run('DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?', userId, userId);
+    await t.run('DELETE FROM push_subscriptions WHERE user_id = ?', userId);
+    await t.run('DELETE FROM friend_requests WHERE requester_id = ? OR addressee_id = ?', userId, userId);
+    await t.run('DELETE FROM groupe_members WHERE user_id = ?', userId);
     await t.run(`DELETE FROM likes WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
     await t.run(`DELETE FROM comments WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
     await t.run(`DELETE FROM notifications WHERE user_id = ? OR actor_id = ? OR post_id IN (${mine})`, userId, userId, userId);
@@ -82,4 +111,4 @@ async function deletePost(ctx, postId) {
   });
 }
 
-module.exports = { admitMember, grantMembership, deleteUser, deletePost };
+module.exports = { admitMember, grantMembership, deleteUser, deletePost, deleteGroup };

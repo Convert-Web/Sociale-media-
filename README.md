@@ -20,9 +20,11 @@ Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (bar
 | **Enregistrés** | Mettre une publication de côté et la retrouver dans « Enregistrés ». |
 | **Sécurité** | Signaler une publication, un commentaire ou un membre ; bloquer un membre (contenus masqués, messages impossibles) ; file des signalements dans « Direction ». |
 | **Application** | Installable sur l'écran d'accueil (icône, plein écran), accueil guidé des nouveaux membres. |
-| **Profils** | Photo, couverture, bio, profession, ville, site web, statistiques, abonnés / abonnements, onglet « Photos » en grille. |
+| **Profils** | Mise en page inspirée de X : couverture 3:1, photo qui chevauche, onglets soulignés « Publications / Photos ». **Outil de recadrage** (glisser, pincer, zoom) pour la photo de profil et la couverture : jamais d'image étirée. Visionneuse animée (glisser vers le bas pour fermer). |
+| **Amis** | Demandes d'ami façon Facebook : Ajouter → Demande envoyée → Accepter / Refuser, liste d'amis, « Vous connaissez peut-être », bandeau dans Activité et badge rouge. Accepter une demande abonne les deux membres l'un à l'autre. |
+| **Groupes privés** | Création avec couverture, invitation de membres, demandes d'adhésion validées par le créateur ou les admins du groupe, rôles (créateur / admin / membre), discussion réservée aux membres. Les publications d'un groupe n'apparaissent jamais dans le Salon, les profils, la recherche ou les tendances. |
 | **Messagerie privée** | Conversations entre membres **en temps réel**, accusés de lecture « Vu », compteurs de non-lus. |
-| **Notifications** | J'aime, commentaires, nouveaux abonnés, mentions — en temps réel. |
+| **Notifications** | Réactions, commentaires, abonnés, mentions, demandes d'ami, invitations de groupe. **Notifications sur le téléphone** (Web Push) à chaque message privé, demande d'ami ou invitation — à activer dans Réglages › Notifications. Sur iPhone : ajouter d'abord AURUM à l'écran d'accueil (iOS 16.4+). Clés VAPID générées automatiquement, rien à configurer. |
 | **Explorer** | Recherche (membres, métiers, villes, #sujets), tendances, suggestions, derniers arrivés. |
 | **Direction (admin)** | Membres, chiffre d'affaires, conversion, inscriptions sur 14 jours, derniers paiements, exclusion de membres, modération des publications. |
 | **RGPD** | Export de toutes ses données en un clic, suppression du compte, aucun traceur, polices hébergées localement. |

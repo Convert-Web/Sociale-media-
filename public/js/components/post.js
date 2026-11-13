@@ -471,7 +471,7 @@ function commentsSection(post, onCount) {
 // ---------------------------------------------------------------------------
 // Éditeur de publication (texte + jusqu'à 6 photos)
 // ---------------------------------------------------------------------------
-export function composer({ onPosted, placeholder } = {}) {
+export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}) {
   let files = [];
   const ta = h('textarea', {
     placeholder: placeholder || 'Partagez une idée, une adresse, une réussite…',
@@ -554,13 +554,13 @@ export function composer({ onPosted, placeholder } = {}) {
             fd.append('images', small, small.name || 'photo');
           }
           if (total > MAX_UPLOAD) throw new Error('Photos trop lourdes : retirez-en une ou deux.');
-          const { post } = await api.post('/api/posts', fd);
+          const { post } = await api.post(endpoint, fd);
           ta.value = '';
           files.forEach((f) => URL.revokeObjectURL(f.url));
           files = [];
           paintPreviews();
           fit();
-          toast('Publié dans le Salon.');
+          toast(post.groupId ? 'Publié dans le groupe.' : 'Publié dans le Salon.');
           store.emit('post:created', post);
           onPosted?.(post);
         } catch (err) {

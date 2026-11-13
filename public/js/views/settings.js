@@ -3,6 +3,8 @@ import { store, disconnectRealtime } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, toast, memberCard, cardSince, fullDate, memberNo, confirmDialog, modal, shrinkImage, TOO_BIG_GIF } from '../dom.js';
 import { backHead } from './feed.js';
+import { cropImage } from '../components/cropper.js';
+import { pushCard } from '../components/pushcard.js';
 
 function field(label, input, hint) {
   return h('label', { class: 'field' }, h('span', null, label), input, hint ? h('small', { class: 'hint' }, hint) : null);
@@ -34,8 +36,15 @@ export function settingsView(ctx) {
 
   const upload = async (kind, file) => {
     const fd = new FormData();
-    const small = await shrinkImage(file, kind === 'avatar' ? 800 : 2000);
-    fd.append('image', small, small.name || 'photo');
+    // Recadrage : jamais d'image étirée, l'utilisateur choisit le cadre (GIF animés conservés tels quels)
+    let small;
+    if (file.type === 'image/gif') small = file;
+    else {
+      const cropped = await cropImage(file, kind === 'avatar' ? { aspect: 1, round: true, outWidth: 800, title: 'Photo de profil' } : { aspect: 3, outWidth: 1500, title: 'Photo de couverture' });
+      if (!cropped) return;
+      small = await shrinkImage(cropped, kind === 'avatar' ? 800 : 1600);
+    }
+    fd.append('image', small, small.name || 'photo.jpg');
     try {
       const { user } = await api.post(`/api/me/${kind}`, fd);
       store.setUser(user);
@@ -253,6 +262,10 @@ export function settingsView(ctx) {
     blockedList,
   );
 
+  const notifCard = pushCard();
+  notifCard.id = 'notifications';
+  if (location.hash === '#notifications') setTimeout(() => notifCard.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+
   ctx.title = 'Réglages — AURUM';
-  return h('div', null, backHead('Réglages', `@${u.username}`), h('div', { class: 'settings' }, profileForm, membership, security, blockedCard, data));
+  return h('div', null, backHead('Réglages', `@${u.username}`), h('div', { class: 'settings' }, profileForm, notifCard, membership, security, blockedCard, data));
 }

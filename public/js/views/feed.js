@@ -1,7 +1,7 @@
 import { api } from '../api.js';
 import { store, isPolling } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, clear, spinner, emptyState, infinite } from '../dom.js';
+import { h, icon, clear, spinner, emptyState, infinite, skeletonPosts } from '../dom.js';
 import { postCard, composer } from '../components/post.js';
 import { storiesBar } from '../components/stories.js';
 
@@ -69,7 +69,9 @@ export function postList(fetchPage, { empty } = {}) {
   const list = h('div');
   const sentinel = h('div', { style: { height: '1px' } });
   const loader = spinner();
-  const root = h('div', null, list, loader, sentinel);
+  const skel = skeletonPosts();
+  loader.hidden = true;
+  const root = h('div', null, skel, list, loader, sentinel);
   let before = null;
   let done = false;
   let loading = false;
@@ -93,6 +95,8 @@ export function postList(fetchPage, { empty } = {}) {
       done = true;
     } finally {
       loading = false;
+      skel.remove();
+      loader.hidden = false;
     }
   }
 
@@ -155,7 +159,7 @@ export function feedView(ctx) {
   tabFollow.addEventListener('click', () => setScope('following'));
 
   ctx.onCleanup(() => stopList());
-  ctx.onCleanup(store.on('post:created', (post) => current?.prepend(post)));
+  ctx.onCleanup(store.on('post:created', (post) => !post.groupId && current?.prepend(post)));
   const showPill = () => {
     clear(pill);
     pill.append(

@@ -22,7 +22,12 @@ const config = {
   isProd,
   port,
   appName: env.APP_NAME || 'AURUM',
-  baseUrl: (env.BASE_URL || env.RENDER_EXTERNAL_URL || `http://localhost:${port}`).replace(/\/$/, ''),
+  baseUrl: (
+    env.BASE_URL ||
+    env.RENDER_EXTERNAL_URL ||
+    (env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : '') ||
+    `http://localhost:${port}`
+  ).replace(/\/$/, ''),
   dataDir: path.resolve(env.DATA_DIR || path.join(__dirname, '..', 'data')),
   databasePath: env.DATABASE_PATH || '',
   priceCents: Number(env.ENTRY_PRICE_CENTS) || 999,
