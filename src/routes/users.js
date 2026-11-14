@@ -6,7 +6,7 @@ const { fail, intParam } = require('../http');
 const { POST_SELECT, NOT_BLOCKED, PUBLIC_POST, serializePost, publicUser, authorOf, notify, retractNotification, isBlocked } = require('../social');
 
 // Le premier paramètre de chaque requête USER_LIST est l'identifiant du membre qui consulte.
-const USER_LIST = `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.bio, u.profession, u.city,
+const USER_LIST = `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot, u.bio, u.profession, u.city,
   EXISTS(SELECT 1 FROM follows fx WHERE fx.follower_id = ? AND fx.followee_id = u.id) AS is_following`;
 // Exclut les membres bloqués (dans un sens ou dans l'autre) : deux paramètres, l'identifiant du lecteur.
 const USER_NOT_BLOCKED = `u.id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)`;
@@ -153,7 +153,7 @@ module.exports = function userRoutes(ctx) {
   // Membres bloqués (réglages)
   r.get('/me/blocked', requireMember, async (req, res) => {
     const rows = await db.all(
-      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at
+      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot
        FROM blocks b JOIN users u ON u.id = b.blocked_id WHERE b.blocker_id = ? ORDER BY b.created_at DESC`,
       req.user.id,
     );
@@ -210,7 +210,7 @@ module.exports = function userRoutes(ctx) {
       `${USER_LIST},
          (SELECT COUNT(*) FROM follows f WHERE f.followee_id = u.id) AS followers
        FROM users u
-       WHERE u.paid_at IS NOT NULL AND u.id != ? AND ${USER_NOT_BLOCKED}
+       WHERE u.paid_at IS NOT NULL AND u.is_bot = 0 AND u.id != ? AND ${USER_NOT_BLOCKED}
          AND u.id NOT IN (SELECT followee_id FROM follows WHERE follower_id = ?)
        ORDER BY followers DESC, RANDOM() LIMIT ?`,
       me, me, me, me, me, limit,
@@ -221,7 +221,7 @@ module.exports = function userRoutes(ctx) {
   r.get('/members', async (req, res) => {
     const me = req.user.id;
     const rows = await db.all(
-      `${USER_LIST} FROM users u WHERE u.paid_at IS NOT NULL AND ${USER_NOT_BLOCKED} ORDER BY u.paid_at DESC LIMIT 30`,
+      `${USER_LIST} FROM users u WHERE u.paid_at IS NOT NULL AND u.is_bot = 0 AND ${USER_NOT_BLOCKED} ORDER BY u.paid_at DESC LIMIT 30`,
       me, me, me,
     );
     res.json({ users: rows.map((row) => listUser(row, req.user)) });

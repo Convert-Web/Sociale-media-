@@ -16,7 +16,7 @@ const USERNAME_RE = /^[a-z0-9_.]{3,20}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const RESERVED = new Set([
   'admin', 'administrateur', 'aurum', 'support', 'help', 'aide', 'root', 'system', 'systeme',
-  'api', 'moderation', 'staff', 'equipe', 'contact', 'security', 'securite', 'null', 'undefined',
+  'concierge', 'le.concierge', 'api', 'moderation', 'staff', 'equipe', 'contact', 'security', 'securite', 'null', 'undefined',
 ]);
 
 function text(value, { field, min = 0, max = 500, required = false } = {}) {

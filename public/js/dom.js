@@ -99,7 +99,12 @@ export function richText(str) {
   for (const m of str.matchAll(TOKEN_RE)) {
     if (m.index > last) frag.append(str.slice(last, m.index));
     if (m[1]) {
-      frag.append(h('a', { href: m[1], target: '_blank', rel: 'noopener noreferrer nofollow' }, m[1].replace(/^https?:\/\/(www\.)?/, '')));
+      const internal = m[1].startsWith(`${location.origin}/`);
+      frag.append(
+        internal
+          ? h('a', { href: m[1].slice(location.origin.length) }, m[1].slice(location.origin.length))
+          : h('a', { href: m[1], target: '_blank', rel: 'noopener noreferrer nofollow' }, m[1].replace(/^https?:\/\/(www\.)?/, '')),
+      );
     } else if (m[2]) {
       frag.append(h('a', { href: `/@${m[2]}` }, `@${m[2]}`));
     } else if (m[3]) {
@@ -147,6 +152,11 @@ export function avatar(user, size = '', { presence = false } = {}) {
   return el;
 }
 
+// Étiquette des comptes automatiques (AURUM, Le Concierge)
+export function botChip() {
+  return h('span', { class: 'bot-chip', title: 'Compte automatique : publications générées par AURUM' }, 'Automatique');
+}
+
 // Badge « Membre vérifié » (identité confirmée par la Direction)
 export function verifiedMark() {
   return h('span', { class: 'verified', title: 'Membre vérifié', 'aria-label': 'Membre vérifié' }, icon('verified'));
@@ -157,6 +167,7 @@ export function nameLine(user, { link = true } = {}) {
     h('b', null, user.displayName),
     user.verified ? verifiedMark() : null,
     user.founder ? h('span', { title: 'Membre fondateur' }, icon('crown', 'crown')) : null,
+    user.bot ? botChip() : null,
   ];
   return link
     ? h('a', { href: `/@${user.username}`, class: 'name-line' }, parts)

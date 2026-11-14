@@ -37,6 +37,8 @@ const config = {
   // Modifiable ensuite depuis la page Direction.
   admissionDefault: env.ADMISSION === 'open' ? 'open' : 'invitation',
   invitesPerMember: Number(env.INVITES_PER_MEMBER) || 3,
+  // Comptes automatiques (AURUM, Le Concierge) : actifs sauf BOTS=off ; désactivés pendant les tests
+  bots: env.BOTS !== 'off' && env.NODE_ENV !== 'test',
   // Droit d'entrée payant : désactivé par défaut (inscription gratuite).
   // Passez PAID_ENTRY=true pour exiger le paiement à l'inscription.
   paidEntry: bool(env.PAID_ENTRY, false),

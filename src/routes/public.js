@@ -7,9 +7,9 @@ module.exports = function publicRoutes(ctx) {
 
   r.get('/public/stats', async (_req, res) => {
     const { members, lastNumber, cities } = await db.get(
-      `SELECT (SELECT COUNT(*) FROM users WHERE paid_at IS NOT NULL) AS members,
+      `SELECT (SELECT COUNT(*) FROM users WHERE paid_at IS NOT NULL AND is_bot = 0) AS members,
               (SELECT COALESCE(MAX(number), 0) FROM member_numbers) AS lastNumber,
-              (SELECT COUNT(DISTINCT LOWER(city)) FROM users WHERE paid_at IS NOT NULL AND city != '') AS cities`,
+              (SELECT COUNT(DISTINCT LOWER(city)) FROM users WHERE paid_at IS NOT NULL AND is_bot = 0 AND city != '') AS cities`,
     );
     res.json({
       members,

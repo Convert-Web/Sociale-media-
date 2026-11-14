@@ -33,7 +33,7 @@ module.exports = function invitationRoutes(ctx) {
       await db.run('INSERT INTO invitations (code, inviter_id, created_at) VALUES (?, ?, ?)', newCode(), req.user.id, Date.now() + i);
     }
     const rows = await db.all(
-      `SELECT i.code, i.created_at, i.used_at, u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at
+      `SELECT i.code, i.created_at, i.used_at, u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot
        FROM invitations i LEFT JOIN users u ON u.id = i.used_by
        WHERE i.inviter_id = ? ORDER BY (i.used_at IS NULL) DESC, i.created_at ASC`,
       req.user.id,

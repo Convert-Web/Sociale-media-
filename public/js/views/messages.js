@@ -189,10 +189,12 @@ export function messagesView(ctx) {
       box,
       data.blocked
         ? h('div', { class: 'dm-blocked' }, icon('ban', 'icon-sm'), 'Vous ne pouvez plus échanger avec ce membre.')
-        : form,
+        : data.automatic
+          ? h('div', { class: 'dm-blocked' }, icon('info', 'icon-sm'), 'Compte automatique : il ne lit pas les réponses.')
+          : form,
     );
     scrollDown();
-    if (!data.blocked && window.matchMedia('(min-width: 721px)').matches) ta.focus();
+    if (!data.blocked && !data.automatic && window.matchMedia('(min-width: 721px)').matches) ta.focus();
     loadList();
   }
 

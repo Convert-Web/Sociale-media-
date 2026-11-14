@@ -38,7 +38,7 @@ async function findInvitation(ctx, code) {
   const c = normalizeCode(code);
   if (c.length < 6) return null;
   return ctx.db.get(
-    `SELECT i.*, u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.paid_at AS inviter_member
+    `SELECT i.*, u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot, u.paid_at AS inviter_member
      FROM invitations i JOIN users u ON u.id = i.inviter_id WHERE i.code = ?`,
     c,
   );

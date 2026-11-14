@@ -340,6 +340,8 @@ const COLUMNS = [
   ['users', 'admission_requested_at', 'INTEGER'],
   ['users', 'admission_declined_at', 'INTEGER'],
   ['users', 'admission_note', "TEXT NOT NULL DEFAULT ''"],
+  ['users', 'is_bot', 'INTEGER NOT NULL DEFAULT 0'],
+  ['posts', 'journal_id', 'INTEGER'],
 ];
 
 async function migrate(client) {

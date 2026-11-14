@@ -221,6 +221,18 @@ export function feedView(ctx) {
   );
 
   load();
+  // Comptes automatiques : publient ce qui est dû (Journal, question du jour…) à l'ouverture du Salon
+  api
+    .post('/api/bots/tick')
+    .then((r) => {
+      if (!r?.posted?.length || !host.isConnected) return;
+      if (window.scrollY < 80) load();
+      else {
+        pending += r.posted.length;
+        showPill();
+      }
+    })
+    .catch(() => {});
   const stories = storiesBar();
   ctx.title = 'Le Salon — AURUM';
   return h(

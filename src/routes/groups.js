@@ -92,7 +92,7 @@ module.exports = function groupRoutes(ctx) {
     const canSeeMembers = isMember(g, req.user) || g.status === 'invited';
     const preview = canSeeMembers
       ? await db.all(
-          `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at
+          `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot
            FROM groupe_members m JOIN users u ON u.id = m.user_id
            WHERE m.groupe_id = ? AND m.status = 'member' ORDER BY m.created_at ASC LIMIT 8`,
           g.id,
@@ -168,7 +168,7 @@ module.exports = function groupRoutes(ctx) {
     const g = await loadGroup(req.params.id, req.user);
     requireMemberOf(g, req.user);
     const rows = await db.all(
-      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.profession, m.role, m.status, m.created_at
+      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot, u.profession, m.role, m.status, m.created_at
        FROM groupe_members m JOIN users u ON u.id = m.user_id
        WHERE m.groupe_id = ? ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, m.created_at ASC`,
       g.id,
@@ -220,6 +220,7 @@ module.exports = function groupRoutes(ctx) {
     if (g.status !== 'member') fail(403, 'Seuls les membres peuvent inviter.');
     const u = await findUser(req.body?.username);
     if (u.id === req.user.id) fail(400, 'Vous êtes déjà membre.');
+    if (u.is_bot) fail(400, 'Les comptes automatiques ne peuvent pas rejoindre un groupe.');
     if (await isBlocked(ctx, req.user.id, u.id)) fail(403, 'Impossible d’inviter ce membre.');
     const existing = await db.get('SELECT status FROM groupe_members WHERE groupe_id = ? AND user_id = ?', g.id, u.id);
     if (existing?.status === 'member') fail(409, `${u.display_name} est déjà membre.`);

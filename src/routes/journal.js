@@ -12,7 +12,7 @@ const KEEP_PER_SOURCE = 40; // éléments conservés par source
 
 const ITEM_SELECT = `
   SELECT j.*, s.title AS source_title,
-         u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at
+         u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot
   FROM journal_items j
   LEFT JOIN journal_sources s ON s.id = j.source_id
   LEFT JOIN users u ON u.id = j.author_id`;
@@ -88,7 +88,8 @@ async function refreshAll(ctx, { force = false } = {}) {
   const results = await Promise.all(sources.map((s) => refreshSource(db, s)));
   // On ne garde que les plus récents de chaque source (les éléments « à la une » restent)
   await db.run(
-    `DELETE FROM journal_items WHERE source_id IS NOT NULL AND featured_at IS NULL AND id NOT IN (
+    `DELETE FROM journal_items WHERE source_id IS NOT NULL AND featured_at IS NULL
+       AND id NOT IN (SELECT journal_id FROM posts WHERE journal_id IS NOT NULL) AND id NOT IN (
        SELECT x.id FROM journal_items x WHERE x.source_id = journal_items.source_id ORDER BY x.published_at DESC LIMIT ?)`,
     KEEP_PER_SOURCE,
   );

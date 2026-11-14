@@ -9,7 +9,7 @@ const { authorOf, notify, retractNotification } = require('../social');
 const CATEGORIES = ['restaurant', 'hotel', 'bar', 'boutique', 'artisan', 'bienetre', 'services', 'voyage'];
 
 const PLACE_SELECT = `
-  SELECT pl.*, u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at,
+  SELECT pl.*, u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
          (SELECT COUNT(*) FROM place_endorsements x WHERE x.place_id = pl.id) AS endorse_count,
          EXISTS(SELECT 1 FROM place_endorsements x WHERE x.place_id = pl.id AND x.user_id = v.id) AS me_endorsed
   FROM (SELECT ? AS id) v
@@ -99,7 +99,7 @@ module.exports = function placeRoutes(ctx) {
   r.get('/places/:id', async (req, res) => {
     const row = await load(req.params.id, req.user);
     const endorsers = await db.all(
-      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at
+      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot
        FROM place_endorsements x JOIN users u ON u.id = x.user_id WHERE x.place_id = ? ORDER BY x.created_at ASC LIMIT 200`,
       row.id,
     );

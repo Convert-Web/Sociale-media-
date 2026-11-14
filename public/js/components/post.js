@@ -35,6 +35,19 @@ async function copy(text) {
 // ---------------------------------------------------------------------------
 // Photos : une seule, ou un carrousel qui se fait défiler du doigt
 // ---------------------------------------------------------------------------
+// Contenu du Journal partagé dans le Salon : carte avec photo, source et titre
+function journalLink(j) {
+  const external = j.kind === 'article';
+  const img = j.image ? h('img', { src: j.image, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }) : null;
+  img?.addEventListener('error', () => img.remove());
+  return h(
+    'a',
+    external ? { href: j.url, target: '_blank', rel: 'noopener noreferrer', class: 'post-journal' } : { href: `/journal/${j.id}`, class: 'post-journal' },
+    h('span', { class: `post-journal-img${j.kind === 'article' ? '' : ' media'}` }, img, j.kind !== 'article' ? h('span', { class: 'journal-video-badge' }, icon(j.kind === 'video' ? 'play' : 'headphones')) : null),
+    h('span', { class: 'post-journal-text' }, h('small', null, j.siteName || 'Le Journal'), h('b', null, j.title), j.summary ? h('span', null, j.summary) : null),
+  );
+}
+
 function gallery(images) {
   if (images.length === 1) {
     return h('div', { class: 'post-image', onclick: () => lightbox(images[0]) }, h('img', { src: images[0], alt: '', loading: 'lazy', decoding: 'async' }));
@@ -351,6 +364,7 @@ export function postCard(post, { expanded = false } = {}) {
       ),
       bodyEl,
       post.images.length ? gallery(post.images) : null,
+      post.journal ? journalLink(post.journal) : null,
       h('div', { class: 'post-actions' }, reactBtn, faces, commentBtn, shareBtn, h('span', { class: 'grow' }), saveBtn),
       commentsHost,
     ),

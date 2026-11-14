@@ -1,7 +1,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, memberChip, founderBadge, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox, popMenu, confirmDialog, verifiedMark } from '../dom.js';
+import { h, icon, avatar, memberChip, founderBadge, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox, popMenu, confirmDialog, verifiedMark, botChip } from '../dom.js';
 import { postList, backHead } from './feed.js';
 import { reportDialog } from '../components/report.js';
 import { friendButton } from './friends.js';
@@ -15,7 +15,7 @@ export function userRow(u, { follow = true } = {}) {
     h(
       'a',
       { href: `/@${u.username}`, class: 'meta' },
-      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null, u.founder ? icon('crown', 'crown') : null),
+      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null, u.founder ? icon('crown', 'crown') : null, u.bot ? botChip() : null),
       h('small', null, memberChip(u), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, `@${u.username}${u.profession ? ` · ${u.profession}` : ''}`)),
       u.bio ? h('span', { class: 'bio' }, u.bio) : null,
     ),
@@ -154,7 +154,9 @@ export async function profileView(ctx) {
         h('a', { href: '/invitations', class: 'btn btn-ghost btn-icon', 'aria-label': 'Mes invitations', title: 'Mes invitations' }, icon('ticket')),
         h('a', { href: '/reglages', class: 'btn btn-ghost' }, 'Modifier le profil'),
       ]
-    : user.blocked
+    : user.bot
+      ? [moreBtn]
+      : user.blocked
       ? [moreBtn, h('button', { class: 'btn btn-secondary', onclick: () => toggleBlock(false) }, 'Débloquer')]
       : [
           moreBtn,
@@ -256,6 +258,7 @@ export async function profileView(ctx) {
         user.friendStatus === 'friends' ? h('span', { class: 'tag tag-gold' }, 'Ami') : user.followsYou ? h('span', { class: 'tag' }, 'Vous suit') : null,
         user.blocked ? h('span', { class: 'tag' }, 'Bloqué') : null,
       ),
+      user.bot ? h('p', { class: 'bot-notice' }, icon('info', 'icon-sm'), 'Compte automatique géré par AURUM : ses publications sont générées automatiquement, ce n’est pas un membre.') : null,
       user.bio ? h('p', { class: 'profile-bio' }, richText(user.bio)) : null,
       h('div', { class: 'profile-meta' }, meta),
       h(

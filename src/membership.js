@@ -14,8 +14,14 @@ async function admitIn(t, userId) {
   return t.get('SELECT * FROM users WHERE id = ?', userId);
 }
 
-function admitMember(ctx, userId) {
-  return ctx.db.transaction((t) => admitIn(t, userId));
+async function admitMember(ctx, userId) {
+  const before = await ctx.db.get('SELECT paid_at FROM users WHERE id = ?', userId);
+  const user = await ctx.db.transaction((t) => admitIn(t, userId));
+  // Nouveau membre : bienvenue des comptes automatiques
+  if (user && before && !before.paid_at && user.paid_at && !user.is_bot) {
+    await require('./bots').welcomeMember(ctx, user).catch((err) => console.warn('[bots] bienvenue :', err.message));
+  }
+  return user;
 }
 
 // Accorde l'accès après paiement. Idempotent : un même paiement

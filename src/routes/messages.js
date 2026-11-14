@@ -33,7 +33,7 @@ module.exports = function messageRoutes(ctx) {
          FROM messages WHERE sender_id = ? OR recipient_id = ?
          GROUP BY other_id
        )
-       SELECT conv.other_id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at,
+       SELECT conv.other_id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
               m.body, m.created_at, m.sender_id,
               (SELECT COUNT(*) FROM messages x WHERE x.sender_id = conv.other_id AND x.recipient_id = ? AND x.read_at IS NULL) AS unread
        FROM conv
@@ -93,12 +93,14 @@ module.exports = function messageRoutes(ctx) {
       hasMore: !after && rows.length === limit,
       seenUpTo: seen,
       blocked: await isBlocked(ctx, me, other.id),
+      automatic: Boolean(other.is_bot),
     });
   });
 
   r.post('/conversations/:username', async (req, res) => {
     const other = await findMember(req.params.username);
     if (other.id === req.user.id) fail(400, 'Vous ne pouvez pas vous écrire à vous-même.');
+    if (other.is_bot) fail(400, 'C’est un compte automatique : il ne lit pas les messages. Écrivez plutôt à la Direction.');
     if (await isBlocked(ctx, req.user.id, other.id)) fail(403, 'Vous ne pouvez pas écrire à ce membre.');
     const body = text(req.body.body, { field: 'Message', max: 2000, required: true });
     const { lastInsertRowid } = await db.run(

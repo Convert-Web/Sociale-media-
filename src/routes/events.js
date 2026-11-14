@@ -6,11 +6,12 @@ const { fail, text, intParam } = require('../http');
 const { single, saveImage, deleteUpload } = require('../uploads');
 const { authorOf, notify, retractNotification } = require('../social');
 const { sendPush } = require('../push');
+const { announceEvent } = require('../bots');
 
 const SIX_HOURS = 6 * 3600 * 1000;
 
 const EVENT_SELECT = `
-  SELECT e.*, u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at,
+  SELECT e.*, u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
          (SELECT COUNT(*) FROM event_attendees a WHERE a.event_id = e.id) AS going_count,
          EXISTS(SELECT 1 FROM event_attendees a WHERE a.event_id = e.id AND a.user_id = v.id) AS me_going
   FROM (SELECT ? AS id) v
@@ -24,7 +25,7 @@ module.exports = function eventRoutes(ctx) {
 
   const attendeesPreview = (eventId, limit = 5) =>
     db.all(
-      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at
+      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot
        FROM event_attendees a JOIN users u ON u.id = a.user_id
        WHERE a.event_id = ? ORDER BY a.created_at ASC LIMIT ?`,
       eventId, limit,
@@ -100,7 +101,9 @@ module.exports = function eventRoutes(ctx) {
     );
     // L'organisateur participe d'office
     await db.run('INSERT INTO event_attendees (event_id, user_id, created_at) VALUES (?, ?, ?)', id, req.user.id, now);
-    res.status(201).json({ event: await serialize(await load(id, req.user), req.user) });
+    const created = await load(id, req.user);
+    await announceEvent(ctx, created, req.user).catch((err) => console.warn('[bots] annonce :', err.message));
+    res.status(201).json({ event: await serialize(created, req.user) });
   });
 
   r.get('/events/:id', async (req, res) => {

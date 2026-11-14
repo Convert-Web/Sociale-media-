@@ -6,6 +6,7 @@ const { deleteUpload } = require('../uploads');
 const { authorOf } = require('../social');
 const { deleteUser, admitMember } = require('../membership');
 const { admissionMode, setAdmissionMode, MODES } = require('../admission');
+const { botsEnabled } = require('../bots');
 
 module.exports = function adminRoutes(ctx) {
   const r = express.Router();
@@ -15,7 +16,7 @@ module.exports = function adminRoutes(ctx) {
   r.get('/admin/overview', async (_req, res) => {
     const totals = await db.get(
       `SELECT
-         (SELECT COUNT(*) FROM users WHERE paid_at IS NOT NULL) AS members,
+         (SELECT COUNT(*) FROM users WHERE paid_at IS NOT NULL AND is_bot = 0) AS members,
          (SELECT COUNT(*) FROM users WHERE paid_at IS NULL) AS pending,
          (SELECT COALESCE(SUM(amount_cents), 0) FROM payments WHERE status = 'paid' AND provider != 'demo') AS revenue,
          (SELECT COALESCE(SUM(amount_cents), 0) FROM payments WHERE status = 'paid' AND provider = 'demo') AS demoRevenue,
@@ -38,8 +39,8 @@ module.exports = function adminRoutes(ctx) {
     }
     const recentMembers = (
       await db.all(
-        `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.email, u.paid_at, u.created_at
-         FROM users u ORDER BY u.created_at DESC LIMIT 25`,
+        `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot, u.email, u.paid_at, u.created_at
+         FROM users u WHERE u.is_bot = 0 ORDER BY u.created_at DESC LIMIT 25`,
       )
     ).map((row) => ({ ...authorOf(ctx, row), email: row.email, paidAt: row.paid_at, createdAt: row.created_at }));
     const recentPayments = await db.all(
@@ -51,14 +52,14 @@ module.exports = function adminRoutes(ctx) {
       signups: days,
       recentMembers,
       recentPayments,
-      config: { stripeEnabled: Boolean(ctx.stripe), demoPayments: config.demoPayments, priceCents: config.priceCents, paidEntry: config.paidEntry, admission: await admissionMode(ctx) },
+      config: { stripeEnabled: Boolean(ctx.stripe), demoPayments: config.demoPayments, priceCents: config.priceCents, paidEntry: config.paidEntry, admission: await admissionMode(ctx), bots: await botsEnabled(ctx), botsAvailable: Boolean(config.bots) },
     });
   });
 
   // Demandes d'admission (comptes non admis)
   r.get('/admin/admissions', async (_req, res) => {
     const rows = await db.all(
-      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.email, u.created_at,
+      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot, u.email, u.created_at,
               u.admission_note, u.admission_requested_at, u.admission_declined_at
        FROM users u WHERE u.paid_at IS NULL ORDER BY (u.admission_declined_at IS NOT NULL), u.created_at DESC LIMIT 200`,
     );

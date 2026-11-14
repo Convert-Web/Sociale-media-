@@ -17,7 +17,7 @@ async function friendStatus(ctx, me, other) {
   return row.requester_id === me ? 'outgoing' : 'incoming';
 }
 
-const FRIEND_LIST = `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.bio, u.profession, u.city`;
+const FRIEND_LIST = `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot, u.bio, u.profession, u.city`;
 
 module.exports = function friendRoutes(ctx) {
   const r = express.Router();
@@ -60,6 +60,7 @@ module.exports = function friendRoutes(ctx) {
     const other = await findMember(req.params.username);
     const me = req.user.id;
     if (other.id === me) fail(400, 'Vous ne pouvez pas vous ajouter vous-même.');
+    if (other.is_bot) fail(400, 'C’est un compte automatique : il ne peut pas être ajouté en ami.');
     if (await isBlocked(ctx, me, other.id)) fail(403, 'Impossible d’ajouter ce membre.');
     const status = await friendStatus(ctx, me, other.id);
 

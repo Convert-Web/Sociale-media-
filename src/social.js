@@ -15,6 +15,7 @@ function authorOf(ctx, row, prefix = '') {
     memberNumber: row[`${prefix}member_number`] ?? null,
     founder: isFounder(ctx, row[`${prefix}member_number`]),
     verified: Boolean(row[`${prefix}verified_at`]),
+    bot: Boolean(row[`${prefix}is_bot`]),
   };
 }
 
@@ -32,6 +33,7 @@ function publicUser(ctx, u) {
     memberNumber: u.member_number ?? null,
     founder: isFounder(ctx, u.member_number),
     verified: Boolean(u.verified_at),
+    bot: Boolean(u.is_bot),
     joinedAt: u.paid_at || u.created_at,
     online: ctx.hub.isOnline(u.id),
   };
@@ -55,8 +57,9 @@ const REACTIONS = ['love', 'like', 'bravo', 'fire', 'haha', 'wow'];
 // Le seul paramètre de POST_SELECT est l'identifiant du membre qui consulte (v.id) ;
 // il précède tous les paramètres de la clause WHERE ajoutée par l'appelant.
 const POST_SELECT = `
-  SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.groupe_id,
-         u.username, u.display_name, u.avatar, u.member_number, u.verified_at,
+  SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.groupe_id, p.journal_id,
+         ji.kind AS j_kind, ji.title AS j_title, ji.image AS j_image, ji.url AS j_url, ji.site_name AS j_site, ji.summary AS j_summary,
+         u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count,
          (SELECT GROUP_CONCAT(l.reaction) FROM likes l WHERE l.post_id = p.id) AS reactions,
          (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
@@ -65,7 +68,8 @@ const POST_SELECT = `
          (SELECT GROUP_CONCAT(pm.url, '|') FROM post_media pm WHERE pm.post_id = p.id) AS media
   FROM (SELECT ? AS id) v
   CROSS JOIN posts p
-  JOIN users u ON u.id = p.user_id`;
+  JOIN users u ON u.id = p.user_id
+  LEFT JOIN journal_items ji ON ji.id = p.journal_id`;
 
 // Publications hors groupes (fil, profils, recherche, tendances).
 const PUBLIC_POST = 'p.groupe_id IS NULL';
@@ -102,6 +106,10 @@ function serializePost(ctx, row, viewer) {
     createdAt: row.created_at,
     editedAt: row.edited_at || null,
     groupId: row.groupe_id || null,
+    // Contenu du Journal partagé dans le Salon (carte avec photo et titre)
+    journal: row.journal_id && row.j_title
+      ? { id: row.journal_id, kind: row.j_kind, title: row.j_title, image: row.j_image || null, url: row.j_url, siteName: row.j_site || '', summary: row.j_summary || '' }
+      : null,
     author: authorOf(ctx, row),
     likeCount: row.like_count,
     reactions: reactionSummary(row.reactions),
@@ -121,7 +129,7 @@ async function getPost(ctx, postId, viewer) {
 
 const COMMENT_SELECT = `
   SELECT c.id, c.post_id, c.body, c.created_at, c.user_id,
-         u.username, u.display_name, u.avatar, u.member_number, u.verified_at
+         u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot
   FROM comments c JOIN users u ON u.id = c.user_id`;
 
 function serializeComment(ctx, row, viewer) {
@@ -137,7 +145,7 @@ function serializeComment(ctx, row, viewer) {
 
 const NOTIF_SELECT = `
   SELECT n.id, n.type, n.post_id, n.groupe_id, n.event_id, n.place_id, n.created_at, n.read_at,
-         a.id AS user_id, a.username, a.display_name, a.avatar, a.member_number, a.verified_at,
+         a.id AS user_id, a.username, a.display_name, a.avatar, a.member_number, a.verified_at, a.is_bot,
          p.body AS post_body, p.image AS post_image,
          g.name AS groupe_name, e.title AS event_title, pl.name AS place_name
   FROM notifications n

@@ -97,6 +97,33 @@ async function reportsSection() {
   return host;
 }
 
+// Comptes automatiques (AURUM, Le Concierge)
+let botsState = { enabled: false, available: false };
+function botsSwitch() {
+  const sw = h('input', { type: 'checkbox', class: 'switch', checked: botsState.enabled, disabled: !botsState.available, 'aria-label': 'Comptes automatiques' });
+  const sub = h('small', { class: 'muted' });
+  const paint = () => {
+    sub.textContent = !botsState.available
+      ? 'Désactivés par la configuration du serveur (BOTS=off).'
+      : botsState.enabled
+        ? 'AURUM et Le Concierge animent le Salon : Journal, question du jour, événements, bienvenue.'
+        : 'Aucune publication automatique.';
+  };
+  paint();
+  sw.addEventListener('change', async () => {
+    try {
+      const { enabled } = await api.post('/api/admin/bots', { enabled: sw.checked });
+      botsState.enabled = enabled;
+      paint();
+      toast(enabled ? 'Comptes automatiques activés.' : 'Comptes automatiques désactivés.');
+    } catch (err) {
+      sw.checked = !sw.checked;
+      toast(err.message, 'error');
+    }
+  });
+  return h('label', { class: 'admission-mode' }, h('span', { class: 'grow' }, h('b', null, 'Comptes automatiques'), sub), sw);
+}
+
 // Demandes d'admission et mode d'entrée (libre / sur invitation)
 async function admissionsSection(mode) {
   const host = h('div', { class: 'admissions' });
@@ -122,6 +149,7 @@ async function admissionsSection(mode) {
     }
   });
   host.append(h('label', { class: 'admission-mode' }, h('span', { class: 'grow' }, h('b', null, 'Entrée sur invitation'), status), sw));
+  host.append(botsSwitch());
 
   const pending = admissions.filter((a) => !a.declined);
   const declined = admissions.filter((a) => a.declined);
@@ -160,6 +188,7 @@ async function admissionsSection(mode) {
 
 export async function adminView(ctx) {
   const data = await api.get('/api/admin/overview');
+  botsState = { enabled: Boolean(data.config.bots), available: Boolean(data.config.botsAvailable) };
   const admissions = data.config.paidEntry ? null : await admissionsSection(data.config.admission);
   const reports = await reportsSection();
   const t = data.totals;
