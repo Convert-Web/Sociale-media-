@@ -94,7 +94,7 @@ async function createApp(config, overrides = {}) {
 
   // Application monopage : toute route « propre » renvoie index.html.
   // Attention : les noms d'utilisateur peuvent contenir un point (/@alexandre.v).
-  const STATIC_PREFIX = /^\/(api|media|fonts|js|css|img|seed)\//;
+  const STATIC_PREFIX = /^\/(api|media|fonts|js|css|img)\//;
   const ASSET_EXT = /\.(js|mjs|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i;
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();

@@ -47,7 +47,8 @@ const config = {
     webhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
   },
   // Paiement simulé : actif par défaut uniquement en développement sans clé Stripe.
-  demoPayments: bool(env.DEMO_PAYMENTS, !stripeSecretKey && !isProd),
+  // Paiement simulé : uniquement sur l'ordinateur de développement, jamais en ligne
+  demoPayments: !isProd && bool(env.DEMO_PAYMENTS, !stripeSecretKey),
   adminEmails: (env.ADMIN_EMAILS || '')
     .split(',')
     .map((e) => e.trim().toLowerCase())

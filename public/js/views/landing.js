@@ -45,6 +45,8 @@ export function siteTopbar() {
 export async function landingView(ctx) {
   const cfg = store.config;
   const paid = cfg.paidEntry;
+  // Entrée réelle : sur invitation (ou validation de la Direction), ou libre
+  const onInvite = !paid && cfg.admission === 'invitation';
   const price = money(cfg.priceCents, cfg.currency);
   let stats = { members: 0, cities: 0, founderSpotsLeft: cfg.founderLimit, founderLimit: cfg.founderLimit };
   try {
@@ -70,8 +72,8 @@ export async function landingView(ctx) {
         h('p', { class: 'eyebrow' }, 'Le réseau social privé'),
         h('h1', null, 'Un cercle.', h('br'), h('span', { class: 'muted-strong' }, 'Pas une foule.')),
         h('p', { class: 'lead' }, 'AURUM réunit les personnes qui comptent. Sans publicité. Sans algorithme. Sans bruit.'),
-        h('div', { class: 'hero-cta' }, cta(paid ? `Obtenir ma carte — ${price}` : 'Obtenir ma carte'), more('Se connecter', '/connexion')),
-        h('p', { class: 'hero-note' }, paid ? `Paiement unique de ${price}. Accès à vie.` : 'Inscription gratuite. Numéro de membre à vie.'),
+        h('div', { class: 'hero-cta' }, cta(paid ? `Obtenir ma carte — ${price}` : onInvite ? 'Demander mon admission' : 'Obtenir ma carte'), more('Se connecter', '/connexion')),
+        h('p', { class: 'hero-note' }, paid ? `Paiement unique de ${price}. Accès à vie.` : onInvite ? 'Sur invitation d’un membre, ou après validation de la Direction. Gratuit.' : 'Inscription gratuite. Numéro de membre à vie.'),
       ),
       h(
         'div',
@@ -134,7 +136,7 @@ export async function landingView(ctx) {
 
   // ---------------------------------------------------------------- Adhésion
   const included = [
-    paid ? 'Paiement unique, accès à vie' : 'Sans carte bancaire',
+    paid ? 'Paiement unique, accès à vie' : onInvite ? 'Sur invitation ou après validation' : 'Sans carte bancaire',
     'Numéro de membre personnel',
     'Messagerie privée',
     'Aucune publicité',
@@ -147,9 +149,9 @@ export async function landingView(ctx) {
       { class: 'container narrow reveal' },
       h('p', { class: 'eyebrow' }, 'Adhésion'),
       h('p', { class: 'membership-price' }, paid ? price : 'Gratuit.'),
-      h('p', { class: 'membership-sub' }, paid ? 'Une fois. Pour toujours.' : 'Deux minutes pour créer votre compte.'),
+      h('p', { class: 'membership-sub' }, paid ? 'Une fois. Pour toujours.' : onInvite ? 'Une invitation d’un membre vous ouvre la porte aussitôt. Sans invitation, présentez-vous : la Direction étudie chaque demande.' : 'Deux minutes pour créer votre compte.'),
       h('ul', { class: 'checklist' }, included.map((t) => h('li', null, icon('check', 'icon-sm'), t))),
-      cta(paid ? 'Franchir la porte' : 'Créer mon compte', 'btn btn-primary btn-lg'),
+      cta(paid ? 'Franchir la porte' : onInvite ? 'Demander mon admission' : 'Créer mon compte', 'btn btn-primary btn-lg'),
       paid ? h('p', { class: 'secure-note' }, icon('lock', 'icon-sm'), 'Paiement sécurisé par Stripe') : null,
     ),
   );
@@ -173,11 +175,14 @@ export async function landingView(ctx) {
               faqItem('Le paiement est-il sécurisé ?', 'Il est traité par Stripe. Nous ne voyons ni ne stockons vos coordonnées bancaires.'),
             ]
           : [
-              faqItem("L'inscription est-elle gratuite ?", 'Oui. Créez votre compte et recevez aussitôt votre carte et votre numéro de membre.'),
+              onInvite
+                ? faqItem('Comment entrer ?', 'Sur invitation d’un membre : votre lien personnel vous fait entrer immédiatement. Sans invitation, créez votre compte et présentez-vous ; la Direction étudie chaque demande et vous prévient de sa décision. L’adhésion est gratuite.')
+                : faqItem("L'inscription est-elle gratuite ?", 'Oui. Créez votre compte et recevez aussitôt votre carte et votre numéro de membre.'),
               faqItem('Pourquoi aucune publicité ?', 'Un réseau financé par la publicité finit par travailler pour les annonceurs. Ici, votre fil ne montre que ce que publient les membres.'),
             ],
         faqItem('Que devient mon numéro ?', "Il vous appartient à vie et ne sera jamais attribué à quelqu'un d'autre, même si vous quittez le cercle."),
-        faqItem('Qui peut rejoindre AURUM ?', 'Toute personne majeure qui respecte l’esprit du cercle : courtoisie, authenticité, discrétion.'),
+        faqItem('Qui peut rejoindre AURUM ?', 'Toute personne majeure qui respecte l’esprit du cercle : courtoisie, authenticité, discrétion. Chaque membre publie sous son identité réelle.'),
+        faqItem('Qui sont AURUM et Le Concierge ?', 'Deux comptes automatiques, signalés comme tels : ils partagent le Journal, la question du jour, les événements et l’adresse de la semaine, et accueillent les nouveaux membres. Tous les autres comptes sont de vraies personnes.'),
         faqItem('Puis-je partir ?', 'À tout moment, depuis vos réglages. Vous pouvez aussi télécharger l’intégralité de vos données.'),
       ),
     ),

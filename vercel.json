@@ -5,7 +5,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/|media/|fonts/|js/|css/|img/|seed/|manifest\\.webmanifest|sw\\.js).*)",
+      "source": "/((?!api/|media/|fonts/|js/|css/|img/|manifest\\.webmanifest|sw\\.js).*)",
       "destination": "/index.html"
     }
   ],
@@ -40,7 +40,7 @@
       ]
     },
     {
-      "source": "/((?!api/|media/|fonts/|js/|css/|img/|seed/|manifest\\.webmanifest|sw\\.js).*)",
+      "source": "/((?!api/|media/|fonts/|js/|css/|img/|manifest\\.webmanifest|sw\\.js).*)",
       "headers": [
         {
           "key": "Cache-Control",

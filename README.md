@@ -69,7 +69,6 @@ npm install
 npm start        # → http://localhost:3000
 ```
 
-Pour tester en local avec des membres fictifs : `npm run seed` (refusé en production). Mot de passe des comptes fictifs : `aurum-demo-2026`.
 
 ## Activer le droit d'entrée payant (Stripe)
 
@@ -162,6 +161,5 @@ src/
 public/
   index.html, css/      Interface (application monopage sans étape de compilation)
   js/views/             Pages : accueil, inscription, adhésion, salon, profil, messages…
-scripts/seed.js         Membres fictifs pour tester en local
 test/                   Tests d'intégration
 ```
