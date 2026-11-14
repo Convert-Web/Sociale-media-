@@ -67,7 +67,9 @@ const QUESTIONS = [
 ];
 
 const PARIS = 'Europe/Paris';
-const parisHour = (ts) => Number(new Intl.DateTimeFormat('fr-FR', { timeZone: PARIS, hour: '2-digit', hour12: false }).format(ts));
+// Heure de Paris (0 à 23). Attention : en français, l'heure seule s'écrit « 13 h », d'où formatToParts.
+const parisHour = (ts) =>
+  Number(new Intl.DateTimeFormat('fr-FR', { timeZone: PARIS, hour: '2-digit', hourCycle: 'h23' }).formatToParts(ts).find((p) => p.type === 'hour').value);
 const parisDay = (ts) => new Intl.DateTimeFormat('fr-CA', { timeZone: PARIS }).format(ts); // AAAA-MM-JJ
 const fullDate = (ts) =>
   new Intl.DateTimeFormat('fr-FR', { timeZone: PARIS, weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }).format(ts);
@@ -144,10 +146,9 @@ const JOURNAL_INTRO = {
 };
 
 // Tâches régulières, déclenchées par l'ouverture du Salon (aucun serveur permanent n'est nécessaire)
-async function tick(ctx, { force = false } = {}) {
+async function tick(ctx, { force = false, now = Date.now() } = {}) {
   const { db } = ctx;
   if (!(await botsEnabled(ctx))) return { posted: [] };
-  const now = Date.now();
   const lock = Number(await setting(db, 'bots_lock')) || 0;
   if (!force && now - lock < 60000) return { posted: [] };
   await putSetting(db, 'bots_lock', now);
@@ -241,4 +242,4 @@ async function announceEvent(ctx, event, host) {
   );
 }
 
-module.exports = { BOTS, QUESTIONS, ensureBots, botsEnabled, tick, welcomeMember, announceEvent };
+module.exports = { parisHour, BOTS, QUESTIONS, ensureBots, botsEnabled, tick, welcomeMember, announceEvent };

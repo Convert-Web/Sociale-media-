@@ -6,7 +6,7 @@ const { lettreEmail } = require('./emails');
 const PARIS = 'Europe/Paris';
 const DAY = 86400000;
 const parisParts = (ts) => {
-  const f = new Intl.DateTimeFormat('fr-FR', { timeZone: PARIS, weekday: 'long', hour: '2-digit', hour12: false }).formatToParts(ts);
+  const f = new Intl.DateTimeFormat('fr-FR', { timeZone: PARIS, weekday: 'long', hour: '2-digit', hourCycle: 'h23' }).formatToParts(ts);
   return { weekday: f.find((x) => x.type === 'weekday')?.value, hour: Number(f.find((x) => x.type === 'hour')?.value) };
 };
 const parisDay = (ts) => new Intl.DateTimeFormat('fr-CA', { timeZone: PARIS }).format(ts);

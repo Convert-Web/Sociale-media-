@@ -130,9 +130,12 @@ test('tâches régulières : Journal, question du jour, adresse de la semaine', 
   const place = await fetch(`${base}/api/places`, { method: 'POST', headers: { 'x-aurum': '1', cookie: claire.cookie() }, body: fd });
   assert.equal(place.status, 201);
 
-  assert.equal((await claire.post('/api/bots/tick', { force: true })).status, 200); // « force » réservé à la Direction : sans effet ici
+  // Un membre déclenche la tâche (« force » est réservé à la Direction : selon l'heure, rien ou une partie part)
+  const first = await claire.post('/api/bots/tick', { force: true });
+  assert.equal(first.status, 200);
   const r = await admin.post('/api/bots/tick', { force: true });
-  assert.deepEqual(r.data.posted.sort(), ['adresse', 'journal', 'question']);
+  const posted = new Set([...first.data.posted, ...r.data.posted]);
+  assert.deepEqual([...posted].sort(), ['adresse', 'journal', 'question']);
   const feed = (await claire.get('/api/feed')).data.posts;
   const j = feed.find((p) => p.journal);
   assert.equal(j.journal.title, 'Les plus belles villas');
@@ -144,6 +147,29 @@ test('tâches régulières : Journal, question du jour, adresse de la semaine', 
   const again = await admin.post('/api/bots/tick', { force: true });
   assert.ok(!again.data.posted.includes('journal'));
   assert.ok(!again.data.posted.includes('adresse'));
+});
+
+test('horaires réels : sans forcer, les publications partent aux bonnes heures', async () => {
+  const { tick, parisHour } = require('../src/bots');
+  // Heure de Paris correctement lue (et non « 13 h »)
+  assert.equal(parisHour(Date.UTC(2026, 10, 14, 12, 30)), 13);
+  assert.equal(parisHour(Date.UTC(2026, 6, 14, 22, 0)), 0);
+  await ctx.db.run("UPDATE settings SET value = '0' WHERE key IN ('bots_journal_at', 'bots_lock')");
+  await ctx.db.run("UPDATE settings SET value = '' WHERE key = 'bots_question_day'");
+  await ctx.db.run(
+    `INSERT INTO journal_items (kind, title, url, image, site_name, published_at, created_at) VALUES ('podcast', 'Épisode du jour', 'https://exemple.com/ep', 'https://exemple.com/e.jpg', 'Podcast', ?, ?)`,
+    Date.now() - 3600000, Date.now(),
+  );
+  // 6 h à Paris : trop tôt, rien ne part
+  const early = await tick(ctx, { now: Date.UTC(2026, 10, 15, 5, 0) });
+  assert.deepEqual(early.posted, []);
+  // 14 h à Paris : le Journal et la question du jour partent
+  const noon = await tick(ctx, { now: Date.UTC(2026, 10, 15, 13, 0) });
+  assert.ok(noon.posted.includes('journal'), JSON.stringify(noon));
+  assert.ok(noon.posted.includes('question'), JSON.stringify(noon));
+  // Une heure plus tard : rien de nouveau (Journal toutes les 4 h, une question par jour)
+  const later = await tick(ctx, { now: Date.UTC(2026, 10, 15, 14, 0) });
+  assert.deepEqual(later.posted, []);
 });
 
 test('annonce des nouveaux événements et interrupteur de la Direction', async () => {
