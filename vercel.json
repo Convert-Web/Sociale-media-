@@ -40,11 +40,11 @@
       ]
     },
     {
-      "source": "/index.html",
+      "source": "/((?!api/|media/|fonts/|js/|css/|img/|seed/|manifest\\.webmanifest|sw\\.js).*)",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "no-cache"
+          "value": "no-store, max-age=0"
         }
       ]
     },

@@ -120,7 +120,8 @@ function plain(html, max = 400) {
     .trim();
   return s.length > max ? `${s.slice(0, max - 1).replace(/\s+\S*$/, '')}…` : s;
 }
-const httpsOnly = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u.trim()) ? u.trim().replace(/^http:\/\//i, 'https://') : null);
+const lighter = (u) => u.replace(/^(https:\/\/cdn\.mos\.cms\.futurecdn\.net\/[\w-]+)-(?:1[2-9]\d\d|[2-9]\d{3})-(\d+)\.(jpe?g|png|webp)$/i, '$1-800-$2.$3');
+const httpsOnly = (u) => (typeof u === 'string' && /^https?:\/\//i.test(u.trim()) ? lighter(u.trim().replace(/^http:\/\//i, 'https://')) : null);
 
 // ---------------------------------------------------------------------------
 // Lecteurs intégrés : YouTube, Vimeo, Dailymotion, Spotify, Apple Podcasts, SoundCloud, Deezer
@@ -391,4 +392,4 @@ const DEFAULT_SOURCES = [
   { kind: 'video', title: 'BFM Business', url: 'https://www.youtube.com/feeds/videos.xml?channel_id=UCUsBMOIUl_ad6JUOC16DpmQ' },
 ];
 
-module.exports = { KINDS, safeFetch, assertPublicUrl, previewLink, parseFeed, loadFeed, searchPodcasts, embedFor, plain, DEFAULT_SOURCES };
+module.exports = { lighter, KINDS, safeFetch, assertPublicUrl, previewLink, parseFeed, loadFeed, searchPodcasts, embedFor, plain, DEFAULT_SOURCES };

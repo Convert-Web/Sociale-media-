@@ -4,7 +4,7 @@ const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam } = require('../http');
 const { authorOf } = require('../social');
-const { KINDS, previewLink, loadFeed, searchPodcasts, DEFAULT_SOURCES } = require('../journal');
+const { KINDS, previewLink, loadFeed, searchPodcasts, DEFAULT_SOURCES, lighter } = require('../journal');
 
 const REFRESH_EVERY = 20 * 60 * 1000; // les flux sont relus au plus toutes les 20 minutes
 const PER_SOURCE = 15; // éléments repris à chaque lecture d'un flux
@@ -108,7 +108,7 @@ module.exports = function journalRoutes(ctx) {
     title: row.title,
     summary: row.summary,
     url: row.url,
-    image: row.image || null,
+    image: row.image ? lighter(row.image) : null,
     audioUrl: row.audio_url || null,
     embedUrl: row.embed_url || null,
     duration: row.duration || null,

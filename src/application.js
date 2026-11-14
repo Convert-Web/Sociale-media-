@@ -101,6 +101,8 @@ async function createApp(config, overrides = {}) {
     if (STATIC_PREFIX.test(req.path)) return next();
     if (ASSET_EXT.test(req.path) && !/^\/(@|messages\/)/.test(req.path)) return next();
     res.setHeader('Cache-Control', 'no-cache');
+    // Jamais en cache : les règles de sécurité (CSP) de la page doivent toujours être les dernières
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
     res.sendFile(INDEX_HTML);
   });
 

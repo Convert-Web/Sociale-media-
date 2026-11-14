@@ -11,6 +11,19 @@ const KIND_ICON = { article: 'newspaper', podcast: 'headphones', video: 'video' 
 const minutes = (s) => (s ? (s >= 3600 ? `${Math.floor(s / 3600)} h ${String(Math.round((s % 3600) / 60)).padStart(2, '0')}` : `${Math.max(1, Math.round(s / 60))} min`) : '');
 const meta = (it) => [it.siteName, timeAgo(it.publishedAt), it.kind === 'podcast' ? minutes(it.duration) : ''].filter(Boolean).join(' · ');
 
+// Image d'un site extérieur : chargement différé, sans transmettre l'adresse d'AURUM,
+// et remplacée par une icône si elle ne se charge pas (plus de case grise vide).
+function extImg(src, fallback = 'newspaper', { lazy = true } = {}) {
+  const img = h('img', { src, alt: '', loading: lazy ? 'lazy' : 'eager', decoding: 'async', referrerpolicy: 'no-referrer' });
+  img.addEventListener('error', () => {
+    const box = img.parentElement;
+    img.remove();
+    if (box && !box.querySelector('.icon')) box.prepend(icon(fallback));
+    box?.classList.add('img-failed');
+  });
+  return img;
+}
+
 // Relecture des flux en arrière-plan quand le Journal date de plus de 20 minutes
 let refreshing = null;
 export function refreshJournal() {
@@ -106,7 +119,7 @@ export function journalCard(it, { onChange, variant } = {}) {
     return h(
       'a',
       { ...hrefOf(it), class: 'journal-hero' },
-      it.image ? h('img', { src: it.image, alt: '', loading: 'lazy' }) : null,
+      it.image ? extImg(it.image, 'newspaper', { lazy: false }) : null,
       h(
         'span',
         { class: 'journal-hero-text' },
@@ -122,7 +135,7 @@ export function journalCard(it, { onChange, variant } = {}) {
     return h(
       'a',
       { ...hrefOf(it), class: 'journal-video' },
-      h('span', { class: 'journal-thumb' }, it.image ? h('img', { src: it.image, alt: '', loading: 'lazy' }) : icon('video'), h('span', { class: 'journal-video-badge' }, icon('play'))),
+      h('span', { class: 'journal-thumb' }, it.image ? extImg(it.image, 'video') : icon('video'), h('span', { class: 'journal-video-badge' }, icon('play'))),
       h('span', { class: 'journal-text' }, h('small', null, meta(it)), h('b', null, it.title), sharedNote(it)),
       moreButton(it, onChange),
     );
@@ -131,7 +144,7 @@ export function journalCard(it, { onChange, variant } = {}) {
     return h(
       'a',
       { ...hrefOf(it), class: 'journal-podcast' },
-      h('span', { class: 'journal-art' }, it.image ? h('img', { src: it.image, alt: '', loading: 'lazy' }) : icon('headphones')),
+      h('span', { class: 'journal-art' }, it.image ? extImg(it.image, 'headphones') : icon('headphones')),
       h('span', { class: 'journal-text' }, h('small', null, it.siteName), h('b', null, it.title), h('span', { class: 'journal-when' }, [minutes(it.duration), timeAgo(it.publishedAt)].filter(Boolean).join(' · ')), sharedNote(it)),
       playButton(it),
       moreButton(it, onChange),
@@ -141,7 +154,7 @@ export function journalCard(it, { onChange, variant } = {}) {
     'a',
     { ...hrefOf(it), class: 'journal-article' },
     h('span', { class: 'journal-text' }, h('small', null, meta(it)), h('b', null, it.title), it.summary ? h('span', { class: 'journal-summary' }, it.summary) : null, sharedNote(it)),
-    it.image ? h('span', { class: 'journal-art' }, h('img', { src: it.image, alt: '', loading: 'lazy' })) : null,
+    it.image ? h('span', { class: 'journal-art' }, extImg(it.image, 'newspaper')) : null,
     moreButton(it, onChange),
   );
 }
@@ -499,9 +512,9 @@ export async function journalItemView(ctx) {
     listen.addEventListener('click', () => playItem(it));
     paint();
     ctx.onCleanup(onPlayer(paint));
-    player = h('div', { class: 'journal-listen' }, h('span', { class: 'journal-art big' }, it.image ? h('img', { src: it.image, alt: '' }) : icon('headphones')), listen);
+    player = h('div', { class: 'journal-listen' }, h('span', { class: 'journal-art big' }, it.image ? extImg(it.image, 'headphones', { lazy: false }) : icon('headphones')), listen);
   } else if (it.image) {
-    player = h('div', { class: 'cover journal-cover' }, h('img', { src: it.image, alt: '' }));
+    player = h('div', { class: 'cover journal-cover' }, extImg(it.image, 'newspaper', { lazy: false }));
   }
 
   const moreBtn = h('button', { class: 'btn btn-ghost btn-icon', 'aria-label': 'Options' }, icon('more'));
@@ -551,7 +564,7 @@ export function journalStrip() {
             h(
               'a',
               { ...hrefOf(it), class: 'strip-card' },
-              h('span', { class: 'strip-img' }, it.image ? h('img', { src: it.image, alt: '', loading: 'lazy' }) : icon(KIND_ICON[it.kind]), it.kind !== 'article' ? h('span', { class: 'strip-kind' }, icon(it.kind === 'video' ? 'play' : 'headphones')) : null),
+              h('span', { class: 'strip-img' }, it.image ? extImg(it.image, KIND_ICON[it.kind]) : icon(KIND_ICON[it.kind]), it.kind !== 'article' ? h('span', { class: 'strip-kind' }, icon(it.kind === 'video' ? 'play' : 'headphones')) : null),
               h('small', null, it.siteName),
               h('b', null, it.title),
             ),
