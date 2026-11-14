@@ -1,8 +1,8 @@
 import { api } from '../api.js';
 import { store, isPolling } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, clear, spinner, emptyState, infinite, skeletonPosts } from '../dom.js';
-import { postCard, composer } from '../components/post.js';
+import { h, icon, clear, spinner, emptyState, infinite, skeletonPosts, avatar } from '../dom.js';
+import { postCard } from '../components/post.js';
 import { storiesBar } from '../components/stories.js';
 import { nextEventCard } from './events.js';
 import { journalStrip } from './journal.js';
@@ -67,7 +67,7 @@ function onboardingCard() {
 }
 
 // Liste paginée de publications (fil, profil…)
-export function postList(fetchPage, { empty } = {}) {
+export function postList(fetchPage, { empty, insertAfter = null } = {}) {
   const list = h('div');
   const sentinel = h('div', { style: { height: '1px' } });
   const loader = spinner();
@@ -84,7 +84,18 @@ export function postList(fetchPage, { empty } = {}) {
     loading = true;
     try {
       const { posts, hasMore } = await fetchPage(before);
-      for (const p of posts) list.append(postCard(p));
+      for (const p of posts) {
+        list.append(postCard(p));
+        // Un bloc glissé dans le fil (le Journal), comme les suggestions d'Instagram
+        if (insertAfter && !insertAfter.done && list.querySelectorAll(':scope > .post').length === insertAfter.index) {
+          list.append(insertAfter.el);
+          insertAfter.done = true;
+        }
+      }
+      if (insertAfter && !insertAfter.done && done === false && !hasMore) {
+        list.append(insertAfter.el);
+        insertAfter.done = true;
+      }
       if (posts.length) before = posts[posts.length - 1].id;
       done = !hasMore;
       if (done) {
@@ -140,6 +151,7 @@ export function feedView(ctx) {
     tabAll.classList.toggle('active', scope === 'all');
     tabFollow.classList.toggle('active', scope === 'following');
     current = postList((before) => api.get(`/api/feed?scope=${scope}${before ? `&before=${before}` : ''}`), {
+      insertAfter: { index: 2, el: journalStrip() },
       empty: () =>
         scope === 'following'
           ? emptyState('users', 'Votre fil est encore calme', 'Suivez quelques membres pour voir leurs publications ici.', h('a', { href: '/explorer', class: 'btn btn-primary' }, 'Découvrir des membres'))
@@ -220,6 +232,19 @@ export function feedView(ctx) {
     }),
   );
 
+  // Pastilles de l'en-tête (Activité, Messages), mises à jour en direct
+  function headBadge(kind) {
+    const b = h('span', { class: 'badge-count', hidden: true });
+    const paint = (c = {}) => {
+      const v = kind === 'activity' ? (c.notifications || 0) + (c.requests || 0) : c[kind] || 0;
+      b.hidden = !v;
+      b.textContent = v > 99 ? '99+' : String(v);
+    };
+    paint(store.counters);
+    ctx.onCleanup(store.on('counters', paint));
+    return b;
+  }
+
   load();
   // Comptes automatiques : publient ce qui est dû (Journal, question du jour…) à l'ouverture du Salon
   api
@@ -238,13 +263,26 @@ export function feedView(ctx) {
   return h(
     'div',
     null,
-    h('header', { class: 'page-head' }, h('div', { class: 'grow' }, h('h1', null, 'Le Salon'), h('div', { class: 'sub' }, 'Le fil du cercle, sans algorithme ni publicité'))),
+    // En-tête façon Instagram : le logo, l'Activité et les Messages
+    h(
+      'header',
+      { class: 'page-head salon-head' },
+      h('a', { href: '/salon', class: 'wordmark', 'aria-label': 'AURUM, le Salon' }, 'AURUM'),
+      h('span', { class: 'grow' }),
+      h('a', { href: '/notifications', class: 'head-icon', 'aria-label': 'Activité' }, icon('heart'), headBadge('activity')),
+      h('a', { href: '/messages', class: 'head-icon', 'aria-label': 'Messages' }, icon('send'), headBadge('messages')),
+    ),
     stories.el,
-    nextEventCard(),
-    journalStrip(),
-    h('div', { class: 'tabs' }, tabAll, tabFollow),
+    h(
+      'button',
+      { class: 'compose-row', type: 'button', onclick: () => document.dispatchEvent(new CustomEvent('aurum:compose')) },
+      avatar(store.user, 'sm'),
+      h('span', { class: 'grow' }, 'Que souhaitez-vous partager ?'),
+      h('span', { class: 'compose-photo' }, icon('image')),
+    ),
     onboardingCard(),
-    composer(),
+    nextEventCard(),
+    h('div', { class: 'tabs feed-tabs' }, tabAll, tabFollow),
     pill,
     host,
   );

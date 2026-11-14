@@ -247,8 +247,19 @@ export function postCard(post, { expanded = false } = {}) {
     section?.focus();
   });
 
-  const shareBtn = h('button', { class: 'act', 'aria-label': 'Copier le lien' }, icon('link'));
-  shareBtn.addEventListener('click', () => copy(`${location.origin}${link}`));
+  const shareBtn = h('button', { class: 'act', 'aria-label': 'Partager' }, icon('send'));
+  shareBtn.addEventListener('click', async () => {
+    const url = `${location.origin}${link}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `${post.author.displayName} sur AURUM`, url });
+        return;
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+      }
+    }
+    copy(url);
+  });
 
   const saveBtn = h('button', { class: `act save-btn${post.saved ? ' saved' : ''}`, 'aria-label': 'Enregistrer', 'aria-pressed': String(post.saved) }, icon('bookmark'));
   saveBtn.addEventListener('click', async () => {
@@ -268,10 +279,12 @@ export function postCard(post, { expanded = false } = {}) {
     }
   });
 
-  const bodyEl = h('div', { class: 'post-body' });
+  // Avec photos : légende sous les boutons, précédée du nom (façon Instagram) ; sans photo : texte en grand
+  const hasMedia = post.images.length > 0;
+  const bodyEl = h('div', { class: `post-body${hasMedia ? ' caption' : ''}` });
   const edited = h('span', { class: 'edited', hidden: !post.editedAt, title: post.editedAt ? `Modifié ${fullDate(post.editedAt)}` : '' }, ' · modifié');
   const paintBody = () => {
-    bodyEl.replaceChildren(richText(post.body || ''));
+    bodyEl.replaceChildren(...(hasMedia ? [h('a', { href: `/@${post.author.username}`, class: 'cap-name' }, post.author.displayName), ' '] : []), richText(post.body || ''));
     bodyEl.hidden = !post.body;
     edited.hidden = !post.editedAt;
   };
@@ -345,29 +358,33 @@ export function postCard(post, { expanded = false } = {}) {
     popMenu(menuBtn, items);
   });
 
+  // « Voir les N commentaires » sous la publication
+  const moreComments = h('button', { class: 'see-comments', type: 'button', hidden: !post.commentCount || expanded }, post.commentCount > 1 ? `Voir les ${num(post.commentCount)} commentaires` : 'Voir le commentaire');
+  moreComments.addEventListener('click', () => {
+    moreComments.hidden = true;
+    openComments();
+  });
+
   append(el, [
-    h('a', { href: `/@${post.author.username}`, 'aria-label': post.author.displayName }, avatar(post.author)),
     h(
-      'div',
-      { class: 'post-main' },
+      'header',
+      { class: 'post-head' },
+      h('a', { href: `/@${post.author.username}`, class: 'post-avatar', 'aria-label': post.author.displayName }, avatar(post.author)),
       h(
         'div',
-        { class: 'post-head' },
-        h(
-          'div',
-          { class: 'who' },
-          nameLine(post.author),
-          memberChip(post.author),
-          h('span', { class: 'handle' }, `@${post.author.username} · `, h('a', { href: link, title: fullDate(post.createdAt) }, timeAgo(post.createdAt)), edited),
-        ),
-        menuBtn,
+        { class: 'who' },
+        nameLine(post.author),
+        h('span', { class: 'handle' }, memberChip(post.author), h('a', { href: link, title: fullDate(post.createdAt) }, timeAgo(post.createdAt)), edited),
       ),
-      bodyEl,
-      post.images.length ? gallery(post.images) : null,
-      post.journal ? journalLink(post.journal) : null,
-      h('div', { class: 'post-actions' }, reactBtn, faces, commentBtn, shareBtn, h('span', { class: 'grow' }), saveBtn),
-      commentsHost,
+      menuBtn,
     ),
+    hasMedia ? null : bodyEl,
+    hasMedia ? gallery(post.images) : null,
+    post.journal ? journalLink(post.journal) : null,
+    h('div', { class: 'post-actions' }, reactBtn, faces, commentBtn, shareBtn, h('span', { class: 'grow' }), saveBtn),
+    hasMedia ? bodyEl : null,
+    moreComments,
+    commentsHost,
   ]);
 
   if (expanded) openComments();

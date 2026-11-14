@@ -1565,6 +1565,116 @@ body.has-player #toasts { top: calc(12px + env(safe-area-inset-top, 0px)); }
   .post-journal-img { aspect-ratio: 16 / 8; }
 }
 
+/* ==========================================================================
+   v8 — design façon Apple / Instagram : fond blanc, publications pleine largeur,
+   barre d'onglets à la Apple, en-tête du Salon avec le logo. Pas de zoom.
+   ========================================================================== */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { overscroll-behavior-y: none; }
+:root { --shadow-card: 0 0 0 0.5px rgba(0, 0, 0, 0.07), 0 6px 22px rgba(0, 0, 0, 0.05); }
+@media (prefers-color-scheme: dark) {
+  :root { --shadow-card: 0 0 0 0.5px rgba(255, 255, 255, 0.1); }
+}
+.shell { background: var(--bg); }
+
+/* En-tête du Salon : le logo, l'Activité, les Messages */
+.salon-head { gap: 4px; }
+.wordmark { font: 600 21px/1 var(--font); letter-spacing: 0.34em; color: var(--text); padding: 6px 0 6px 2px; }
+.head-icon { position: relative; width: 44px; height: 44px; display: grid; place-items: center; color: var(--text); border-radius: 50%; transition: transform 0.15s var(--ease); }
+.head-icon:active { transform: scale(0.9); }
+.head-icon .icon { width: 26px; height: 26px; }
+.head-icon .badge-count { position: absolute; top: 3px; right: 1px; }
+.page-head .me-handle { font-size: 22px; }
+
+/* Ligne « Que souhaitez-vous partager ? » */
+.compose-row { display: flex; align-items: center; gap: 12px; width: calc(100% - var(--gutter) - var(--gutter-r)); margin: 10px var(--gutter-r) 4px var(--gutter); padding: 7px 8px 7px 7px; border-radius: 999px; background: var(--fill); color: var(--muted); font-size: 15.5px; text-align: left; transition: transform 0.15s var(--ease); }
+.compose-row:active { transform: scale(0.985); }
+.compose-row .grow { flex: 1; }
+.compose-photo { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--accent); }
+
+/* Publications pleine largeur, façon Instagram */
+.post { display: block; margin: 0; padding: 0 0 12px; border-radius: 0; background: var(--bg); box-shadow: none; border-bottom: 0.5px solid var(--line); animation: fadeUp 0.45s var(--ease) both; }
+.post-head { display: flex; align-items: center; gap: 10px; padding: 12px calc(var(--gutter-r) - 6px) 10px var(--gutter); }
+.post-avatar .avatar { --s: 38px; }
+.post-head .who { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.post-head .who .name-line b { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.post-head .handle { width: auto; display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); overflow: hidden; white-space: nowrap; }
+.post-head .handle .member-no { font-size: 10.5px; padding: 1px 6px; }
+.post-head .menu-btn { margin: 0; }
+.post-body { margin: 0; padding: 2px var(--gutter-r) 6px var(--gutter); font-size: 17px; line-height: 1.45; }
+.post-body.caption { padding-top: 4px; padding-bottom: 0; font-size: 15px; line-height: 1.42; }
+.cap-name { font-weight: 600; color: var(--text) !important; }
+.post .carousel, .post .post-image { margin: 0; border-radius: 0; background: var(--surface-2); }
+.post .carousel-slide { aspect-ratio: 4 / 5; max-height: none; }
+.post .post-image img { max-height: 640px; }
+.post .post-journal { margin: 4px var(--gutter-r) 0 var(--gutter); }
+.post-actions { margin: 4px 0 0; padding: 0 calc(var(--gutter-r) - 6px) 0 calc(var(--gutter) - 8px); }
+.act { color: var(--text); height: 42px; padding: 0 8px; font-size: 14px; font-weight: 600; }
+.act .icon { width: 25px; height: 25px; }
+.act:hover { background: transparent; opacity: 0.6; }
+.act:active { transform: scale(0.88); }
+.reaction-faces { margin-left: -6px; }
+.see-comments { display: block; padding: 6px var(--gutter-r) 0 var(--gutter); color: var(--muted); font-size: 14.5px; text-align: left; }
+.post .comments, .post .comment-form { padding-left: var(--gutter); padding-right: var(--gutter-r); }
+.post.big { border-bottom: 0; }
+
+/* Barre d'onglets à la Apple */
+.tabbar { border-top: 0.5px solid var(--line); }
+.tabbar a { font-size: 10px; letter-spacing: 0.01em; gap: 3px; transition: color 0.2s; }
+.tabbar a:active .icon, .tabbar a:active .tab-avatar { transform: scale(0.88); }
+.tabbar .icon { width: 26px; height: 26px; transition: transform 0.15s var(--ease); }
+.tabbar .plus { width: 44px; height: 32px; border-radius: 11px; }
+.tab-avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; transition: transform 0.15s var(--ease); }
+.tab-avatar .avatar { --s: 26px; font-size: 10px; }
+.tab-avatar .avatar.founder::before { display: none; }
+.tabbar a.active .tab-avatar { box-shadow: 0 0 0 1.5px var(--text); }
+.badge-dot-only { min-width: 9px !important; width: 9px; height: 9px; padding: 0 !important; font-size: 0 !important; top: -1px !important; right: -4px !important; }
+
+/* Stories : anneau doré plus marqué, comme Instagram */
+.stories-bar { padding-top: 10px; padding-bottom: 6px; border-bottom: 0.5px solid var(--line); }
+.story-ring { padding: 3px; }
+.story-ring .avatar { --s: 64px; }
+.story-ring .avatar > img, .story-ring .avatar > .avatar-initials { box-shadow: 0 0 0 3px var(--bg); }
+.story-name { font-size: 12px; color: var(--text); }
+
+/* Profil façon Instagram */
+.profile-top { background: var(--bg); border-bottom: 0; }
+.profile-row { align-items: flex-end; gap: 16px; }
+.ig-stats { flex: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); text-align: center; padding-bottom: 8px; min-width: 0; }
+.ig-stat { display: grid; justify-items: center; gap: 0; min-width: 0; color: var(--text); }
+.ig-stat b { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+.ig-stat small { font-size: 13px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+button.ig-stat:active { opacity: 0.6; }
+.profile-name { margin-top: 12px; }
+.profile-name h1 { font-size: 22px; }
+.profile-stats { margin-top: 10px; font-size: 14px; }
+.profile-actions { display: flex; gap: 8px; margin-top: 16px; padding: 0; }
+.profile-actions > .btn:not(.btn-icon) { flex: 1; --h: 36px; padding: 0 12px; border-radius: 10px; font-size: 14.5px; font-weight: 600; }
+.profile-actions > .btn-icon { --h: 36px; width: 40px; border-radius: 10px; }
+.profile-actions > .btn-primary { flex: 1.4; }
+.tabs.profile-tabs { background: var(--bg); border-top: 0.5px solid var(--line); }
+.photo-grid { gap: 2px; }
+
+/* Cartes : contour très fin sur fond blanc */
+.journal-article, .journal-podcast, .journal-video, .event-card, .place-card, .ticket, .card, .explore-list, .next-event, .requests-banner, .shortcut, .sk-card, .member-card, .admission-card, .admission-mode, .reports-empty, .notif-list { box-shadow: var(--shadow-card); }
+.tabs:not(.profile-tabs) { background: var(--fill); }
+
+.profile-actions > .btn-ghost.btn-icon { background: var(--fill); box-shadow: none; border: 0; }
+.feed-tabs { margin-top: 6px; margin-bottom: 2px; }
+.feed-tabs .tab { padding: 6px 10px; font-size: 14px; }
+.journal-list .journal-strip, .post + .journal-strip, div > .journal-strip { border-bottom: 0.5px solid var(--line); padding-bottom: 14px; margin-top: 0; padding-top: 14px; }
+
+@media (min-width: 768px) {
+  .compose-row { width: 100%; margin: 12px 0 8px; }
+  .post { margin: 0 0 14px; border: 0.5px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-card); }
+  .post-head { padding-left: 16px; padding-right: 10px; }
+  .post-body, .see-comments { padding-left: 16px; padding-right: 16px; }
+  .post .post-journal { margin-left: 16px; margin-right: 16px; }
+  .post-actions { padding-left: 8px; padding-right: 10px; }
+  .post .comments, .post .comment-form { padding-left: 16px; padding-right: 16px; }
+  .stories-bar { border-bottom: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }

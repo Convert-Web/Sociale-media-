@@ -151,8 +151,8 @@ export async function profileView(ctx) {
   const actions = user.isMe
     ? [
         store.user.isAdmin ? moreBtn : null,
-        h('a', { href: '/invitations', class: 'btn btn-ghost btn-icon', 'aria-label': 'Mes invitations', title: 'Mes invitations' }, icon('ticket')),
-        h('a', { href: '/reglages', class: 'btn btn-ghost' }, 'Modifier le profil'),
+        h('a', { href: '/reglages', class: 'btn btn-secondary' }, 'Modifier le profil'),
+        h('a', { href: '/invitations', class: 'btn btn-secondary' }, 'Inviter'),
       ]
     : user.bot
       ? [moreBtn]
@@ -240,15 +240,34 @@ export async function profileView(ctx) {
     avatarEl.addEventListener('click', () => lightbox(user.avatar));
   }
 
+  // Chiffres façon Instagram : publications, abonnés, suivis
+  const stat = (value, label, onclick) => h(onclick ? 'button' : 'div', { class: 'ig-stat', type: onclick ? 'button' : undefined, onclick }, value, h('small', null, label));
+  const stats = h(
+    'div',
+    { class: 'ig-stats' },
+    stat(h('b', null, num(user.stats.posts)), user.stats.posts > 1 ? 'publications' : 'publication'),
+    stat(followersEl, user.stats.followers > 1 ? 'abonnés' : 'abonné', () => relationModal(user.username, 'followers')),
+    stat(h('b', null, num(user.stats.following)), user.stats.following > 1 ? 'suivis' : 'suivi', () => relationModal(user.username, 'following')),
+  );
+  // Son propre profil : nom d'utilisateur et menu (≡), comme sur Instagram
+  const head = user.isMe
+    ? h(
+        'header',
+        { class: 'page-head' },
+        h('div', { class: 'grow' }, h('h1', { class: 'me-handle' }, user.username)),
+        h('button', { class: 'icon-btn', 'aria-label': 'Menu : amis, groupes, réglages', onclick: () => document.dispatchEvent(new CustomEvent('aurum:menu')) }, icon('menu')),
+      )
+    : backHead(user.displayName, `${num(user.stats.posts)} publication${user.stats.posts > 1 ? 's' : ''}`);
+
   return h(
     'div',
     null,
-    backHead(user.displayName, `${num(user.stats.posts)} publication${user.stats.posts > 1 ? 's' : ''}`),
+    head,
     coverEl,
     h(
       'section',
       { class: 'profile-top' },
-      h('div', { class: 'profile-row' }, avatarEl, h('div', { class: 'profile-actions' }, actions)),
+      h('div', { class: 'profile-row' }, avatarEl, stats),
       h('div', { class: 'profile-name' }, h('h1', null, user.displayName), user.verified ? verifiedMark() : null, user.founder ? founderBadge() : null),
       h(
         'div',
@@ -265,10 +284,9 @@ export async function profileView(ctx) {
         'div',
         { class: 'profile-stats' },
         h('button', { onclick: () => relationModal(user.username, 'friends') }, friendsEl, (user.stats.friends || 0) > 1 ? 'amis' : 'ami'),
-        h('button', { onclick: () => relationModal(user.username, 'following') }, h('b', null, num(user.stats.following)), user.stats.following > 1 ? 'abonnements' : 'abonnement'),
-        h('button', { onclick: () => relationModal(user.username, 'followers') }, followersEl, user.stats.followers > 1 ? 'abonnés' : 'abonné'),
         h('span', null, h('b', null, num(user.stats.likes)), user.stats.likes > 1 ? 'réactions reçues' : 'réaction reçue'),
       ),
+      h('div', { class: 'profile-actions' }, actions),
     ),
     user.blocked ? null : h('div', { class: 'tabs profile-tabs' }, tabPosts, tabPhotos),
     content,
