@@ -4,6 +4,7 @@ import { navigate } from '../router.js';
 import { h, icon, avatar, nameLine, memberChip, clear, spinner, emptyState, timeAgo, clock, dayLabel, richText, autosize, toast } from '../dom.js';
 import { pickMember } from './profile.js';
 import { pushBanner } from '../components/pushcard.js';
+import { translateLink } from '../components/translate.js';
 
 export function messagesView(ctx) {
   const other = ctx.params.username || null;
@@ -76,7 +77,9 @@ export function messagesView(ctx) {
         lastDay = day;
       }
       const mine = m.senderId === me;
-      const bubble = h('div', { class: `bubble ${mine ? 'mine' : 'theirs'}`, dataset: { id: m.id } }, richText(m.body), h('time', null, clock(m.createdAt)));
+      const text = h('span', { class: 'bubble-text' }, richText(m.body));
+      const tr = mine ? null : translateLink(m.body, m.lang, { show: ([t]) => text.replaceChildren(richText(t)), hide: () => text.replaceChildren(richText(m.body)), small: true });
+      const bubble = h('div', { class: `bubble ${mine ? 'mine' : 'theirs'}`, dataset: { id: m.id } }, text, tr, h('time', null, clock(m.createdAt)));
       if (!animate) bubble.style.animation = 'none';
       box.insertBefore(bubble, seen);
       if (mine) {

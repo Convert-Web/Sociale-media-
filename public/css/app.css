@@ -1594,13 +1594,13 @@ body { overscroll-behavior-y: none; }
 
 /* Publications pleine largeur, façon Instagram */
 .post { display: block; margin: 0; padding: 0 0 12px; border-radius: 0; background: var(--bg); box-shadow: none; border-bottom: 0.5px solid var(--line); animation: fadeUp 0.45s var(--ease) both; }
-.post-head { display: flex; align-items: center; gap: 10px; padding: 12px calc(var(--gutter-r) - 6px) 10px var(--gutter); }
+.post > .post-head { display: flex; align-items: center; gap: 10px; padding: 12px calc(var(--gutter-r) - 6px) 10px var(--gutter); }
 .post-avatar .avatar { --s: 38px; }
-.post-head .who { display: grid; gap: 1px; flex: 1; min-width: 0; }
-.post-head .who .name-line b { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
-.post-head .handle { width: auto; display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); overflow: hidden; white-space: nowrap; }
-.post-head .handle .member-no { font-size: 10.5px; padding: 1px 6px; }
-.post-head .menu-btn { margin: 0; }
+.post > .post-head .who { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.post > .post-head .who .name-line b { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.post > .post-head .handle { width: auto; display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); overflow: hidden; white-space: nowrap; }
+.post > .post-head .handle .member-no { font-size: 10.5px; padding: 1px 6px; }
+.post > .post-head .menu-btn { margin: 0; }
 .post-body { margin: 0; padding: 2px var(--gutter-r) 6px var(--gutter); font-size: 17px; line-height: 1.45; }
 .post-body.caption { padding-top: 4px; padding-bottom: 0; font-size: 15px; line-height: 1.42; }
 .cap-name { font-weight: 600; color: var(--text) !important; }
@@ -1664,10 +1664,17 @@ button.ig-stat:active { opacity: 0.6; }
 .feed-tabs .tab { padding: 6px 10px; font-size: 14px; }
 .journal-list .journal-strip, .post + .journal-strip, div > .journal-strip { border-bottom: 0.5px solid var(--line); padding-bottom: 14px; margin-top: 0; padding-top: 14px; }
 
+/* Traduction automatique */
+.see-translation { display: block; padding: 4px var(--gutter-r) 0 var(--gutter); color: var(--muted); font-size: 13.5px; font-weight: 600; text-align: left; }
+.see-translation:disabled { opacity: 0.6; }
+.comment .see-translation, .bubble .see-translation, .see-translation.small { padding: 4px 0 0; font-size: 12.5px; }
+.bubble.mine .see-translation { color: rgba(255, 255, 255, 0.8); }
+.journal-text .see-translation { padding: 2px 0 0; }
+
 @media (min-width: 768px) {
   .compose-row { width: 100%; margin: 12px 0 8px; }
   .post { margin: 0 0 14px; border: 0.5px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-card); }
-  .post-head { padding-left: 16px; padding-right: 10px; }
+  .post > .post-head { padding-left: 16px; padding-right: 10px; }
   .post-body, .see-comments { padding-left: 16px; padding-right: 16px; }
   .post .post-journal { margin-left: 16px; margin-right: 16px; }
   .post-actions { padding-left: 8px; padding-right: 10px; }

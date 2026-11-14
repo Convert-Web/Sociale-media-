@@ -1,4 +1,5 @@
 'use strict';
+const { detectLang } = require('../translate');
 // Le Journal : actualités, podcasts et vidéos.
 const express = require('express');
 const { requireMember } = require('../auth');
@@ -108,6 +109,7 @@ module.exports = function journalRoutes(ctx) {
     kind: row.kind,
     title: row.title,
     summary: row.summary,
+    lang: detectLang(`${row.title}. ${row.summary || ''}`),
     url: row.url,
     image: row.image ? lighter(row.image) : null,
     audioUrl: row.audio_url || null,

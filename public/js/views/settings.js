@@ -5,6 +5,7 @@ import { h, icon, avatar, toast, memberCard, cardSince, fullDate, memberNo, conf
 import { backHead } from './feed.js';
 import { cropImage } from '../components/cropper.js';
 import { pushCard } from '../components/pushcard.js';
+import { LANG_CHOICES, myLang } from '../components/translate.js';
 
 function field(label, input, hint) {
   return h('label', { class: 'field' }, h('span', null, label), input, hint ? h('small', { class: 'hint' }, hint) : null);
@@ -276,6 +277,26 @@ export function settingsView(ctx) {
       toast(err.message, 'error');
     }
   });
+  // --- Langue des traductions ----------------------------------------------------
+  const langSelect = h('select', { class: 'input', 'aria-label': 'Langue des traductions' }, LANG_CHOICES.map(([code, name]) => h('option', { value: code }, name)));
+  langSelect.value = myLang();
+  langSelect.addEventListener('change', async () => {
+    try {
+      const { user } = await api.post('/api/me/lang', { lang: langSelect.value });
+      store.setUser(user);
+      toast('Langue des traductions enregistrée.');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+  const langCard = h(
+    'div',
+    { class: 'card' },
+    h('h2', null, 'Traduction'),
+    h('p', { class: 'desc' }, 'Sous chaque publication, commentaire ou message écrit dans une autre langue, « Voir la traduction » le traduit dans la langue de votre choix.'),
+    h('label', { class: 'field' }, h('span', null, 'Traduire les contenus en'), langSelect),
+  );
+
   const mailCard = h(
     'div',
     { class: 'card' },
@@ -287,5 +308,5 @@ export function settingsView(ctx) {
   if (location.hash === '#notifications') setTimeout(() => notifCard.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
 
   ctx.title = 'Réglages — AURUM';
-  return h('div', null, backHead('Réglages', `@${u.username}`), h('div', { class: 'settings' }, profileForm, notifCard, mailCard, membership, security, blockedCard, data));
+  return h('div', null, backHead('Réglages', `@${u.username}`), h('div', { class: 'settings' }, profileForm, notifCard, langCard, mailCard, membership, security, blockedCard, data));
 }

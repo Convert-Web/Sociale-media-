@@ -7,6 +7,7 @@ import {
 } from '../dom.js';
 import { reportDialog } from './report.js';
 import { attachMentions } from './mentions.js';
+import { translateLink } from './translate.js';
 
 const MAX_POST = 2000;
 const MAX_PHOTOS = 6;
@@ -283,8 +284,8 @@ export function postCard(post, { expanded = false } = {}) {
   const hasMedia = post.images.length > 0;
   const bodyEl = h('div', { class: `post-body${hasMedia ? ' caption' : ''}` });
   const edited = h('span', { class: 'edited', hidden: !post.editedAt, title: post.editedAt ? `Modifié ${fullDate(post.editedAt)}` : '' }, ' · modifié');
-  const paintBody = () => {
-    bodyEl.replaceChildren(...(hasMedia ? [h('a', { href: `/@${post.author.username}`, class: 'cap-name' }, post.author.displayName), ' '] : []), richText(post.body || ''));
+  const paintBody = (text = post.body) => {
+    bodyEl.replaceChildren(...(hasMedia ? [h('a', { href: `/@${post.author.username}`, class: 'cap-name' }, post.author.displayName), ' '] : []), richText(text || ''));
     bodyEl.hidden = !post.body;
     edited.hidden = !post.editedAt;
   };
@@ -358,6 +359,9 @@ export function postCard(post, { expanded = false } = {}) {
     popMenu(menuBtn, items);
   });
 
+  // « Voir la traduction » : publication écrite dans une autre langue
+  const bodyTranslate = translateLink(post.body, post.lang, { show: ([t]) => paintBody(t), hide: () => paintBody() });
+
   // « Voir les N commentaires » sous la publication
   const moreComments = h('button', { class: 'see-comments', type: 'button', hidden: !post.commentCount || expanded }, post.commentCount > 1 ? `Voir les ${num(post.commentCount)} commentaires` : 'Voir le commentaire');
   moreComments.addEventListener('click', () => {
@@ -379,10 +383,12 @@ export function postCard(post, { expanded = false } = {}) {
       menuBtn,
     ),
     hasMedia ? null : bodyEl,
+    hasMedia ? null : bodyTranslate,
     hasMedia ? gallery(post.images) : null,
     post.journal ? journalLink(post.journal) : null,
     h('div', { class: 'post-actions' }, reactBtn, faces, commentBtn, shareBtn, h('span', { class: 'grow' }), saveBtn),
     hasMedia ? bodyEl : null,
+    hasMedia ? bodyTranslate : null,
     moreComments,
     commentsHost,
   ]);
@@ -422,6 +428,7 @@ function commentEl(c, onDelete) {
   if (c.author.id !== store.user.id) {
     actions.push(h('button', { onclick: () => reportDialog('comment', c.id, 'Signaler le commentaire') }, 'Signaler'));
   }
+  const commentBody = h('div', { class: 'comment-body' }, richText(c.body));
   return h(
     'div',
     { class: 'comment', dataset: { id: c.id } },
@@ -433,7 +440,8 @@ function commentEl(c, onDelete) {
         'div',
         { class: 'comment-bubble' },
         h('div', { class: 'post-head' }, h('div', { class: 'who' }, nameLine(c.author), memberChip(c.author))),
-        h('div', { class: 'comment-body' }, richText(c.body)),
+        commentBody,
+        translateLink(c.body, c.lang, { show: ([t]) => commentBody.replaceChildren(richText(t)), hide: () => commentBody.replaceChildren(richText(c.body)) }),
       ),
       h('div', { class: 'comment-meta' }, h('span', { title: fullDate(c.createdAt) }, timeAgo(c.createdAt)), actions),
     ),

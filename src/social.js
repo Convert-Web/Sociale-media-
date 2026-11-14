@@ -1,4 +1,5 @@
 'use strict';
+const { detectLang } = require('./translate');
 
 // Sérialisation et logique sociale partagée entre les routes.
 
@@ -46,6 +47,7 @@ function selfUser(ctx, u) {
     isMember: Boolean(u.paid_at),
     isAdmin: Boolean(u.is_admin),
     emailDigest: u.email_digest !== 0,
+    lang: u.lang || null,
     admission: u.paid_at
       ? null
       : { requested: Boolean(u.admission_requested_at), declined: Boolean(u.admission_declined_at), note: u.admission_note || '' },
@@ -102,6 +104,7 @@ function serializePost(ctx, row, viewer) {
   return {
     id: row.id,
     body: row.body,
+    lang: detectLang(row.body),
     image: images[0] || null,
     images,
     createdAt: row.created_at,
@@ -138,6 +141,7 @@ function serializeComment(ctx, row, viewer) {
     id: row.id,
     postId: row.post_id,
     body: row.body,
+    lang: detectLang(row.body),
     createdAt: row.created_at,
     author: authorOf(ctx, row),
     canDelete: row.user_id === viewer.id || Boolean(viewer.is_admin),

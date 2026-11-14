@@ -296,6 +296,15 @@ CREATE TABLE IF NOT EXISTS journal_items (
 CREATE INDEX IF NOT EXISTS idx_journal_items_kind ON journal_items(kind, published_at);
 CREATE INDEX IF NOT EXISTS idx_journal_items_source ON journal_items(source_id, published_at);
 
+-- v9 : traductions déjà faites (un texte n'est traduit qu'une fois)
+CREATE TABLE IF NOT EXISTS translations (
+  key         TEXT PRIMARY KEY,
+  lang        TEXT NOT NULL,
+  source      TEXT,
+  text        TEXT NOT NULL,
+  created_at  INTEGER NOT NULL
+);
+
 -- Photos envoyées par les membres, stockées dans la base
 -- (les hébergeurs gratuits effacent leurs fichiers à chaque redémarrage).
 CREATE TABLE IF NOT EXISTS media (
@@ -343,6 +352,7 @@ const COLUMNS = [
   ['users', 'is_bot', 'INTEGER NOT NULL DEFAULT 0'],
   ['posts', 'journal_id', 'INTEGER'],
   ['users', 'email_digest', 'INTEGER NOT NULL DEFAULT 1'],
+  ['users', 'lang', 'TEXT'],
 ];
 
 async function migrate(client) {

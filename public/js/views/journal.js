@@ -5,6 +5,7 @@ import { navigate } from '../router.js';
 import { h, icon, avatar, nameLine, toast, popMenu, confirmDialog, emptyState, spinner, modal, timeAgo, debounce, skeletonPosts } from '../dom.js';
 import { backHead } from './feed.js';
 import { playItem, isCurrent, onPlayer, state as playerState, fmtTime } from '../components/player.js';
+import { translateLink } from '../components/translate.js';
 
 const KIND_LABEL = { article: 'Actualité', podcast: 'Podcast', video: 'Vidéo' };
 const KIND_ICON = { article: 'newspaper', podcast: 'headphones', video: 'video' };
@@ -114,6 +115,24 @@ function playButton(it) {
   return btn;
 }
 
+// Titre (et résumé) d'une carte, avec « Voir la traduction » si la langue diffère
+function titled(it, withSummary = false) {
+  const t = h('b', null, it.title);
+  const s = withSummary && it.summary ? h('span', { class: 'journal-summary' }, it.summary) : null;
+  const link = translateLink(s ? [it.title, it.summary] : [it.title], it.lang, {
+    small: true,
+    show: ([a, b]) => {
+      t.textContent = a;
+      if (s && b) s.textContent = b;
+    },
+    hide: () => {
+      t.textContent = it.title;
+      if (s) s.textContent = it.summary;
+    },
+  });
+  return [t, s, link].filter(Boolean);
+}
+
 export function journalCard(it, { onChange, variant } = {}) {
   if (variant === 'hero') {
     return h(
@@ -136,7 +155,7 @@ export function journalCard(it, { onChange, variant } = {}) {
       'a',
       { ...hrefOf(it), class: 'journal-video' },
       h('span', { class: 'journal-thumb' }, it.image ? extImg(it.image, 'video') : icon('video'), h('span', { class: 'journal-video-badge' }, icon('play'))),
-      h('span', { class: 'journal-text' }, h('small', null, meta(it)), h('b', null, it.title), sharedNote(it)),
+      h('span', { class: 'journal-text' }, h('small', null, meta(it)), ...titled(it), sharedNote(it)),
       moreButton(it, onChange),
     );
   }
@@ -145,7 +164,7 @@ export function journalCard(it, { onChange, variant } = {}) {
       'a',
       { ...hrefOf(it), class: 'journal-podcast' },
       h('span', { class: 'journal-art' }, it.image ? extImg(it.image, 'headphones') : icon('headphones')),
-      h('span', { class: 'journal-text' }, h('small', null, it.siteName), h('b', null, it.title), h('span', { class: 'journal-when' }, [minutes(it.duration), timeAgo(it.publishedAt)].filter(Boolean).join(' · ')), sharedNote(it)),
+      h('span', { class: 'journal-text' }, h('small', null, it.siteName), ...titled(it), h('span', { class: 'journal-when' }, [minutes(it.duration), timeAgo(it.publishedAt)].filter(Boolean).join(' · ')), sharedNote(it)),
       playButton(it),
       moreButton(it, onChange),
     );
@@ -153,7 +172,7 @@ export function journalCard(it, { onChange, variant } = {}) {
   return h(
     'a',
     { ...hrefOf(it), class: 'journal-article' },
-    h('span', { class: 'journal-text' }, h('small', null, meta(it)), h('b', null, it.title), it.summary ? h('span', { class: 'journal-summary' }, it.summary) : null, sharedNote(it)),
+    h('span', { class: 'journal-text' }, h('small', null, meta(it)), ...titled(it, true), sharedNote(it)),
     it.image ? h('span', { class: 'journal-art' }, extImg(it.image, 'newspaper')) : null,
     moreButton(it, onChange),
   );
@@ -522,6 +541,8 @@ export async function journalItemView(ctx) {
     e.stopPropagation();
     itemMenu(it, moreBtn, () => navigate('/journal', { replace: true }));
   });
+  const titleEl = h('h1', { class: 'place-title' }, it.title);
+  const summaryEl = it.summary ? h('p', { class: 'event-desc' }, it.summary) : null;
 
   return h(
     'div',
@@ -532,8 +553,18 @@ export async function journalItemView(ctx) {
       'section',
       { class: 'event-top' },
       h('span', { class: 'eyebrow' }, [KIND_LABEL[it.kind], it.siteName, timeAgo(it.publishedAt)].filter(Boolean).join(' · ')),
-      h('h1', { class: 'place-title' }, it.title),
-      it.summary ? h('p', { class: 'event-desc' }, it.summary) : null,
+      titleEl,
+      summaryEl,
+      translateLink(it.summary ? [it.title, it.summary] : [it.title], it.lang, {
+        show: ([t, s]) => {
+          titleEl.textContent = t;
+          if (s && summaryEl) summaryEl.textContent = s;
+        },
+        hide: () => {
+          titleEl.textContent = it.title;
+          if (summaryEl) summaryEl.textContent = it.summary;
+        },
+      }),
       it.sharedBy
         ? h('figure', { class: 'place-quote' }, it.note ? h('blockquote', null, it.note) : null, h('figcaption', null, avatar(it.sharedBy, 'sm'), h('span', null, nameLine(it.sharedBy), h('small', null, 'a partagé ce contenu avec le cercle'))))
         : null,

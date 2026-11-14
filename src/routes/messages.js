@@ -1,4 +1,5 @@
 'use strict';
+const { detectLang } = require('../translate');
 const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam } = require('../http');
@@ -13,6 +14,7 @@ module.exports = function messageRoutes(ctx) {
   const serializeMessage = (m) => ({
     id: m.id,
     body: m.body,
+    lang: detectLang(m.body),
     createdAt: m.created_at,
     senderId: m.sender_id,
     recipientId: m.recipient_id,

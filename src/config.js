@@ -57,6 +57,12 @@ const config = {
     url: env.SMTP_URL || '',
     from: env.MAIL_FROM || 'AURUM <no-reply@aurum.local>',
   },
+  // Traduction : DeepL si une clé est fournie (plus de volume), sinon MyMemory (gratuit, sans compte).
+  // TRANSLATE_EMAIL relève le quota gratuit de MyMemory (5 000 → 50 000 caractères par jour).
+  translate: {
+    deeplKey: env.DEEPL_API_KEY || '',
+    email: env.TRANSLATE_EMAIL || '',
+  },
   // Brevo (offre gratuite) : clé d'API ; l'expéditeur MAIL_FROM doit être validé dans Brevo
   mail: {
     brevoKey: env.BREVO_API_KEY || '',
