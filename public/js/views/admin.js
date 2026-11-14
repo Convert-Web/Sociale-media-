@@ -97,6 +97,66 @@ async function reportsSection() {
   return host;
 }
 
+// Courriels : état de l'envoi, essais et Lettre du cercle
+async function emailsSection() {
+  const host = h('div', { class: 'card emails-card' });
+  let d;
+  try {
+    d = await api.get('/api/admin/emails');
+  } catch (err) {
+    host.append(h('p', { class: 'muted' }, err.message));
+    return host;
+  }
+  const status = d.enabled
+    ? h('div', { class: 'push-status on' }, h('span', { class: 'push-dot' }), `Envoi actif${d.provider === 'brevo' ? ' via Brevo' : ''}${d.from ? ` — expéditeur : ${d.from}` : ''}`)
+    : h('div', { class: 'push-status' }, h('span', { class: 'push-dot' }), 'Envoi non configuré');
+  const action = (label, fn, cls = 'btn-secondary') => {
+    const b = h('button', { class: `btn ${cls} btn-sm`, type: 'button' }, label);
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        await fn();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+      b.disabled = false;
+    });
+    return b;
+  };
+  host.append(
+    h('h2', null, 'Courriels'),
+    status,
+    d.enabled
+      ? null
+      : h('p', { class: 'small muted' }, 'Ajoutez la clé Brevo (BREVO_API_KEY) et l’expéditeur (MAIL_FROM) dans les réglages Vercel du projet, puis redéployez : la marche à suivre est dans le README.'),
+    h(
+      'p',
+      { class: 'small muted' },
+      `La Lettre du cercle part chaque dimanche matin à ${d.subscribers} membre${d.subscribers > 1 ? 's' : ''} abonné${d.subscribers > 1 ? 's' : ''}.`,
+      d.lastSentAt ? ` Dernier envoi : ${timeAgo(d.lastSentAt)} (${d.lastCount} destinataire${d.lastCount > 1 ? 's' : ''}).` : '',
+    ),
+    h(
+      'div',
+      { class: 'row-start' },
+      h('a', { class: 'btn btn-ghost btn-sm', href: '/api/admin/lettre/apercu', target: '_blank', rel: 'noopener' }, 'Aperçu de la Lettre'),
+      d.enabled ? action('M’envoyer un test', async () => toast(`Courriel de test envoyé à ${(await api.post('/api/admin/emails/test')).to}.`)) : null,
+      d.enabled ? action('M’envoyer la Lettre', async () => (await api.post('/api/admin/lettre/send', { test: true }), toast('La Lettre vous a été envoyée.'))) : null,
+      d.enabled
+        ? action(
+            'Envoyer la Lettre à tous',
+            async () => {
+              if (!(await confirmDialog('Envoyer la Lettre maintenant ?', `Elle partira à ${d.subscribers} membre${d.subscribers > 1 ? 's' : ''}. L’envoi automatique de dimanche sera alors sauté cette semaine.`, 'Envoyer', false))) return;
+              const r = await api.post('/api/admin/lettre/send');
+              toast(r.skipped || `Lettre envoyée à ${r.sent} membre${r.sent > 1 ? 's' : ''}.`, r.skipped ? 'error' : 'ok');
+            },
+            'btn-primary',
+          )
+        : null,
+    ),
+  );
+  return host;
+}
+
 // Comptes automatiques (AURUM, Le Concierge)
 let botsState = { enabled: false, available: false };
 function botsSwitch() {
@@ -190,6 +250,7 @@ export async function adminView(ctx) {
   const data = await api.get('/api/admin/overview');
   botsState = { enabled: Boolean(data.config.bots), available: Boolean(data.config.botsAvailable) };
   const admissions = data.config.paidEntry ? null : await admissionsSection(data.config.admission);
+  const emails = await emailsSection();
   const reports = await reportsSection();
   const t = data.totals;
   const conversion = t.members + t.pending ? Math.round((t.members / (t.members + t.pending)) * 100) : 0;
@@ -263,6 +324,8 @@ export async function adminView(ctx) {
       kpi('Commentaires', num(t.comments)),
       kpi('Messages privés', num(t.messages)),
     ),
+    h('div', { class: 'section-title' }, 'Courriels'),
+    h('div', { class: 'admissions' }, emails),
     admissions ? h('div', { class: 'section-title' }, `Demandes d’admission${data.totals.admissions ? ` · ${data.totals.admissions}` : ''}`) : null,
     admissions,
     h('div', { class: 'section-title' }, 'Signalements'),

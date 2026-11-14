@@ -263,9 +263,29 @@ export function settingsView(ctx) {
   );
 
   const notifCard = pushCard();
+
+  // --- Courriels ------------------------------------------------------------------
+  const digest = h('input', { type: 'checkbox', class: 'switch', checked: store.user.emailDigest !== false, 'aria-label': 'Recevoir la Lettre du cercle' });
+  digest.addEventListener('change', async () => {
+    try {
+      const { user } = await api.post('/api/me/emails', { digest: digest.checked });
+      store.setUser(user);
+      toast(digest.checked ? 'Vous recevrez la Lettre chaque dimanche.' : 'Vous ne recevrez plus la Lettre.');
+    } catch (err) {
+      digest.checked = !digest.checked;
+      toast(err.message, 'error');
+    }
+  });
+  const mailCard = h(
+    'div',
+    { class: 'card' },
+    h('h2', null, 'Courriels'),
+    h('p', { class: 'desc' }, `Envoyés à ${u.email}. Les courriels de sécurité (mot de passe oublié) sont toujours envoyés.`),
+    h('label', { class: 'admission-mode', style: { boxShadow: 'none', padding: '4px 0', background: 'transparent' } }, h('span', { class: 'grow' }, h('b', null, 'La Lettre du cercle'), h('small', { class: 'muted' }, 'Chaque dimanche matin : les événements, les meilleures publications, le Journal et l’adresse de la semaine.')), digest),
+  );
   notifCard.id = 'notifications';
   if (location.hash === '#notifications') setTimeout(() => notifCard.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
 
   ctx.title = 'Réglages — AURUM';
-  return h('div', null, backHead('Réglages', `@${u.username}`), h('div', { class: 'settings' }, profileForm, notifCard, membership, security, blockedCard, data));
+  return h('div', null, backHead('Réglages', `@${u.username}`), h('div', { class: 'settings' }, profileForm, notifCard, mailCard, membership, security, blockedCard, data));
 }

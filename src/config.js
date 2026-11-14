@@ -56,6 +56,12 @@ const config = {
     url: env.SMTP_URL || '',
     from: env.MAIL_FROM || 'AURUM <no-reply@aurum.local>',
   },
+  // Brevo (offre gratuite) : clé d'API ; l'expéditeur MAIL_FROM doit être validé dans Brevo
+  mail: {
+    brevoKey: env.BREVO_API_KEY || '',
+    // Tâche planifiée de Vercel (Lettre du dimanche) : jeton facultatif
+    cronSecret: env.CRON_SECRET || '',
+  },
   cookieSecure: bool(env.COOKIE_SECURE, isProd),
   trustProxy: bool(env.TRUST_PROXY, isProd),
   rateLimit: bool(env.RATE_LIMIT, true),

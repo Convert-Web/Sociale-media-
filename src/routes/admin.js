@@ -80,14 +80,7 @@ module.exports = function adminRoutes(ctx) {
     if (!user) fail(404, 'Demande introuvable.');
     if (req.params.action === 'approve') {
       await db.run('UPDATE users SET admission_declined_at = NULL WHERE id = ?', id);
-      const admitted = await admitMember(ctx, id);
-      ctx.mailer
-        .send({
-          to: admitted.email,
-          subject: `${config.appName} — Bienvenue dans le cercle`,
-          text: `Bonjour ${admitted.display_name},\n\nVotre demande d'admission a été acceptée. Votre carte de membre N° ${String(admitted.member_number).padStart(4, '0')} vous attend :\n${config.baseUrl}/connexion\n\n— ${config.appName}`,
-        })
-        .catch(() => {});
+      await admitMember(ctx, id); // courriel de bienvenue envoyé à l'admission
       return res.json({ ok: true });
     }
     if (req.params.action === 'decline') {

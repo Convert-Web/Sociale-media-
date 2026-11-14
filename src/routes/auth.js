@@ -120,12 +120,9 @@ module.exports = function authRoutes(ctx) {
         sha256(token), user.id, Date.now() + 3600 * 1000,
       );
       const link = `${config.baseUrl}/reinitialiser?jeton=${token}`;
-      ctx.mailer
-        .send({
-          to: user.email,
-          subject: `${config.appName} — Réinitialisation de votre mot de passe`,
-          text: `Bonjour ${user.display_name},\n\nPour choisir un nouveau mot de passe, ouvrez ce lien (valable 1 heure) :\n${link}\n\nSi vous n'êtes pas à l'origine de cette demande, ignorez simplement cet e-mail.\n\n— ${config.appName}`,
-        })
+      const { resetEmail } = require('../emails');
+      await ctx.mailer
+        .send({ to: user.email, name: user.display_name, ...resetEmail(config, user, link) })
         .catch((err) => console.error('[email] échec :', err.message));
     }
     // Réponse identique que le compte existe ou non.

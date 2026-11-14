@@ -19,6 +19,7 @@ Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (bar
 | **Membre vérifié** | Badge bleu attribué par la Direction depuis le profil d'un membre, affiché à côté de son nom partout. |
 | **Le Journal** | Actualités, podcasts et vidéos : sources relues automatiquement toutes les 20 minutes (France 24, Robb Report, Wallpaper*, Dezeen, L’Heure du Monde, GDIY, La Martingale, chaînes YouTube…), mise en page magazine (« À la une », « À écouter », « À regarder »), lecteur de podcasts qui continue pendant la navigation (commandes de l’écran verrouillé, reprise là où l’on s’était arrêté), vidéos YouTube / Vimeo / Dailymotion et podcasts Spotify / Apple jouées dans l’application. Chaque membre peut partager un lien ; la Direction gère les sources (site, flux RSS, chaîne YouTube, recherche de podcast par nom) et choisit la une. |
 | **Comptes automatiques** | **AURUM** (compte officiel) publie dans le Salon les contenus du Journal (toutes les 4 h, de 8 h à 23 h), une question du jour pour lancer la conversation, les nouveaux événements de l'Agenda, et souhaite la bienvenue à chaque nouveau membre. **Le Concierge** envoie un message d'accueil et met en avant l'adresse de la semaine du Carnet. Ils portent l'étiquette « Automatique », n'ont pas de numéro de membre, ne comptent pas dans les effectifs et ne peuvent pas se connecter. Interrupteur dans la page Direction (ou `BOTS=off`). |
+| **Courriels** | Bienvenue à l'admission (avec la carte de membre), accusé de réception d'une demande d'admission (et alerte à la Direction), mot de passe oublié, et **la Lettre du cercle** chaque dimanche matin (événements, meilleures publications, Journal, adresse de la semaine, nouveaux membres) avec lien de désinscription. Envoi par Brevo (gratuit, 300 courriels par jour). Essais et aperçu dans la page Direction. |
 | **Carte de membre** | Numéro unique attribué dans l'ordre d'arrivée et **jamais réattribué**. Carte en titane clair, en **or** pour les 100 premiers « Fondateurs ». Cérémonie d'accueil à l'inscription. Le premier compte créé devient administrateur. |
 | **Le Salon** | Fil chronologique « Tout le cercle » / « Mes abonnements », publications avec jusqu'à 6 photos (carrousel), modification, commentaires, #hashtags, @mentions avec suggestions, défilement infini, bandeau « nouvelles publications ». |
 | **Réactions** | ❤️ 👍 👏 🔥 😂 😮 : un toucher pour ❤️, appui long (ou survol) pour choisir, liste des membres qui ont réagi. |
@@ -82,6 +83,19 @@ Pour tester en local avec des membres fictifs : `npm run seed` (refusé en produ
 4. Redémarrez. Carte de test : `4242 4242 4242 4242`, date future, CVC quelconque.
 
 Même sans webhook, l'accès est accordé au retour du paiement (le serveur interroge Stripe pour vérifier). Le webhook couvre le cas où le membre ferme la page trop tôt.
+
+## Activer les courriels (Brevo, gratuit)
+
+1. Créez un compte gratuit sur **brevo.com** et complétez le profil demandé.
+2. **Expéditeurs** : ajoutez « AURUM » avec votre adresse e-mail et validez-la avec le code reçu.
+3. **SMTP et API → Clés API** : générez une clé (elle commence par `xkeysib-`) et copiez-la.
+4. Dans **Vercel → votre projet → Settings → Environment Variables**, ajoutez :
+   - `BREVO_API_KEY` : la clé copiée ;
+   - `MAIL_FROM` : `AURUM <votre-adresse-validée>` ;
+   - `CRON_SECRET` : une longue phrase au hasard (protège l'envoi automatique du dimanche).
+5. **Deployments → Redeploy**, puis dans AURUM : **Direction → Courriels → M'envoyer un test**.
+
+La Lettre du cercle part chaque dimanche vers 8 h (tâche planifiée Vercel, `vercel.json`).
 
 ## Configuration
 

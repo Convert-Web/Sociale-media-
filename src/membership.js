@@ -20,6 +20,8 @@ async function admitMember(ctx, userId) {
   // Nouveau membre : bienvenue des comptes automatiques
   if (user && before && !before.paid_at && user.paid_at && !user.is_bot) {
     await require('./bots').welcomeMember(ctx, user).catch((err) => console.warn('[bots] bienvenue :', err.message));
+    const { welcomeEmail } = require('./emails');
+    await ctx.mailer.send({ to: user.email, name: user.display_name, ...welcomeEmail(ctx.config, user) }).catch((err) => console.warn('[courriel] bienvenue :', err.message));
   }
   return user;
 }

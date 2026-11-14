@@ -79,7 +79,10 @@ async function redeemInvitation(ctx, userId, invitation) {
 async function announceAdmissionRequest(ctx, user) {
   const { notify } = require('./social');
   const { sendPush } = require('./push');
-  const admins = await ctx.db.all('SELECT id FROM users WHERE is_admin = 1 AND paid_at IS NOT NULL');
+  const admins = await ctx.db.all('SELECT id, email FROM users WHERE is_admin = 1 AND paid_at IS NOT NULL');
+  const { admissionReceivedEmail, admissionAdminEmail } = require('./emails');
+  await ctx.mailer.send({ to: user.email, name: user.display_name, ...admissionReceivedEmail(ctx.config, user) }).catch(() => {});
+  for (const a of admins) await ctx.mailer.send({ to: a.email, ...admissionAdminEmail(ctx.config, user) }).catch(() => {});
   for (const a of admins) {
     await notify(ctx, { userId: a.id, actorId: user.id, type: 'admission_request' });
     sendPush(ctx, a.id, {

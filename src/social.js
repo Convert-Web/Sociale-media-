@@ -45,6 +45,7 @@ function selfUser(ctx, u) {
     email: u.email,
     isMember: Boolean(u.paid_at),
     isAdmin: Boolean(u.is_admin),
+    emailDigest: u.email_digest !== 0,
     admission: u.paid_at
       ? null
       : { requested: Boolean(u.admission_requested_at), declined: Boolean(u.admission_declined_at), note: u.admission_note || '' },
