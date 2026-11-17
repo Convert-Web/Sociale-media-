@@ -1,11 +1,12 @@
 'use strict';
 const express = require('express');
 const { hashPassword, verifyPassword, burnPasswordCheck, newToken, sha256 } = require('../security');
-const { createSession, destroySession, requireAuth } = require('../auth');
+const { createSession, destroySession, requireAuth, autoAdmit } = require('../auth');
 const { fail, text, USERNAME_RE, EMAIL_RE, RESERVED } = require('../http');
 const { selfUser, counters } = require('../social');
 const { admitMember } = require('../membership');
-const { admissionMode, findInvitation, normalizeCode, foundersLeft, redeemInvitation, announceAdmissionRequest } = require('../admission');
+const { assertClean } = require('../contentFilter');
+const { admissionMode, findInvitation, normalizeCode, foundersLeft, redeemInvitation, announceAdmissionRequest, entryIsPaid } = require('../admission');
 
 function validatePassword(pw) {
   if (typeof pw !== 'string' || pw.length < 8) fail(400, 'Le mot de passe doit contenir au moins 8 caractères.');
@@ -25,12 +26,13 @@ module.exports = function authRoutes(ctx) {
         appName: config.appName,
         priceCents: config.priceCents,
         currency: config.currency,
-        paidEntry: config.paidEntry,
+        // Entrée payante en ce moment (les places gratuites de Fondateur sont toutes attribuées)
+        paidEntry: await entryIsPaid(ctx),
         stripeEnabled: Boolean(ctx.stripe),
         demoPayments: config.demoPayments,
         founderLimit: config.founderLimit,
-        foundersLeft: await foundersLeft(ctx),
-        admission: config.paidEntry ? 'paid' : await admissionMode(ctx),
+        foundersLeft: config.paidEntry ? 0 : await foundersLeft(ctx),
+        admission: await admissionMode(ctx),
         realtime: config.realtime,
       },
     });
@@ -46,12 +48,13 @@ module.exports = function authRoutes(ctx) {
       fail(400, "Nom d'utilisateur : 3 à 20 caractères (lettres, chiffres, « _ » ou « . »).");
     }
     if (RESERVED.has(username.toLowerCase())) fail(409, "Ce nom d'utilisateur est réservé.");
+    assertClean('Nom', displayName, username.replace(/[._]/g, ' '));
     if (!EMAIL_RE.test(email)) fail(400, 'Adresse e-mail invalide.');
     if (await db.get('SELECT 1 FROM users WHERE username = ?', username)) fail(409, "Ce nom d'utilisateur est déjà pris.");
     if (await db.get('SELECT 1 FROM users WHERE email = ?', email)) fail(409, 'Un compte existe déjà avec cet e-mail.');
     // Invitation d'un membre : vérifiée avant de créer le compte
     let invitation = null;
-    if (!config.paidEntry && normalizeCode(req.body.invitation)) {
+    if (normalizeCode(req.body.invitation)) {
       invitation = await findInvitation(ctx, req.body.invitation);
       if (!invitation || invitation.used_by || !invitation.inviter_member) {
         fail(400, 'Cette invitation n’est plus valable. Retirez le code pour simplement demander votre admission.');
@@ -70,13 +73,12 @@ module.exports = function authRoutes(ctx) {
     );
     await createSession(ctx, res, lastInsertRowid);
     let user;
-    if (config.paidEntry) {
-      user = await db.get('SELECT * FROM users WHERE id = ?', lastInsertRowid);
-    } else if (invitation) {
+    if (invitation) {
       user = (await redeemInvitation(ctx, lastInsertRowid, invitation)) || (await db.get('SELECT * FROM users WHERE id = ?', lastInsertRowid));
     } else {
       const noMemberYet = !(await db.get('SELECT 1 FROM users WHERE paid_at IS NOT NULL'));
       if (isAdmin || noMemberYet || (await admissionMode(ctx)) === 'open') {
+        // Phase payante : ticket accordé, l'entrée se fait au droit d'entrée
         user = await admitMember(ctx, lastInsertRowid);
       } else {
         // Sur invitation : la demande est transmise à la Direction
@@ -98,9 +100,8 @@ module.exports = function authRoutes(ctx) {
       await db.run('UPDATE users SET is_admin = 1 WHERE id = ?', user.id);
     }
     await createSession(ctx, res, user.id);
-    // Entrée libre : un compte créé avant reste admis à la connexion. Sur invitation : il attend la Direction.
-    const autoAdmit = !user.paid_at && !config.paidEntry && (user.is_admin || (await admissionMode(ctx)) === 'open');
-    const fresh = autoAdmit ? await admitMember(ctx, user.id) : await db.get('SELECT * FROM users WHERE id = ?', user.id);
+    // Entrée libre : un compte créé avant est admis à la connexion. Sur invitation : il attend la Direction.
+    const fresh = await autoAdmit(ctx, await db.get('SELECT * FROM users WHERE id = ?', user.id));
     res.json({ user: selfUser(ctx, fresh) });
   });
 
@@ -144,7 +145,7 @@ module.exports = function authRoutes(ctx) {
       await t.run('DELETE FROM sessions WHERE user_id = ?', row.user_id);
     });
     await createSession(ctx, res, row.user_id);
-    const user = config.paidEntry ? await db.get('SELECT * FROM users WHERE id = ?', row.user_id) : await admitMember(ctx, row.user_id);
+    const user = await autoAdmit(ctx, await db.get('SELECT * FROM users WHERE id = ?', row.user_id));
     res.json({ user: selfUser(ctx, user) });
   });
 

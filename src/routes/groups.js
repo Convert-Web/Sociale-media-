@@ -2,6 +2,7 @@
 const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam } = require('../http');
+const { moderate, autoReport, assertClean } = require('../contentFilter');
 const { single, photos, saveImage, deleteUpload } = require('../uploads');
 const { POST_SELECT, NOT_BLOCKED, serializePost, getPost, authorOf, notify, notifyMentions, isBlocked } = require('../social');
 const { deleteGroup } = require('../membership');
@@ -70,6 +71,7 @@ module.exports = function groupRoutes(ctx) {
   r.post('/groups', single('cover'), async (req, res) => {
     const name = text(req.body?.name, { field: 'Nom du groupe', min: 2, max: 60, required: true });
     const description = text(req.body?.description, { field: 'Description', max: 500 });
+    assertClean('Groupe', name, description);
     const cover = await saveImage(ctx, req.file);
     const now = Date.now();
     const id = await db.transaction(async (t) => {
@@ -109,6 +111,7 @@ module.exports = function groupRoutes(ctx) {
     requireManager(g, req.user);
     const name = req.body?.name !== undefined ? text(req.body.name, { field: 'Nom du groupe', min: 2, max: 60, required: true }) : g.name;
     const description = req.body?.description !== undefined ? text(req.body.description, { field: 'Description', max: 500 }) : g.description;
+    assertClean('Groupe', name, description);
     await db.run('UPDATE groupes SET name = ?, description = ? WHERE id = ?', name, description, g.id);
     res.json({ group: serialize(await loadGroup(g.id, req.user)) });
   });
@@ -150,12 +153,14 @@ module.exports = function groupRoutes(ctx) {
     const body = text(req.body?.body, { field: 'Publication', max: 2000 });
     const files = [...(req.files?.image || []), ...(req.files?.images || [])].slice(0, 6);
     if (!body && !files.length) fail(400, 'Votre publication est vide.');
+    const flagged = moderate(body);
     const urls = [];
     for (const f of files) urls.push(await saveImage(ctx, f));
     const { lastInsertRowid } = await db.run(
-      'INSERT INTO posts (user_id, body, image, groupe_id, created_at) VALUES (?, ?, ?, ?, ?)',
-      req.user.id, body, urls[0] || null, g.id, Date.now(),
+      'INSERT INTO posts (user_id, body, image, groupe_id, flagged, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      req.user.id, body, urls[0] || null, g.id, flagged, Date.now(),
     );
+    await autoReport(ctx, 'post', lastInsertRowid, flagged);
     for (const [i, url] of urls.slice(1).entries()) {
       await db.run('INSERT INTO post_media (post_id, url, position) VALUES (?, ?, ?)', lastInsertRowid, url, i + 1);
     }

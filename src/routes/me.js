@@ -3,6 +3,7 @@ const express = require('express');
 const { requireAuth, requireMember, destroySession } = require('../auth');
 const { verifyPassword } = require('../security');
 const { fail, text, cleanWebsite } = require('../http');
+const { assertClean } = require('../contentFilter');
 const { single, saveImage, deleteUpload } = require('../uploads');
 const { selfUser } = require('../social');
 const { deleteUser } = require('../membership');
@@ -21,6 +22,7 @@ module.exports = function meRoutes(ctx) {
     const city = b.city !== undefined ? text(b.city, { field: 'Ville', max: 60 }) : u.city;
     const profession = b.profession !== undefined ? text(b.profession, { field: 'Profession', max: 60 }) : u.profession;
     const website = b.website !== undefined ? cleanWebsite(b.website) : u.website;
+    assertClean('Profil', displayName, bio, city, profession);
     await db.run(
       'UPDATE users SET display_name = ?, bio = ?, city = ?, profession = ?, website = ? WHERE id = ?',
       displayName, bio, city, profession, website, u.id,

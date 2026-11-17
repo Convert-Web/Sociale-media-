@@ -88,6 +88,28 @@ function admissionReceivedEmail(config, user) {
   return { subject: 'AURUM — Votre demande d’admission est bien reçue', html, text };
 }
 
+// Phase payante : admission acceptée, reste le droit d'entrée
+function admissionApprovedEmail(config, user) {
+  const price = `${(config.priceCents / 100).toFixed(2).replace('.', ',')} €`;
+  const url = `${config.baseUrl}/rejoindre`;
+  const html = layout({
+    baseUrl: config.baseUrl,
+    preheader: 'Votre place est réservée : il ne reste que le droit d’entrée.',
+    body:
+      h1(`Votre admission est acceptée, ${esc(firstName(user.display_name))}.`) +
+      p(`La Direction a accepté votre demande. Les ${config.founderLimit} places gratuites de Fondateur ont toutes trouvé preneur : l’entrée se fait désormais par un droit d’entrée unique de ${price}, sans abonnement.`) +
+      p('Votre carte est prête, il ne reste qu’à y graver votre numéro.') +
+      button('Finaliser mon entrée', url),
+  });
+  const text = `Votre admission est acceptée, ${firstName(user.display_name)}.
+Les ${config.founderLimit} places gratuites de Fondateur sont attribuées : l'entrée se fait par un droit d'entrée unique de ${price}, sans abonnement.
+
+Finaliser mon entrée : ${url}
+
+— AURUM`;
+  return { subject: 'AURUM — Votre admission est acceptée', html, text };
+}
+
 function admissionAdminEmail(config, user) {
   const note = user.admission_note ? `<blockquote style="margin:0 0 14px;padding:12px 16px;border-left:3px solid ${GOLD};background:#f8f6f2;border-radius:8px;font-style:italic">${esc(user.admission_note)}</blockquote>` : p('<em>Aucune présentation.</em>');
   const html = layout({
@@ -167,4 +189,4 @@ function lettreEmail(config, data, recipient, unsubscribeUrl) {
   return { subject: data.subject, html, text: lines.join('\n') };
 }
 
-module.exports = { welcomeEmail, resetEmail, admissionReceivedEmail, admissionAdminEmail, testEmail, lettreEmail, layout, esc };
+module.exports = { welcomeEmail, resetEmail, admissionReceivedEmail, admissionApprovedEmail, admissionAdminEmail, testEmail, lettreEmail, layout, esc };

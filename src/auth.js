@@ -29,6 +29,15 @@ async function destroySession(ctx, req, res) {
   res.clearCookie(SESSION_COOKIE, { path: '/' });
 }
 
+// Entrée libre (ou compte de la Direction) : un compte non admis l'est à sa visite.
+// Sur invitation, il attend la Direction ou un code. Pendant la phase payante, il reçoit
+// son ticket et entre après le droit d'entrée (aucune écriture une fois le ticket obtenu).
+async function autoAdmit(ctx, row) {
+  if (!row || row.paid_at || row.admission_approved_at) return row;
+  if (row.is_admin || (await admissionMode(ctx)) === 'open') return (await admitMember(ctx, row.id)) || row;
+  return row;
+}
+
 function loadUser(ctx) {
   let lastCleanup = 0;
   return async (req, _res, next) => {
@@ -41,12 +50,7 @@ function loadUser(ctx) {
          WHERE s.id = ? AND s.expires_at > ?`,
         sha256(token), now,
       );
-      // Entrée libre : un compte non admis (ex. créé du temps de l'entrée payante) l'est à sa visite.
-      // Sur invitation, il attend la Direction ou un code.
-      if (row) {
-        const admit = !row.paid_at && !ctx.config.paidEntry && (row.is_admin || (await admissionMode(ctx)) === 'open');
-        req.user = admit ? await admitMember(ctx, row.id) : row;
-      }
+      if (row) req.user = await autoAdmit(ctx, row);
       if (now - lastCleanup > 3600 * 1000) {
         lastCleanup = now;
         ctx.db.run('DELETE FROM sessions WHERE expires_at <= ?', now).catch(() => {});
@@ -83,6 +87,7 @@ function csrfGuard(req, _res, next) {
 }
 
 module.exports = {
+  autoAdmit,
   SESSION_COOKIE,
   createSession,
   destroySession,

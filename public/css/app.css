@@ -1685,3 +1685,30 @@ button.ig-stat:active { opacity: 0.6; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+
+/* ===================================================================== v10
+   Filtre automatique : contenus masqués derrière un avertissement
+   ===================================================================== */
+/* Contenu et voile superposés dans la même case : le cadre prend la hauteur du plus grand */
+.sensitive { position: relative; display: grid; margin: 4px 0; border-radius: 14px; overflow: hidden; white-space: normal; }
+.sensitive > .sensitive-content, .sensitive > .sensitive-veil { grid-area: 1 / 1; }
+.post > .sensitive { margin: 4px var(--gutter-r) 4px var(--gutter); }
+.sensitive-content { filter: blur(9px); opacity: 0.55; pointer-events: none; user-select: none; -webkit-user-select: none; transition: filter 0.35s var(--ease), opacity 0.35s var(--ease); }
+.sensitive-veil { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 10px 14px; text-align: center; background: color-mix(in srgb, var(--surface-2) 70%, transparent); -webkit-backdrop-filter: saturate(120%); backdrop-filter: saturate(120%); transition: opacity 0.25s var(--ease); }
+.sensitive-label { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--text); }
+.sensitive-veil small { font-size: 12px; color: var(--muted); }
+.sensitive-actions { display: flex; gap: 8px; margin-top: 4px; }
+.sensitive-show { padding: 6px 14px; border-radius: 999px; background: var(--fill-strong); color: var(--text); font-size: 13.5px; font-weight: 600; }
+.sensitive.revealed { overflow: visible; }
+.sensitive.revealed .sensitive-content { filter: none; opacity: 1; pointer-events: auto; user-select: text; -webkit-user-select: text; }
+.sensitive.revealed .sensitive-veil { opacity: 0; pointer-events: none; }
+.sensitive-note { display: flex; align-items: center; gap: 6px; margin: 6px var(--gutter-r) 0 var(--gutter); font-size: 12.5px; color: var(--muted); }
+.comment .sensitive-note { margin: 4px 0 0; }
+.bubble .sensitive { min-width: 220px; margin: 0; border-radius: 12px; }
+.bubble .sensitive-veil { background: transparent; padding: 6px 4px; }
+.bubble .sensitive-label { font-size: 13.5px; }
+.bubble.theirs { -webkit-touch-callout: none; }
+.bubble-flag { display: block; margin-top: 4px; font-size: 11.5px; opacity: 0.7; }
+.post > .sensitive .post-body, .post > .sensitive .see-translation, .post > .sensitive-own .post-body { padding-left: 0; padding-right: 0; margin-left: 0; margin-right: 0; }
+.post > .sensitive-own { padding: 0 var(--gutter-r) 0 var(--gutter); }
+.post > .sensitive-own .sensitive-note { margin: 6px 0 0; }

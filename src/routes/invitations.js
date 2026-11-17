@@ -3,7 +3,7 @@ const express = require('express');
 const { requireAuth, requireMember } = require('../auth');
 const { fail, text } = require('../http');
 const { authorOf, selfUser } = require('../social');
-const { newCode, findInvitation, foundersLeft, redeemInvitation, announceAdmissionRequest, admissionMode } = require('../admission');
+const { newCode, findInvitation, foundersLeft, redeemInvitation, announceAdmissionRequest, admissionMode, entryIsPaid } = require('../admission');
 
 module.exports = function invitationRoutes(ctx) {
   const r = express.Router();
@@ -19,8 +19,11 @@ module.exports = function invitationRoutes(ctx) {
       used: Boolean(inv?.used_by),
       code: valid ? inv.code : null,
       inviter: inv ? authorOf(ctx, inv) : null,
-      foundersLeft: await foundersLeft(ctx),
+      foundersLeft: config.paidEntry ? 0 : await foundersLeft(ctx),
       founderLimit: config.founderLimit,
+      paidEntry: await entryIsPaid(ctx),
+      priceCents: config.priceCents,
+      currency: config.currency,
     });
   });
 
@@ -58,8 +61,8 @@ module.exports = function invitationRoutes(ctx) {
 
   // Compte en attente : utiliser un code d'invitation
   r.post('/admission/redeem', requireAuth, async (req, res) => {
-    if (req.user.paid_at) return res.json({ user: selfUser(ctx, req.user) });
-    if (config.paidEntry) fail(400, 'L’entrée se fait par le droit d’entrée.');
+    // Déjà admis, ou ticket déjà obtenu (phase payante) : le carton n'est pas consommé
+    if (req.user.paid_at || req.user.admission_approved_at) return res.json({ user: selfUser(ctx, req.user) });
     const inv = await findInvitation(ctx, req.body?.code);
     if (!inv || !inv.inviter_member) fail(404, 'Ce code d’invitation est introuvable.');
     if (inv.used_by) fail(409, 'Cette invitation a déjà été utilisée.');

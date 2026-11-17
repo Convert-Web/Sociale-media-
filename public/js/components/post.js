@@ -8,6 +8,7 @@ import {
 import { reportDialog } from './report.js';
 import { attachMentions } from './mentions.js';
 import { translateLink } from './translate.js';
+import { sensitive, flaggedNotice } from './sensitive.js';
 
 const MAX_POST = 2000;
 const MAX_PHOTOS = 6;
@@ -311,6 +312,7 @@ export function postCard(post, { expanded = false } = {}) {
               paintBody();
               m.close();
               toast('Publication modifiée.');
+              flaggedNotice(res.post);
             } catch (err) {
               save.disabled = false;
               toast(err.message, 'error');
@@ -361,6 +363,8 @@ export function postCard(post, { expanded = false } = {}) {
 
   // « Voir la traduction » : publication écrite dans une autre langue
   const bodyTranslate = translateLink(post.body, post.lang, { show: ([t]) => paintBody(t), hide: () => paintBody() });
+  // Filtre automatique : texte flouté derrière un avertissement (sauf pour son auteur)
+  const textParts = post.flagged ? [sensitive(h('div', null, bodyEl, bodyTranslate), post.flagged, { mine: post.mine })] : [bodyEl, bodyTranslate];
 
   // « Voir les N commentaires » sous la publication
   const moreComments = h('button', { class: 'see-comments', type: 'button', hidden: !post.commentCount || expanded }, post.commentCount > 1 ? `Voir les ${num(post.commentCount)} commentaires` : 'Voir le commentaire');
@@ -382,13 +386,11 @@ export function postCard(post, { expanded = false } = {}) {
       ),
       menuBtn,
     ),
-    hasMedia ? null : bodyEl,
-    hasMedia ? null : bodyTranslate,
+    ...(hasMedia ? [] : textParts),
     hasMedia ? gallery(post.images) : null,
     post.journal ? journalLink(post.journal) : null,
     h('div', { class: 'post-actions' }, reactBtn, faces, commentBtn, shareBtn, h('span', { class: 'grow' }), saveBtn),
-    hasMedia ? bodyEl : null,
-    hasMedia ? bodyTranslate : null,
+    ...(hasMedia ? textParts : []),
     moreComments,
     commentsHost,
   ]);
@@ -429,6 +431,7 @@ function commentEl(c, onDelete) {
     actions.push(h('button', { onclick: () => reportDialog('comment', c.id, 'Signaler le commentaire') }, 'Signaler'));
   }
   const commentBody = h('div', { class: 'comment-body' }, richText(c.body));
+  const commentTranslate = translateLink(c.body, c.lang, { show: ([t]) => commentBody.replaceChildren(richText(t)), hide: () => commentBody.replaceChildren(richText(c.body)) });
   return h(
     'div',
     { class: 'comment', dataset: { id: c.id } },
@@ -440,8 +443,7 @@ function commentEl(c, onDelete) {
         'div',
         { class: 'comment-bubble' },
         h('div', { class: 'post-head' }, h('div', { class: 'who' }, nameLine(c.author), memberChip(c.author))),
-        commentBody,
-        translateLink(c.body, c.lang, { show: ([t]) => commentBody.replaceChildren(richText(t)), hide: () => commentBody.replaceChildren(richText(c.body)) }),
+        c.flagged ? sensitive(h('div', null, commentBody, commentTranslate), c.flagged, { mine: c.author.id === store.user.id }) : [commentBody, commentTranslate],
       ),
       h('div', { class: 'comment-meta' }, h('span', { title: fullDate(c.createdAt) }, timeAgo(c.createdAt)), actions),
     ),
@@ -470,6 +472,7 @@ function commentsSection(post, onCount) {
         try {
           const { comment } = await api.post(`/api/posts/${post.id}/comments`, { body });
           list.append(commentEl(comment, removeComment));
+          flaggedNotice(comment);
           onCount(++count);
           ta.value = '';
           ta.dispatchEvent(new Event('input'));
@@ -599,7 +602,8 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
           files = [];
           paintPreviews();
           fit();
-          toast(post.groupId ? 'Publié dans le groupe.' : 'Publié dans le Salon.');
+          if (post.flagged) flaggedNotice(post);
+          else toast(post.groupId ? 'Publié dans le groupe.' : 'Publié dans le Salon.');
           store.emit('post:created', post);
           onPosted?.(post);
         } catch (err) {

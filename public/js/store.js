@@ -78,7 +78,7 @@ export function connectRealtime() {
     return;
   }
   if (source) return;
-  source = new EventSource('/api/events');
+  source = new EventSource('/api/stream');
   const relay = (name) =>
     source.addEventListener(name, (e) => {
       const data = JSON.parse(e.data);

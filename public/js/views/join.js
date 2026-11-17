@@ -78,6 +78,10 @@ function admissionView(ctx) {
         clearInterval(timer);
         connectRealtime();
         navigate('/bienvenue', { replace: true });
+      } else if (store.user?.admission?.approved) {
+        // Phase payante : admission acceptée, place au droit d'entrée
+        clearInterval(timer);
+        navigate('/rejoindre', { replace: true });
       }
     } catch {
       /* nouvel essai */
@@ -110,6 +114,9 @@ function admissionView(ctx) {
             ? 'Le cercle grandit lentement et la Direction n’a pas retenu votre demande pour le moment. Une invitation d’un membre vous ouvre la porte à tout moment.'
             : 'La Direction examine chaque candidature personnellement. Cette page s’ouvrira d’elle-même dès votre admission.',
         ),
+        store.config.paidEntry
+          ? h('p', { class: 'muted small', style: { marginTop: '12px' } }, `Les ${store.config.founderLimit} places gratuites de Fondateur ont toutes trouvé preneur : une fois admis, vous réglerez un droit d’entrée unique de ${money(store.config.priceCents, store.config.currency)}, sans abonnement.`)
+          : null,
         h('div', { style: { marginTop: '30px', maxWidth: '420px' } }, memberCard({ name: u.displayName, number: null, since: cardSince(Date.now()) })),
       ),
       h(
@@ -132,7 +139,10 @@ export function joinView(ctx) {
     return h('div');
   }
   const cfg = store.config;
-  if (!cfg.paidEntry) return admissionView(ctx);
+  // Gratuit tant qu'il reste des places de Fondateur. Ensuite : invitation ou accord de la
+  // Direction (le « ticket »), puis droit d'entrée.
+  const ticket = u.admission?.approved || cfg.admission === 'open' || u.isAdmin;
+  if (!cfg.paidEntry || !ticket) return admissionView(ctx);
   const price = money(cfg.priceCents, cfg.currency);
   const firstName = u.displayName.split(/\s+/)[0];
   const status = ctx.query.get('statut');
@@ -158,7 +168,7 @@ export function joinView(ctx) {
       ),
     );
   }
-  if (!canPay) notices.push(h('div', { class: 'form-error' }, 'Le paiement est momentanément indisponible.'));
+  if (!canPay) notices.push(h('div', { class: 'form-ok' }, 'Le paiement en ligne ouvre très bientôt. Votre place est réservée : nous vous écrirons dès son ouverture.'));
 
   const showError = (msg) => {
     err.textContent = msg;
@@ -278,7 +288,8 @@ export function joinView(ctx) {
         { class: 'fade-up' },
         h('div', { class: 'steps' }, h('i', { class: 'on' }), h('i', { class: 'on' }), h('span', null, "Étape 2 sur 2 — Droit d'entrée")),
         h('h1', null, `Plus qu'une porte à franchir, `, h('em', { class: 'accent' }, firstName), '.'),
-        h('p', { class: 'lead' }, 'Votre carte est prête. Il ne manque que le droit d’entrée pour y graver votre numéro.'),
+        h('p', { class: 'lead' }, u.admission?.approved ? 'Votre admission est acceptée et votre carte est prête. Il ne manque que le droit d’entrée pour y graver votre numéro.' : 'Votre carte est prête. Il ne manque que le droit d’entrée pour y graver votre numéro.'),
+        h('p', { class: 'muted small', style: { marginTop: '10px' } }, `Les ${cfg.founderLimit} premières places, gratuites, ont été attribuées aux Fondateurs. Le droit d’entrée est unique : aucun abonnement.`),
         h('div', { style: { marginTop: '34px', maxWidth: '420px' } }, memberCard({ name: u.displayName, number: null, since: cardSince(Date.now()) })),
       ),
       h('div', { class: 'fade-up', style: { animationDelay: '.1s' } }, form),

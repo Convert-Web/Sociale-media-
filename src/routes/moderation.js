@@ -11,16 +11,20 @@ const REASONS = {
   harassment: 'Harcèlement ou propos haineux',
   fake: 'Faux profil ou usurpation',
   other: 'Autre',
+  // Signalements du filtre automatique (reporter_id = 0)
+  auto: 'Filtre automatique',
 };
-const TYPES = ['post', 'user', 'comment'];
+const TYPES = ['post', 'user', 'comment', 'message'];
 
 module.exports = function moderationRoutes(ctx) {
   const r = express.Router();
   const { db } = ctx;
 
-  const targetExists = async (type, id) => {
+  const targetExists = async (type, id, user) => {
     if (type === 'post') return db.get('SELECT id FROM posts WHERE id = ?', id);
     if (type === 'comment') return db.get('SELECT id FROM comments WHERE id = ?', id);
+    // Message privé : seul son destinataire peut le signaler
+    if (type === 'message') return db.get('SELECT id FROM messages WHERE id = ? AND recipient_id = ?', id, user.id);
     return db.get('SELECT id FROM users WHERE id = ? AND paid_at IS NOT NULL', id);
   };
 
@@ -28,8 +32,8 @@ module.exports = function moderationRoutes(ctx) {
     const type = req.body?.type;
     const id = intParam(req.body?.id);
     if (!TYPES.includes(type) || !id) fail(400, 'Signalement invalide.');
-    if (!REASONS[req.body?.reason]) fail(400, 'Choisissez un motif.');
-    if (!(await targetExists(type, id))) fail(404, 'Contenu introuvable.');
+    if (!REASONS[req.body?.reason] || req.body.reason === 'auto') fail(400, 'Choisissez un motif.');
+    if (!(await targetExists(type, id, req.user))) fail(404, 'Contenu introuvable.');
     if (type === 'user' && id === req.user.id) fail(400, 'Vous ne pouvez pas vous signaler vous-même.');
     const details = text(req.body?.details, { field: 'Précisions', max: 500 });
     const reason = details ? `${req.body.reason}: ${details}` : req.body.reason;
@@ -64,6 +68,14 @@ module.exports = function moderationRoutes(ctx) {
       } else if (row.target_type === 'comment') {
         const c = await db.get('SELECT c.id, c.body, c.post_id, u.username, u.display_name FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?', row.target_id);
         if (c) target = { id: c.id, text: c.body, author: c.username, authorName: c.display_name, link: `/p/${c.post_id}` };
+      } else if (row.target_type === 'message') {
+        // Seul le message signalé est montré à la Direction, jamais le reste de la conversation
+        const m = await db.get(
+          `SELECT m.id, m.body, s.username, s.display_name, r.username AS to_username, r.display_name AS to_name
+           FROM messages m JOIN users s ON s.id = m.sender_id JOIN users r ON r.id = m.recipient_id WHERE m.id = ?`,
+          row.target_id,
+        );
+        if (m) target = { id: m.id, text: m.body, author: m.username, authorName: m.display_name, link: null, to: m.to_username, toName: m.to_name };
       } else {
         const u = await db.get('SELECT id, username, display_name, bio FROM users WHERE id = ?', row.target_id);
         if (u) target = { id: u.id, text: u.bio, author: u.username, authorName: u.display_name, link: `/@${u.username}` };
@@ -75,6 +87,7 @@ module.exports = function moderationRoutes(ctx) {
         reason: REASONS[code] || code,
         details: rest.join(': ') || null,
         reporter: row.reporter,
+        automatic: code === 'auto',
         total: row.total,
         createdAt: row.created_at,
         target,
@@ -98,6 +111,8 @@ module.exports = function moderationRoutes(ctx) {
         }
       } else if (report.target_type === 'comment') {
         await db.run('DELETE FROM comments WHERE id = ?', report.target_id);
+      } else if (report.target_type === 'message') {
+        await db.run('DELETE FROM messages WHERE id = ?', report.target_id);
       } else {
         if (report.target_id === req.user.id) fail(400, 'Vous ne pouvez pas vous exclure vous-même.');
         const media = await deleteUser(ctx, report.target_id);

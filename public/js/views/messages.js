@@ -5,6 +5,8 @@ import { h, icon, avatar, nameLine, memberChip, clear, spinner, emptyState, time
 import { pickMember } from './profile.js';
 import { pushBanner } from '../components/pushcard.js';
 import { translateLink } from '../components/translate.js';
+import { sensitive, flaggedNotice } from '../components/sensitive.js';
+import { reportDialog } from '../components/report.js';
 
 export function messagesView(ctx) {
   const other = ctx.params.username || null;
@@ -79,7 +81,28 @@ export function messagesView(ctx) {
       const mine = m.senderId === me;
       const text = h('span', { class: 'bubble-text' }, richText(m.body));
       const tr = mine ? null : translateLink(m.body, m.lang, { show: ([t]) => text.replaceChildren(richText(t)), hide: () => text.replaceChildren(richText(m.body)), small: true });
-      const bubble = h('div', { class: `bubble ${mine ? 'mine' : 'theirs'}`, dataset: { id: m.id } }, text, tr, h('time', null, clock(m.createdAt)));
+      const report = () => reportDialog('message', m.id, 'Signaler ce message');
+      // Filtre automatique : message flouté chez le destinataire, mention discrète chez l'auteur
+      const content = !m.flagged
+        ? [text, tr]
+        : mine
+          ? [text, h('small', { class: 'bubble-flag' }, 'Masqué chez le destinataire · transmis à la Direction')]
+          : sensitive(h('div', null, text, tr), m.flagged, { extra: h('button', { class: 'sensitive-show', type: 'button', onclick: report }, 'Signaler') });
+      const bubble = h('div', { class: `bubble ${mine ? 'mine' : 'theirs'}${m.flagged ? ' flagged' : ''}`, dataset: { id: m.id } }, content, h('time', null, clock(m.createdAt)));
+      // Signaler un message reçu : clic droit, ou appui long sur téléphone
+      if (!mine) {
+        bubble.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          report();
+        });
+        let press = null;
+        const cancel = () => clearTimeout(press);
+        bubble.addEventListener('touchstart', () => {
+          cancel();
+          press = setTimeout(report, 600);
+        }, { passive: true });
+        for (const ev of ['touchend', 'touchmove', 'touchcancel']) bubble.addEventListener(ev, cancel, { passive: true });
+      }
       if (!animate) bubble.style.animation = 'none';
       box.insertBefore(bubble, seen);
       if (mine) {
@@ -115,6 +138,7 @@ export function messagesView(ctx) {
           try {
             const { message } = await api.post(`/api/conversations/${enc(peer.username)}`, { body });
             addMessage(message);
+            flaggedNotice(message);
             ta.value = '';
             ta.dispatchEvent(new Event('input'));
             scrollDown();

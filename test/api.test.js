@@ -38,6 +38,7 @@ before(async () => {
     dataDir: tmp,
     database: { url: `file:${path.join(tmp, 'test.db')}`, authToken: '' },
     paidEntry: true,
+    admissionDefault: 'open',
     demoPayments: true,
     rateLimit: false,
     adminEmails: ['admin@aurum.test'],

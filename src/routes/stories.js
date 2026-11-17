@@ -2,6 +2,7 @@
 const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam } = require('../http');
+const { assertClean } = require('../contentFilter');
 const { single, saveImage, deleteUpload } = require('../uploads');
 const { authorOf } = require('../social');
 
@@ -72,6 +73,7 @@ module.exports = function storyRoutes(ctx) {
   r.post('/stories', single('image'), async (req, res) => {
     if (!req.file) fail(400, 'Ajoutez une photo à votre story.');
     const caption = text(req.body?.caption, { field: 'Légende', max: 200 });
+    assertClean('Légende', caption);
     const media = await saveImage(ctx, req.file);
     const now = Date.now();
     const { lastInsertRowid } = await db.run(

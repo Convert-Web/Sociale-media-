@@ -3,6 +3,7 @@ const express = require('express');
 const { requireMember } = require('../auth');
 const { deletePost } = require('../membership');
 const { fail, text, intParam } = require('../http');
+const { moderate, autoReport } = require('../contentFilter');
 const { photos, saveImage, deleteUpload } = require('../uploads');
 const {
   POST_SELECT,
@@ -89,13 +90,16 @@ module.exports = function postRoutes(ctx) {
     const body = text(req.body?.body, { field: 'Publication', max: 2000 });
     const files = [...(req.files?.image || []), ...(req.files?.images || [])].slice(0, 6);
     if (!body && !files.length) fail(400, 'Votre publication est vide.');
+    // Filtre automatique : propos haineux ou menaces refusés, insultes masquées et signalées
+    const flagged = moderate(body);
     const urls = [];
     for (const f of files) urls.push(await saveImage(ctx, f));
     // La première photo reste dans posts.image (compatibilité), les suivantes dans post_media.
     const { lastInsertRowid } = await db.run(
-      'INSERT INTO posts (user_id, body, image, created_at) VALUES (?, ?, ?, ?)',
-      req.user.id, body, urls[0] || null, Date.now(),
+      'INSERT INTO posts (user_id, body, image, flagged, created_at) VALUES (?, ?, ?, ?, ?)',
+      req.user.id, body, urls[0] || null, flagged, Date.now(),
     );
+    await autoReport(ctx, 'post', lastInsertRowid, flagged);
     for (const [i, url] of urls.slice(1).entries()) {
       await db.run('INSERT INTO post_media (post_id, url, position) VALUES (?, ?, ?)', lastInsertRowid, url, i + 1);
     }
@@ -119,7 +123,9 @@ module.exports = function postRoutes(ctx) {
     if (post.user_id !== req.user.id) fail(403, 'Seul l’auteur peut modifier sa publication.');
     const body = text(req.body?.body, { field: 'Publication', max: 2000 });
     if (!body && !post.image) fail(400, 'Votre publication est vide.');
-    await db.run('UPDATE posts SET body = ?, edited_at = ? WHERE id = ?', body, Date.now(), post.id);
+    const flagged = moderate(body);
+    await db.run('UPDATE posts SET body = ?, flagged = ?, edited_at = ? WHERE id = ?', body, flagged, Date.now(), post.id);
+    await autoReport(ctx, 'post', post.id, flagged);
     res.json({ post: await getPost(ctx, post.id, req.user) });
   });
 
@@ -202,10 +208,12 @@ module.exports = function postRoutes(ctx) {
   r.post('/posts/:id/comments', async (req, res) => {
     const post = await loadPost(req.params.id, req.user);
     const body = text(req.body.body, { field: 'Commentaire', max: 1000, required: true });
+    const flagged = moderate(body);
     const { lastInsertRowid } = await db.run(
-      'INSERT INTO comments (post_id, user_id, body, created_at) VALUES (?, ?, ?, ?)',
-      post.id, req.user.id, body, Date.now(),
+      'INSERT INTO comments (post_id, user_id, body, flagged, created_at) VALUES (?, ?, ?, ?, ?)',
+      post.id, req.user.id, body, flagged, Date.now(),
     );
+    await autoReport(ctx, 'comment', lastInsertRowid, flagged);
     await notify(ctx, { userId: post.user_id, actorId: req.user.id, type: 'comment', postId: post.id });
     await notifyMentions(ctx, body, req.user.id, post.id);
     const row = await db.get(`${COMMENT_SELECT} WHERE c.id = ?`, lastInsertRowid);

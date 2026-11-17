@@ -5,7 +5,7 @@ const { fail, intParam } = require('../http');
 const { deleteUpload } = require('../uploads');
 const { authorOf } = require('../social');
 const { deleteUser, admitMember } = require('../membership');
-const { admissionMode, setAdmissionMode, MODES } = require('../admission');
+const { admissionMode, setAdmissionMode, MODES, entryIsPaid, foundersLeft } = require('../admission');
 const { botsEnabled } = require('../bots');
 
 module.exports = function adminRoutes(ctx) {
@@ -25,7 +25,9 @@ module.exports = function adminRoutes(ctx) {
          (SELECT COUNT(*) FROM messages) AS messages,
          (SELECT COUNT(*) FROM likes) AS likes,
          (SELECT COUNT(DISTINCT target_type || ':' || target_id) FROM reports WHERE resolved_at IS NULL) AS openReports,
-         (SELECT COUNT(*) FROM users WHERE paid_at IS NULL AND admission_declined_at IS NULL) AS admissions`,
+         (SELECT COUNT(*) FROM users WHERE paid_at IS NULL AND admission_declined_at IS NULL AND admission_approved_at IS NULL) AS admissions,
+         (SELECT COUNT(*) FROM users WHERE paid_at IS NULL AND admission_approved_at IS NOT NULL) AS awaitingPayment,
+         (SELECT COUNT(*) FROM reports WHERE resolved_at IS NULL AND reporter_id = 0) AS autoReports`,
     );
     const dayMs = 24 * 3600 * 1000;
     const start = new Date();
@@ -52,7 +54,18 @@ module.exports = function adminRoutes(ctx) {
       signups: days,
       recentMembers,
       recentPayments,
-      config: { stripeEnabled: Boolean(ctx.stripe), demoPayments: config.demoPayments, priceCents: config.priceCents, paidEntry: config.paidEntry, admission: await admissionMode(ctx), bots: await botsEnabled(ctx), botsAvailable: Boolean(config.bots) },
+      config: {
+        stripeEnabled: Boolean(ctx.stripe),
+        demoPayments: config.demoPayments,
+        priceCents: config.priceCents,
+        currency: config.currency,
+        paidEntry: await entryIsPaid(ctx),
+        founderLimit: config.founderLimit,
+        foundersLeft: config.paidEntry ? 0 : await foundersLeft(ctx),
+        admission: await admissionMode(ctx),
+        bots: await botsEnabled(ctx),
+        botsAvailable: Boolean(config.bots),
+      },
     });
   });
 
@@ -60,8 +73,9 @@ module.exports = function adminRoutes(ctx) {
   r.get('/admin/admissions', async (_req, res) => {
     const rows = await db.all(
       `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot, u.email, u.created_at,
-              u.admission_note, u.admission_requested_at, u.admission_declined_at
-       FROM users u WHERE u.paid_at IS NULL ORDER BY (u.admission_declined_at IS NOT NULL), u.created_at DESC LIMIT 200`,
+              u.admission_note, u.admission_requested_at, u.admission_declined_at, u.admission_approved_at
+       FROM users u WHERE u.paid_at IS NULL
+       ORDER BY (u.admission_declined_at IS NOT NULL), (u.admission_approved_at IS NOT NULL), u.created_at DESC LIMIT 200`,
     );
     res.json({
       admissions: rows.map((x) => ({
@@ -70,6 +84,8 @@ module.exports = function adminRoutes(ctx) {
         note: x.admission_note || '',
         createdAt: x.created_at,
         declined: Boolean(x.admission_declined_at),
+        // Admission acceptée, droit d'entrée pas encore réglé
+        approved: Boolean(x.admission_approved_at),
       })),
     });
   });
@@ -80,8 +96,13 @@ module.exports = function adminRoutes(ctx) {
     if (!user) fail(404, 'Demande introuvable.');
     if (req.params.action === 'approve') {
       await db.run('UPDATE users SET admission_declined_at = NULL WHERE id = ?', id);
-      await admitMember(ctx, id); // courriel de bienvenue envoyé à l'admission
-      return res.json({ ok: true });
+      // Courriel de bienvenue envoyé à l'admission ; phase payante : ticket et invitation à régler
+      const admitted = await admitMember(ctx, id);
+      if (admitted && !admitted.paid_at) {
+        const { admissionApprovedEmail } = require('../emails');
+        await ctx.mailer.send({ to: admitted.email, name: admitted.display_name, ...admissionApprovedEmail(config, admitted) }).catch((err) => console.warn('[courriel] admission :', err.message));
+      }
+      return res.json({ ok: true, member: Boolean(admitted?.paid_at) });
     }
     if (req.params.action === 'decline') {
       await db.run('UPDATE users SET admission_declined_at = ? WHERE id = ?', Date.now(), id);

@@ -14,9 +14,10 @@ module.exports = function publicRoutes(ctx) {
     res.json({
       members,
       cities,
-      founderSpotsLeft: Math.max(0, config.founderLimit - lastNumber),
+      founderSpotsLeft: config.paidEntry ? 0 : Math.max(0, config.founderLimit - lastNumber),
       founderLimit: config.founderLimit,
-      paidEntry: config.paidEntry,
+      // Gratuit pour les Fondateurs, payant ensuite
+      paidEntry: config.paidEntry || lastNumber >= config.founderLimit,
       priceCents: config.priceCents,
       currency: config.currency,
     });

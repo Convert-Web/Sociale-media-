@@ -50,7 +50,13 @@ function selfUser(ctx, u) {
     lang: u.lang || null,
     admission: u.paid_at
       ? null
-      : { requested: Boolean(u.admission_requested_at), declined: Boolean(u.admission_declined_at), note: u.admission_note || '' },
+      : {
+          requested: Boolean(u.admission_requested_at),
+          declined: Boolean(u.admission_declined_at),
+          // Admission acceptée (invitation ou Direction) : reste le droit d'entrée à régler
+          approved: Boolean(u.admission_approved_at),
+          note: u.admission_note || '',
+        },
   };
 }
 
@@ -60,7 +66,7 @@ const REACTIONS = ['love', 'like', 'bravo', 'fire', 'haha', 'wow'];
 // Le seul paramètre de POST_SELECT est l'identifiant du membre qui consulte (v.id) ;
 // il précède tous les paramètres de la clause WHERE ajoutée par l'appelant.
 const POST_SELECT = `
-  SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.groupe_id, p.journal_id,
+  SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.groupe_id, p.journal_id, p.flagged,
          ji.kind AS j_kind, ji.title AS j_title, ji.image AS j_image, ji.url AS j_url, ji.site_name AS j_site, ji.summary AS j_summary,
          u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count,
@@ -98,6 +104,12 @@ function reactionSummary(list) {
     .map(([type, count]) => ({ type, count }));
 }
 
+// « injure,sexuel » → ['Insulte', 'Propos sexuels déplacés'] ; null si rien à signaler
+function flaggedLabels(value) {
+  if (!value) return null;
+  return require('./contentFilter').labels(String(value).split(','));
+}
+
 function serializePost(ctx, row, viewer) {
   const mine = row.user_id === viewer.id;
   const images = [row.image, ...(row.media ? row.media.split('|') : [])].filter(Boolean);
@@ -123,6 +135,8 @@ function serializePost(ctx, row, viewer) {
     commentCount: row.comment_count,
     mine,
     canDelete: mine || Boolean(viewer.is_admin),
+    // Filtre automatique : texte masqué derrière un avertissement (catégories détectées)
+    flagged: flaggedLabels(row.flagged),
   };
 }
 
@@ -132,7 +146,7 @@ async function getPost(ctx, postId, viewer) {
 }
 
 const COMMENT_SELECT = `
-  SELECT c.id, c.post_id, c.body, c.created_at, c.user_id,
+  SELECT c.id, c.post_id, c.body, c.created_at, c.user_id, c.flagged,
          u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot
   FROM comments c JOIN users u ON u.id = c.user_id`;
 
@@ -145,13 +159,14 @@ function serializeComment(ctx, row, viewer) {
     createdAt: row.created_at,
     author: authorOf(ctx, row),
     canDelete: row.user_id === viewer.id || Boolean(viewer.is_admin),
+    flagged: flaggedLabels(row.flagged),
   };
 }
 
 const NOTIF_SELECT = `
   SELECT n.id, n.type, n.post_id, n.groupe_id, n.event_id, n.place_id, n.created_at, n.read_at,
          a.id AS user_id, a.username, a.display_name, a.avatar, a.member_number, a.verified_at, a.is_bot,
-         p.body AS post_body, p.image AS post_image,
+         CASE WHEN p.flagged IS NULL THEN p.body ELSE '' END AS post_body, p.image AS post_image,
          g.name AS groupe_name, e.title AS event_title, pl.name AS place_name
   FROM notifications n
   JOIN users a ON a.id = n.actor_id
@@ -243,6 +258,7 @@ async function notifyMentions(ctx, text, actorId, postId, groupId = null) {
 }
 
 module.exports = {
+  flaggedLabels,
   isFounder,
   authorOf,
   publicUser,

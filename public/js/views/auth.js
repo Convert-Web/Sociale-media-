@@ -129,13 +129,13 @@ export function signupView(ctx) {
 
   // Entrée sur invitation : code d'un parrain (lien d'invitation) ou demande d'admission
   const onInvitation = store.config.admission === 'invitation';
-  let code = store.config.paidEntry ? '' : (ctx.query.get('invitation') || rememberedInvitation()).toUpperCase();
+  let code = (ctx.query.get('invitation') || rememberedInvitation()).toUpperCase();
   const inviteBox = h('div');
   const note = h('textarea', { class: 'textarea', rows: 3, maxlength: 500, placeholder: 'Votre activité, ce qui vous amène, qui vous connaissez au sein du cercle…' });
   const noteField = field('Présentez-vous (facultatif)', note, 'Lu par la Direction, qui valide chaque demande personnellement.');
   const paintEntry = () => {
     noteField.hidden = !onInvitation || Boolean(code);
-    if (!store.config.paidEntry) btn.firstChild.textContent = onInvitation && !code ? 'Envoyer ma demande' : 'Créer mon compte';
+    btn.firstChild.textContent = onInvitation && !code ? 'Envoyer ma demande' : store.config.paidEntry ? 'Continuer' : 'Créer mon compte';
   };
   if (code) {
     api
@@ -179,7 +179,7 @@ export function signupView(ctx) {
             invitation: code || undefined,
             note: noteField.hidden ? undefined : note.value,
           });
-          if (user.isMember) rememberInvitation(null);
+          if (user.isMember || user.admission?.approved) rememberInvitation(null);
           afterAuth(user, '/bienvenue');
         } catch (e2) {
           err.show(e2.message);
@@ -220,7 +220,9 @@ export function signupView(ctx) {
       'p',
       { class: 'sub' },
       paid
-        ? "Quelques informations, puis le droit d'entrée. Deux minutes, pas plus."
+        ? onInvitation
+          ? `Les ${store.config.founderLimit} places gratuites de Fondateur sont attribuées. L’entrée se fait sur invitation ou après validation de la Direction, puis par un droit d’entrée unique.`
+          : "Quelques informations, puis le droit d'entrée. Deux minutes, pas plus."
         : onInvitation
           ? 'L’entrée se fait sur invitation. Sans invitation, votre demande est étudiée personnellement par la Direction.'
           : 'Quelques informations et votre carte de membre est à vous. Gratuit.',

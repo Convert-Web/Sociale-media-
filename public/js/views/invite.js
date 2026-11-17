@@ -2,7 +2,7 @@
 import { api, enc } from '../api.js';
 import { store, connectRealtime } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, toast, spinner, memberCard, cardSince, fullDate, emptyState, verifiedMark } from '../dom.js';
+import { h, icon, avatar, toast, spinner, memberCard, cardSince, fullDate, emptyState, verifiedMark, money } from '../dom.js';
 
 const KEY = 'aurum:invitation';
 export function rememberInvitation(code) {
@@ -26,7 +26,14 @@ export const prettyCode = (code) => (code || '').replace(/(.{4})(?=.)/g, '$1 ');
 export async function redeemCode(code) {
   const { user } = await api.post('/api/admission/redeem', { code });
   store.setUser(user);
-  if (!user.isMember) return false;
+  if (!user.isMember) {
+    // Phase payante : l'invitation vaut ticket, reste le droit d'entrée
+    if (user.admission?.approved) {
+      rememberInvitation(null);
+      navigate('/rejoindre', { replace: true });
+    }
+    return false;
+  }
   rememberInvitation(null);
   await store.refresh();
   connectRealtime();
@@ -116,8 +123,10 @@ export async function invitationLanding(ctx) {
       ),
       h('div', { class: 'invite-card fade-up', style: { animationDelay: '.3s' } }, memberCard({ name: 'Votre nom ici', number: null, since: cardSince(Date.now()), founder: d.foundersLeft > 0 })),
       d.foundersLeft > 0
-        ? h('p', { class: 'invite-founders fade-up', style: { animationDelay: '.4s' } }, icon('crown'), `Plus que ${d.foundersLeft} place${d.foundersLeft > 1 ? 's' : ''} de Fondateur sur ${d.founderLimit}`)
-        : null,
+        ? h('p', { class: 'invite-founders fade-up', style: { animationDelay: '.4s' } }, icon('crown'), `Plus que ${d.foundersLeft} place${d.foundersLeft > 1 ? 's' : ''} de Fondateur sur ${d.founderLimit} — entrée gratuite`)
+        : d.paidEntry
+          ? h('p', { class: 'invite-founders fade-up', style: { animationDelay: '.4s' } }, icon('ticket'), `Droit d’entrée unique de ${money(d.priceCents, d.currency)}, sans abonnement`)
+          : null,
       h('div', { class: 'invite-cta fade-up', style: { animationDelay: '.5s' } }, cta),
       h('p', { class: 'muted small fade-up', style: { animationDelay: '.6s' } }, 'Invitation valable une seule fois.'),
     ),

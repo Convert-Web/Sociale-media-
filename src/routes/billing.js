@@ -3,7 +3,24 @@ const express = require('express');
 const { requireAuth } = require('../auth');
 const { fail } = require('../http');
 const { selfUser } = require('../social');
-const { grantMembership } = require('../membership');
+const { grantMembership, admitMember } = require('../membership');
+const { entryIsPaid, hasTicket } = require('../admission');
+
+// Avant tout paiement : places de Fondateur encore libres (entrée gratuite), ou ticket
+// obligatoire (invitation d'un membre, accord de la Direction, ou entrée libre).
+async function checkEntry(ctx, req) {
+  if (!(await entryIsPaid(ctx))) {
+    if (await hasTicket(ctx, req.user)) {
+      const user = await admitMember(ctx, req.user.id);
+      if (user?.paid_at) return { free: true, user };
+    }
+    fail(403, 'L’entrée est encore gratuite : il vous faut l’invitation d’un membre ou l’accord de la Direction.', 'ADMISSION_REQUIRED');
+  }
+  if (!(await hasTicket(ctx, req.user))) {
+    fail(403, 'Votre demande d’admission doit d’abord être acceptée par la Direction, ou utilisez le code d’invitation d’un membre.', 'ADMISSION_REQUIRED');
+  }
+  return null;
+}
 
 async function grantFromCheckoutSession(ctx, session) {
   if (!session || session.payment_status !== 'paid') return null;
@@ -52,6 +69,7 @@ module.exports = function billingRoutes(ctx) {
 
   r.post('/billing/checkout', requireAuth, async (req, res) => {
     if (req.user.paid_at) return res.json({ alreadyMember: true });
+    if ((await checkEntry(ctx, req))?.free) return res.json({ alreadyMember: true });
     if (req.body.waiver !== true) {
       fail(400, "Merci de confirmer votre demande d'accès immédiat pour continuer.");
     }
@@ -87,7 +105,7 @@ module.exports = function billingRoutes(ctx) {
       return res.json({ url: session.url });
     }
     if (config.demoPayments) return res.json({ demo: true });
-    fail(503, 'Le paiement est momentanément indisponible.');
+    fail(503, 'Le paiement en ligne n’est pas encore ouvert. Votre place est réservée : nous vous écrirons dès son ouverture.', 'PAYMENT_UNAVAILABLE');
   });
 
   // Retour depuis Stripe Checkout : on vérifie le paiement côté serveur
@@ -108,6 +126,9 @@ module.exports = function billingRoutes(ctx) {
   // Paiement simulé (développement / démonstration uniquement)
   r.post('/billing/demo', requireAuth, async (req, res) => {
     if (!config.demoPayments) fail(404, 'Indisponible.');
+    if (req.user.paid_at) return res.json({ user: selfUser(ctx, req.user) });
+    const entry = await checkEntry(ctx, req);
+    if (entry?.free) return res.json({ user: selfUser(ctx, entry.user) });
     if (req.body.waiver !== true) {
       fail(400, "Merci de confirmer votre demande d'accès immédiat pour continuer.");
     }

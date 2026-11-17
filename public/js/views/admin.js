@@ -50,8 +50,8 @@ async function reportsSection() {
     host.append(h('div', { class: 'reports-empty' }, icon('shield', 'icon-sm'), 'Aucun signalement à traiter.'));
     return host;
   }
-  const LABEL = { post: 'Publication', comment: 'Commentaire', user: 'Membre' };
-  const REMOVE = { post: 'Supprimer la publication', comment: 'Supprimer le commentaire', user: 'Exclure le membre' };
+  const LABEL = { post: 'Publication', comment: 'Commentaire', user: 'Membre', message: 'Message privé' };
+  const REMOVE = { post: 'Supprimer la publication', comment: 'Supprimer le commentaire', user: 'Exclure le membre', message: 'Supprimer le message' };
   for (const r of reports) {
     const resolve = async (action) => {
       if (action === 'remove' && !(await confirmDialog(`${REMOVE[r.type]} ?`, 'Cette action est définitive.', REMOVE[r.type]))) return;
@@ -76,15 +76,15 @@ async function reportsSection() {
       ),
       r.target
         ? h(
-            'a',
-            { href: r.target.link, class: 'report-target' },
-            h('small', null, `${r.target.authorName} · @${r.target.author}`),
+            r.target.link ? 'a' : 'div',
+            { href: r.target.link || undefined, class: 'report-target' },
+            h('small', null, `${r.target.authorName} · @${r.target.author}${r.target.to ? ` → @${r.target.to}` : ''}`),
             r.target.text ? h('p', null, r.target.text.slice(0, 220)) : null,
             r.target.image ? h('img', { src: r.target.image, alt: '' }) : null,
           )
         : h('p', { class: 'muted small' }, 'Le contenu a déjà été supprimé.'),
-      r.details ? h('p', { class: 'report-details' }, `« ${r.details} »`) : null,
-      h('p', { class: 'muted small' }, `Signalé par @${r.reporter || 'membre supprimé'}`),
+      r.details ? h('p', { class: 'report-details' }, r.automatic ? `Détecté : ${r.details}` : `« ${r.details} »`) : null,
+      h('p', { class: 'muted small' }, r.automatic ? 'Détecté par le filtre automatique' : `Signalé par @${r.reporter || 'membre supprimé'}`),
       h(
         'div',
         { class: 'row-end' },
@@ -211,13 +211,20 @@ async function admissionsSection(mode) {
   host.append(h('label', { class: 'admission-mode' }, h('span', { class: 'grow' }, h('b', null, 'Entrée sur invitation'), status), sw));
   host.append(botsSwitch());
 
-  const pending = admissions.filter((a) => !a.declined);
+  const pending = admissions.filter((a) => !a.declined && !a.approved);
   const declined = admissions.filter((a) => a.declined);
+  const awaiting = admissions.filter((a) => a.approved && !a.declined);
   const row = (a) => {
     const act = async (action) => {
       try {
-        await api.post(`/api/admin/admissions/${a.id}/${action}`);
-        toast(action === 'approve' ? `${a.displayName} est désormais membre.` : 'Demande refusée.');
+        const res = await api.post(`/api/admin/admissions/${a.id}/${action}`);
+        toast(
+          action !== 'approve'
+            ? 'Demande refusée.'
+            : res.member
+              ? `${a.displayName} est désormais membre.`
+              : `Admission acceptée : ${a.displayName} a reçu le lien pour régler son droit d’entrée.`,
+        );
         card.remove();
       } catch (err) {
         toast(err.message, 'error');
@@ -231,7 +238,9 @@ async function admissionsSection(mode) {
       h(
         'div',
         { class: 'row-start' },
-        h('button', { class: 'btn btn-primary btn-sm', onclick: () => act('approve') }, icon('check', 'icon-sm'), 'Admettre'),
+        a.approved && !a.declined
+          ? h('span', { class: 'tag' }, 'Acceptée · droit d’entrée en attente')
+          : h('button', { class: 'btn btn-primary btn-sm', onclick: () => act('approve') }, icon('check', 'icon-sm'), 'Admettre'),
         a.declined ? h('span', { class: 'tag' }, 'Refusée') : h('button', { class: 'btn btn-ghost btn-sm', onclick: () => act('decline') }, 'Refuser'),
       ),
     );
@@ -239,6 +248,9 @@ async function admissionsSection(mode) {
   };
   if (!pending.length) host.append(h('div', { class: 'reports-empty' }, icon('ticket', 'icon-sm'), 'Aucune demande en attente.'));
   for (const a of pending) host.append(row(a));
+  if (awaiting.length) {
+    host.append(h('details', { class: 'admissions-declined' }, h('summary', null, `Acceptées, droit d’entrée en attente (${awaiting.length})`), awaiting.map(row)));
+  }
   if (declined.length) {
     const more = h('details', { class: 'admissions-declined' }, h('summary', null, `Demandes refusées (${declined.length})`), declined.map(row));
     host.append(more);
@@ -249,11 +261,43 @@ async function admissionsSection(mode) {
 export async function adminView(ctx) {
   const data = await api.get('/api/admin/overview');
   botsState = { enabled: Boolean(data.config.bots), available: Boolean(data.config.botsAvailable) };
-  const admissions = data.config.paidEntry ? null : await admissionsSection(data.config.admission);
+  const admissions = await admissionsSection(data.config.admission);
   const emails = await emailsSection();
   const reports = await reportsSection();
   const t = data.totals;
-  const conversion = t.members + t.pending ? Math.round((t.members / (t.members + t.pending)) * 100) : 0;
+  const c = data.config;
+  const price = money(c.priceCents, c.currency);
+  // Entrée : gratuite pour les Fondateurs, puis droit d'entrée (Stripe)
+  const entry = h(
+    'div',
+    { class: 'admissions' },
+    h(
+      'div',
+      { class: 'admission-mode' },
+      h(
+        'span',
+        { class: 'grow' },
+        h('b', null, c.paidEntry ? `Entrée payante · ${price}` : `Entrée gratuite · ${num(c.foundersLeft)} place${c.foundersLeft > 1 ? 's' : ''} de Fondateur sur ${num(c.founderLimit)}`),
+        h(
+          'small',
+          { class: 'muted' },
+          c.paidEntry
+            ? `Les ${num(c.founderLimit)} places gratuites sont attribuées. Après invitation ou votre accord, chaque nouveau membre règle un droit d’entrée unique.`
+            : `Ensuite, l’entrée deviendra payante automatiquement : droit d’entrée unique de ${price}, après invitation ou votre accord.`,
+        ),
+      ),
+    ),
+    c.stripeEnabled
+      ? h('div', { class: 'form-ok' }, 'Stripe est branché : les paiements arrivent directement sur votre compte Stripe.')
+      : h(
+          'div',
+          { class: 'form-error' },
+          c.paidEntry
+            ? 'Stripe n’est pas encore branché : les nouveaux membres ne peuvent pas régler leur droit d’entrée. '
+            : 'À brancher avant la dernière place de Fondateur : ',
+          'créez un compte Stripe (gratuit, sans abonnement), puis ajoutez STRIPE_SECRET_KEY et STRIPE_WEBHOOK_SECRET dans les réglages Vercel.',
+        ),
+  );
 
   const kpi = (label, value, gold, sub) => h('div', { class: `kpi${gold ? ' gold' : ''}` }, h('small', null, label), h('b', { class: gold ? 'accent' : '' }, value), sub ? h('span', { class: 'muted small' }, sub) : null);
 
@@ -308,22 +352,23 @@ export async function adminView(ctx) {
     null,
     backHead(
       'Direction du cercle',
-      !data.config.paidEntry ? 'Inscription gratuite' : data.config.stripeEnabled ? 'Paiements Stripe actifs' : 'Paiements en mode démonstration',
+      !c.paidEntry ? 'Entrée gratuite — Fondateurs' : c.stripeEnabled ? 'Entrée payante · Stripe actif' : 'Entrée payante · Stripe à brancher',
     ),
     h(
       'div',
       { class: 'kpis' },
       kpi('Membres', num(t.members), true),
-      data.config.paidEntry
+      c.paidEntry
         ? kpi("Droits d'entrée encaissés", money(t.revenue), true, t.demoRevenue ? `+ ${money(t.demoRevenue)} simulés` : null)
-        : kpi('Signalements à traiter', num(t.openReports || 0), Boolean(t.openReports)),
-      data.config.paidEntry
-        ? kpi('Conversion', `${conversion} %`, false, `${num(t.pending)} inscrit${t.pending > 1 ? 's' : ''} sans paiement`)
-        : kpi('Réactions', num(t.likes)),
+        : kpi('Places de Fondateur', num(c.foundersLeft), true, `restantes sur ${num(c.founderLimit)}`),
+      kpi('Signalements à traiter', num(t.openReports || 0), Boolean(t.openReports), t.autoReports ? `dont ${num(t.autoReports)} par le filtre automatique` : null),
+      c.paidEntry ? kpi('En attente de paiement', num(t.awaitingPayment || 0)) : kpi('Réactions', num(t.likes)),
       kpi('Publications', num(t.posts)),
       kpi('Commentaires', num(t.comments)),
       kpi('Messages privés', num(t.messages)),
     ),
+    h('div', { class: 'section-title' }, 'Entrée dans le cercle'),
+    entry,
     h('div', { class: 'section-title' }, 'Courriels'),
     h('div', { class: 'admissions' }, emails),
     admissions ? h('div', { class: 'section-title' }, `Demandes d’admission${data.totals.admissions ? ` · ${data.totals.admissions}` : ''}`) : null,

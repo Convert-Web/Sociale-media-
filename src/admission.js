@@ -52,27 +52,31 @@ async function foundersLeft(ctx) {
 
 module.exports = { admissionMode, setAdmissionMode, newCode, normalizeCode, findInvitation, foundersLeft, MODES };
 
-// Accepte une invitation pour un compte : marque le carton comme utilisé, admet le membre
-// et prévient le parrain. Renvoie la ligne utilisateur à jour, ou null si le carton a déjà servi.
+// Accepte une invitation pour un compte : marque le carton comme utilisé et admet le membre
+// (le parrain est prévenu à l'entrée effective, voir membership.welcome). Pendant la phase
+// payante, l'invitation vaut ticket : le membre entre après le droit d'entrée.
+// Renvoie la ligne utilisateur à jour, ou null si le carton a déjà servi.
 async function redeemInvitation(ctx, userId, invitation) {
   const { admitMember } = require('./membership');
-  const { notify } = require('./social');
-  const { sendPush } = require('./push');
   const { changes } = await ctx.db.run(
     'UPDATE invitations SET used_by = ?, used_at = ? WHERE code = ? AND used_by IS NULL',
     userId, Date.now(), invitation.code,
   );
   if (!changes) return null;
   await ctx.db.run('UPDATE users SET invited_by = ?, admission_declined_at = NULL WHERE id = ?', invitation.inviter_id, userId);
-  const user = await admitMember(ctx, userId);
-  await notify(ctx, { userId: invitation.inviter_id, actorId: userId, type: 'invite_accepted' });
-  sendPush(ctx, invitation.inviter_id, {
-    title: 'Votre invitation a été acceptée',
-    body: `${user.display_name} a rejoint AURUM grâce à vous.`,
-    url: `/@${user.username}`,
-    tag: `invite-${userId}`,
-  }).catch(() => {});
-  return user;
+  return admitMember(ctx, userId);
+}
+
+// Entrée payante : quand les places de Fondateur (gratuites) sont toutes attribuées,
+// ou dès le départ si PAID_ENTRY est activé.
+async function entryIsPaid(ctx) {
+  return Boolean(ctx.config.paidEntry) || (await foundersLeft(ctx)) === 0;
+}
+
+// Le compte peut-il régler son droit d'entrée ? Il faut une invitation, l'accord de la
+// Direction, ou que l'entrée soit libre.
+async function hasTicket(ctx, user) {
+  return Boolean(user.is_admin || user.admission_approved_at) || (await admissionMode(ctx)) === 'open';
 }
 
 // Nouvelle demande d'admission : la Direction est prévenue (notification + téléphone).
@@ -96,3 +100,5 @@ async function announceAdmissionRequest(ctx, user) {
 
 module.exports.redeemInvitation = redeemInvitation;
 module.exports.announceAdmissionRequest = announceAdmissionRequest;
+module.exports.entryIsPaid = entryIsPaid;
+module.exports.hasTicket = hasTicket;

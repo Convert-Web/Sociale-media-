@@ -3,13 +3,14 @@ const { detectLang } = require('../translate');
 const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam } = require('../http');
-const { authorOf, counters, pushCounters, isBlocked } = require('../social');
+const { authorOf, counters, pushCounters, isBlocked, flaggedLabels } = require('../social');
+const { moderate, autoReport } = require('../contentFilter');
 const { sendPush } = require('../push');
 
 module.exports = function messageRoutes(ctx) {
   const r = express.Router();
   const { db } = ctx;
-  r.use(['/conversations', '/counters', '/events'], requireMember);
+  r.use(['/conversations', '/counters', '/stream'], requireMember);
 
   const serializeMessage = (m) => ({
     id: m.id,
@@ -19,6 +20,8 @@ module.exports = function messageRoutes(ctx) {
     senderId: m.sender_id,
     recipientId: m.recipient_id,
     readAt: m.read_at,
+    // Filtre automatique : message masqué chez le destinataire derrière un avertissement
+    flagged: flaggedLabels(m.flagged),
   });
 
   const findMember = async (username) => {
@@ -36,7 +39,7 @@ module.exports = function messageRoutes(ctx) {
          GROUP BY other_id
        )
        SELECT conv.other_id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
-              m.body, m.created_at, m.sender_id,
+              m.body, m.created_at, m.sender_id, m.flagged,
               (SELECT COUNT(*) FROM messages x WHERE x.sender_id = conv.other_id AND x.recipient_id = ? AND x.read_at IS NULL) AS unread
        FROM conv
        JOIN messages m ON m.id = conv.last_id
@@ -48,7 +51,12 @@ module.exports = function messageRoutes(ctx) {
     res.json({
       conversations: rows.map((row) => ({
         user: { ...authorOf(ctx, row), online: ctx.hub.isOnline(row.user_id) },
-        lastMessage: { body: row.body, createdAt: row.created_at, fromMe: row.sender_id === me },
+        lastMessage: {
+          body: row.flagged && row.sender_id !== me ? 'Message masqué : contenu potentiellement offensant' : row.body,
+          createdAt: row.created_at,
+          fromMe: row.sender_id === me,
+          flagged: Boolean(row.flagged),
+        },
         unread: row.unread,
       })),
     });
@@ -105,10 +113,13 @@ module.exports = function messageRoutes(ctx) {
     if (other.is_bot) fail(400, 'C’est un compte automatique : il ne lit pas les messages. Écrivez plutôt à la Direction.');
     if (await isBlocked(ctx, req.user.id, other.id)) fail(403, 'Vous ne pouvez pas écrire à ce membre.');
     const body = text(req.body.body, { field: 'Message', max: 2000, required: true });
+    // Filtre automatique : propos haineux ou menaces refusés, insultes masquées et signalées
+    const flagged = moderate(body);
     const { lastInsertRowid } = await db.run(
-      'INSERT INTO messages (sender_id, recipient_id, body, created_at) VALUES (?, ?, ?, ?)',
-      req.user.id, other.id, body, Date.now(),
+      'INSERT INTO messages (sender_id, recipient_id, body, flagged, created_at) VALUES (?, ?, ?, ?, ?)',
+      req.user.id, other.id, body, flagged, Date.now(),
     );
+    await autoReport(ctx, 'message', lastInsertRowid, flagged);
     const message = serializeMessage(await db.get('SELECT * FROM messages WHERE id = ?', lastInsertRowid));
     const from = { ...authorOf(ctx, { ...req.user, user_id: req.user.id }) };
     ctx.hub.send(other.id, 'message', { message, from });
@@ -117,7 +128,7 @@ module.exports = function messageRoutes(ctx) {
     // Notification sur le téléphone du destinataire
     await sendPush(ctx, other.id, {
       title: req.user.display_name,
-      body: body.length > 140 ? `${body.slice(0, 137)}…` : body,
+      body: flagged ? 'Message masqué : contenu potentiellement offensant' : body.length > 140 ? `${body.slice(0, 137)}…` : body,
       url: `/messages/${req.user.username}`,
       tag: `dm-${req.user.id}`,
     });
@@ -136,8 +147,8 @@ module.exports = function messageRoutes(ctx) {
 
   r.get('/counters', async (req, res) => res.json(await counters(ctx, req.user.id)));
 
-  // Flux temps réel (Server-Sent Events)
-  r.get('/events', async (req, res) => {
+  // Flux temps réel (Server-Sent Events). « /events » est réservé à l'Agenda.
+  r.get('/stream', async (req, res) => {
     ctx.hub.attach(req.user.id, req, res);
     ctx.hub.send(req.user.id, 'counters', await counters(ctx, req.user.id));
   });

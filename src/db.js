@@ -353,6 +353,10 @@ const COLUMNS = [
   ['posts', 'journal_id', 'INTEGER'],
   ['users', 'email_digest', 'INTEGER NOT NULL DEFAULT 1'],
   ['users', 'lang', 'TEXT'],
+  ['users', 'admission_approved_at', 'INTEGER'],
+  ['posts', 'flagged', 'TEXT'],
+  ['comments', 'flagged', 'TEXT'],
+  ['messages', 'flagged', 'TEXT'],
 ];
 
 async function migrate(client) {

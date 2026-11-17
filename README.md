@@ -2,7 +2,7 @@
 
 Réseau social privé : chaque membre reçoit une carte numérotée, à vie. Pas de publicité, pas de faux comptes, pas d'algorithme.
 
-L'inscription est **gratuite** par défaut. Un droit d'entrée payant (9,99 € via Stripe) est prêt à l'emploi : il s'active avec `PAID_ENTRY=true`.
+L'entrée est **gratuite pour les 100 premiers membres** (les Fondateurs). Ensuite, elle devient automatiquement payante : droit d'entrée unique de 9,99 € via Stripe, après invitation d'un membre ou accord de la Direction. `PAID_ENTRY=true` rend l'entrée payante dès le départ.
 
 Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (barre d'onglets, feuilles, contrôles natifs), clair ou sombre selon l'appareil, entièrement en français. Typographie système (SF Pro sur iPhone et Mac, Inter ailleurs, hébergée avec le site).
 
@@ -12,7 +12,8 @@ Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (bar
 
 | | |
 |---|---|
-| **Droit d'entrée (optionnel)** | Désactivé par défaut. Avec `PAID_ENTRY=true` : paiement unique via **Stripe Checkout** (carte bancaire, et Apple Pay / Google Pay selon votre configuration Stripe), vérifié côté serveur + webhook signé. Case de renonciation au droit de rétractation (art. L221-28 du Code de la consommation). |
+| **Droit d'entrée** | Gratuit pour les `FOUNDER_LIMIT` (100) premiers membres, puis automatique : paiement unique via **Stripe Checkout** (carte bancaire, et Apple Pay / Google Pay selon votre configuration Stripe), vérifié côté serveur + webhook signé. Case de renonciation au droit de rétractation (art. L221-28 du Code de la consommation). |
+| **Filtre automatique** | Publications, commentaires et messages privés sont analysés à l'envoi (français, anglais, espagnol, italien, allemand, portugais ; écriture « l33t », lettres répétées ou espacées, astérisques). Propos haineux, menaces et numéros de carte bancaire : refusés. Insultes et propos déplacés : publiés mais floutés derrière un avertissement, et signalés automatiquement à la Direction. Les messages privés reçus peuvent être signalés (appui long). |
 | **Entrée sur invitation** | Par défaut, on entre au cercle **sur invitation** : chaque membre dispose de 3 invitations personnelles (lien à partager sur WhatsApp, iMessage…), la personne invitée entre immédiatement. Sans invitation, l'inscription devient une **demande d'admission** que la Direction accepte ou refuse (notification sur le téléphone). Interrupteur « Entrée sur invitation » dans la page Direction pour revenir à l'entrée libre. Le profil affiche « Invité par… ». |
 | **Agenda du cercle** | Événements privés (dîners, vernissages, voyages) : photo, date, lieu avec itinéraire, nombre de places, « Je viens », liste des participants, ajout au calendrier du téléphone (.ics), carte « Prochain événement » en tête du Salon. |
 | **Carnet d'adresses** | Les recommandations des membres (restaurants, hôtels, bars, boutiques, artisans, bien-être, services, voyages) par ville et catégorie, avec photo, itinéraire, site web et « Je recommande aussi ». |
@@ -73,7 +74,7 @@ npm start        # → http://localhost:3000
 
 ## Activer le droit d'entrée payant (Stripe)
 
-0. Ajoutez `PAID_ENTRY=true` à la configuration.
+0. Le paiement s'ouvre de lui-même une fois les places de Fondateur attribuées (ou dès le départ avec `PAID_ENTRY=true`).
 1. Créez un compte sur [stripe.com](https://stripe.com) et récupérez votre **clé secrète** (`sk_test_…` pour tester, `sk_live_…` en réel).
 2. Copiez `.env.example` en `.env` et renseignez `STRIPE_SECRET_KEY`.
 3. Webhook (recommandé) :
@@ -103,7 +104,7 @@ Toutes les options sont décrites dans [`.env.example`](.env.example). Les princ
 
 | Variable | Rôle | Défaut |
 |---|---|---|
-| `PAID_ENTRY` | `true` pour exiger le paiement à l'inscription | `false` |
+| `PAID_ENTRY` | `true` pour exiger le paiement dès le premier membre (sinon : après les Fondateurs) | `false` |
 | `BASE_URL` | Adresse publique du site (automatique sur Render) | `http://localhost:3000` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Paiement | — |
 | `ENTRY_PRICE_CENTS` | Prix d'entrée en centimes | `999` |

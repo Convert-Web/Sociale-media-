@@ -3,6 +3,7 @@
 const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam, cleanWebsite } = require('../http');
+const { assertClean } = require('../contentFilter');
 const { single, saveImage, deleteUpload } = require('../uploads');
 const { authorOf, notify, retractNotification } = require('../social');
 
@@ -85,6 +86,7 @@ module.exports = function placeRoutes(ctx) {
     const address = text(b.address, { field: 'Adresse', max: 160 });
     const website = b.website ? cleanWebsite(b.website) : '';
     const note = text(b.note, { field: 'Votre recommandation', min: 10, max: 600, required: true });
+    assertClean('Adresse', name, address, note);
     const duplicate = await db.get('SELECT id FROM places WHERE name = ? COLLATE NOCASE AND city = ? COLLATE NOCASE', name, city);
     if (duplicate) fail(409, 'Cette adresse figure déjà dans le carnet : ajoutez-y plutôt votre recommandation.');
     const photo = await saveImage(ctx, req.file);

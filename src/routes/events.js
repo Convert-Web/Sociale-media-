@@ -3,6 +3,7 @@
 const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam } = require('../http');
+const { assertClean } = require('../contentFilter');
 const { single, saveImage, deleteUpload } = require('../uploads');
 const { authorOf, notify, retractNotification } = require('../social');
 const { sendPush } = require('../push');
@@ -66,6 +67,7 @@ module.exports = function eventRoutes(ctx) {
     if (endsAt !== null && (!Number.isFinite(endsAt) || endsAt <= startsAt)) fail(400, 'La fin doit être après le début.');
     let capacity = body.capacity === undefined ? current.capacity ?? null : body.capacity === '' || body.capacity === null ? null : Number(body.capacity);
     if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1 || capacity > 10000)) fail(400, 'Nombre de places invalide.');
+    assertClean('Événement', title, description, location);
     return { title, description, location, startsAt, endsAt, capacity };
   };
 
