@@ -67,7 +67,7 @@ const REACTIONS = ['love', 'like', 'bravo', 'fire', 'haha', 'wow'];
 // il précède tous les paramètres de la clause WHERE ajoutée par l'appelant.
 const POST_SELECT = `
   SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.groupe_id, p.journal_id, p.flagged, p.preview_at, p.video_id,
-         vid.mime AS v_mime, vid.width AS v_width, vid.height AS v_height, vid.duration AS v_duration,
+         vid.mime AS v_mime, vid.width AS v_width, vid.height AS v_height, vid.duration AS v_duration, vid.size AS v_size,
          ji.kind AS j_kind, ji.title AS j_title, ji.image AS j_image, ji.url AS j_url, ji.site_name AS j_site, ji.summary AS j_summary,
          u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count,
@@ -122,6 +122,7 @@ function serializePost(ctx, row, viewer) {
         width: row.v_width || null,
         height: row.v_height || null,
         duration: row.v_duration || null,
+        size: row.v_size || null, // le téléphone télécharge la vidéo entière d'avance (morceaux de 1 Mo)
         // Éphémère : effacée à cette date (comme une story)
         expiresAt: require('./videos').expiresAt(ctx, row.created_at),
       }

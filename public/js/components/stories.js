@@ -1,7 +1,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { h, icon, avatar, timeAgo, toast, modal, spinner, clear, nameLine, shrinkImage, confirmDialog } from '../dom.js';
-import { isVideoFile, readVideoInfo, uploadVideo, noSave, sound, clockLabel, MAX_SECONDS } from './video.js';
+import { isVideoFile, readVideoInfo, uploadVideo, noSave, sound, clockLabel, MAX_SECONDS, preloadVideo, localVideo } from './video.js';
 
 const DURATION = 5000; // durée d'affichage d'une story
 
@@ -50,6 +50,11 @@ export function storiesBar() {
       groups = (await api.get('/api/stories')).groups;
     } catch {
       groups = [];
+    }
+    // Première story vidéo des membres non encore vus : prête avant le toucher
+    for (const g of groups.filter((x) => !x.allViewed).slice(0, 2)) {
+      const first = g.stories.find((x) => !x.viewed) || g.stories[0];
+      if (first?.video) preloadVideo(first.video);
     }
     paint();
   }
@@ -296,6 +301,9 @@ export function openViewer(groups, startGroup, onClose) {
       ...extra,
       close,
     );
+    // La story suivante (si c'est une vidéo) se télécharge pendant qu'on regarde celle-ci
+    const following = g.stories[si + 1] || groups[gi + 1]?.stories[0];
+    if (following?.video) preloadVideo(following.video);
     caption.textContent = s.caption || '';
     caption.hidden = !s.caption;
 
@@ -344,7 +352,7 @@ export function openViewer(groups, startGroup, onClose) {
       img.hidden = true;
       vid.hidden = false;
       vid.poster = s.media || '';
-      vid.src = s.video.url;
+      vid.src = localVideo(s.video) || s.video.url; // déjà téléchargée : démarrage immédiat
       vid.muted = !sound.get();
       const play = () => vid.play().catch(() => {
         vid.muted = true; // son refusé sans geste : lecture muette

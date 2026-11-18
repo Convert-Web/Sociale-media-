@@ -85,8 +85,44 @@ function videoHandler(ctx) {
   const { MediaCache } = require('./uploads');
   const cache = new MediaCache(64 * 1024 * 1024);
   ctx.videoCache = cache;
+
+  async function sendChunk(id, idx, req, res, next) {
+    const v = await ctx.db.get(
+      `SELECT v.chunks, p.created_at AS posted_at, s.expires_at AS story_expires
+       FROM videos v LEFT JOIN posts p ON p.video_id = v.id LEFT JOIN stories s ON s.video_id = v.id
+       WHERE v.id = ? AND v.complete = 1`,
+      id,
+    );
+    if (!v || idx >= v.chunks) return next();
+    // Fin de vie : 24 h après la publication (ou fin de la story) ; vidéo pas encore publiée : 1 h
+    const end = v.posted_at ? expiresAt(ctx, v.posted_at) : v.story_expires || Date.now() + 3600 * 1000;
+    if (end <= Date.now()) return next();
+    const key = `${id}:${idx}`;
+    let data = cache.get(key)?.data;
+    if (!data) {
+      const row = await ctx.db.get('SELECT data FROM video_chunks WHERE video_id = ? AND idx = ?', id, idx);
+      if (!row) return next();
+      data = Buffer.from(row.data);
+      cache.set(key, { data });
+    }
+    // Gardé en cache (navigateur et réseau de Vercel) jusqu'à l'effacement de la vidéo, pas plus
+    const ttl = Math.max(60, Math.floor((end - Date.now()) / 1000));
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', data.length);
+    res.setHeader('Cache-Control', `public, max-age=${ttl}, immutable`);
+    res.setHeader('CDN-Cache-Control', `public, max-age=${ttl}`);
+    res.setHeader('Vercel-CDN-Cache-Control', `public, max-age=${ttl}`);
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.end(req.method === 'HEAD' ? undefined : data);
+  }
+
   return async (req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    // Morceau seul (1 Mo) : le téléphone télécharge la vidéo entière d'avance, en parallèle,
+    // et le réseau de Vercel garde ces morceaux en mémoire tant que la vidéo existe.
+    const mc = /^\/([a-f0-9]{32})\/(\d{1,3})\.bin$/.exec(req.path);
+    if (mc) return sendChunk(mc[1], Number(mc[2]), req, res, next);
     const m = /^\/([a-f0-9]{32})\.(mp4|webm)$/.exec(req.path);
     if (!m) return next();
     const v = await ctx.db.get(

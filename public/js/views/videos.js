@@ -4,7 +4,7 @@
 import { api, enc } from '../api.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, richText, num, toast, emptyState, spinner, onTaps, heartBurst, shareLink, verifiedMark } from '../dom.js';
-import { sound, noSave, reelsPlayer, cachedReels, rememberReels } from '../components/video.js';
+import { sound, reelsPlayer, cachedReels, rememberReels, preloadVideo, localVideo, sameVideo } from '../components/video.js';
 
 function slide(post) {
   const v = post.video;
@@ -65,13 +65,11 @@ export async function videosView(ctx) {
   document.documentElement.classList.add('reels-mode');
 
   const player = reelsPlayer();
-  const preloader = noSave(h('video', { class: 'reel-preload', preload: 'auto', playsinline: true }));
-  preloader.muted = true;
   const track = h('div', { class: 'reels-track' });
   const soundBtn = h('button', { type: 'button', 'aria-label': 'Son' });
   const hint = h('button', { class: 'reels-hint', type: 'button', hidden: true }, icon('sound', 'icon-sm'), 'Activer le son');
   const back = h('button', { type: 'button', 'aria-label': 'Retour', onclick: () => (history.length > 1 ? history.back() : navigate('/salon')) }, icon('back'));
-  const root = h('div', { class: 'reels' }, h('div', { class: 'reels-top' }, back, soundBtn), hint, track, preloader);
+  const root = h('div', { class: 'reels' }, h('div', { class: 'reels-top' }, back, soundBtn), hint, track);
 
   let active = null;
   let userPaused = false;
@@ -113,21 +111,19 @@ export async function videosView(ctx) {
     active = box;
     box.classList.add('is-active');
     userPaused = false;
-    const { url } = box.__post.video;
+    const v = box.__post.video;
     box.querySelector('.reel-holder').append(player);
-    if (player.getAttribute('src') !== url) {
+    if (!sameVideo(player, v)) {
       box.classList.remove('is-ready');
-      player.src = url;
+      // Déjà téléchargée sur le téléphone : démarrage immédiat ; sinon lecture en ligne
+      player.src = localVideo(v) || v.url;
     } else if (player.readyState >= 2) {
       box.classList.add('is-ready');
     }
     start();
-    // La suivante se prépare pendant qu'on regarde
-    const next = box.nextElementSibling?.__post;
-    if (next && preloader.getAttribute('src') !== next.video.url) {
-      preloader.src = next.video.url;
-      preloader.load();
-    }
+    // Les deux suivantes se téléchargent en entier pendant qu'on regarde
+    let next = box.nextElementSibling;
+    for (let k = 0; k < 2 && next?.__post; k++, next = next.nextElementSibling) preloadVideo(next.__post.video);
     if (!box.nextElementSibling?.nextElementSibling) loadMore();
   }
 
@@ -204,7 +200,6 @@ export async function videosView(ctx) {
     player.removeEventListener('timeupdate', onTime);
     player.removeEventListener('pause', onPause);
     player.removeEventListener('play', onPause);
-    preloader.removeAttribute('src');
     metas.forEach((m, i) => (m.content = saved[i]));
     document.documentElement.classList.remove('reels-mode');
   });

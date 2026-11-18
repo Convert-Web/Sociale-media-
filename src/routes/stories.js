@@ -43,7 +43,7 @@ module.exports = function storyRoutes(ctx) {
     const me = req.user.id;
     const rows = await db.all(
       `SELECT s.id, s.user_id, s.media, s.caption, s.created_at, s.video_id,
-              vid.mime AS v_mime, vid.duration AS v_duration, vid.width AS v_width, vid.height AS v_height,
+              vid.mime AS v_mime, vid.duration AS v_duration, vid.width AS v_width, vid.height AS v_height, vid.size AS v_size,
               u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
               EXISTS(SELECT 1 FROM story_views sv WHERE sv.story_id = s.id AND sv.user_id = ?) AS viewed,
               (SELECT COUNT(*) FROM story_views sv WHERE sv.story_id = s.id) AS views
@@ -61,7 +61,7 @@ module.exports = function storyRoutes(ctx) {
         id: row.id,
         media: row.media,
         video: row.video_id
-          ? { url: V.videoUrl(row.video_id, V.TYPES[row.v_mime] || 'mp4'), duration: row.v_duration || null, width: row.v_width || null, height: row.v_height || null }
+          ? { url: V.videoUrl(row.video_id, V.TYPES[row.v_mime] || 'mp4'), duration: row.v_duration || null, width: row.v_width || null, height: row.v_height || null, size: row.v_size || null }
           : null,
         caption: row.caption,
         createdAt: row.created_at,

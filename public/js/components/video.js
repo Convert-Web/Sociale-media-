@@ -218,11 +218,19 @@ export function noSave(el) {
 // Badge « éphémère » : temps restant avant l'effacement
 export const ephemeralBadge = (v, cls = 'vp-ephemeral') => (v.expiresAt ? h('span', { class: cls, title: 'Vidéo éphémère : effacée après ce délai' }, icon('clock', 'icon-xs'), remaining(v.expiresAt)) : null);
 
+// Préchargement : les vidéos du fil commencent à se télécharger un écran et demi avant d'apparaître
+const nearIo = typeof IntersectionObserver !== 'undefined'
+  ? new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { e.target.__player?.near(); nearIo.unobserve(e.target); }
+    }, { rootMargin: '150% 0px' })
+  : null;
+
 export function videoPlayer(v, { onOpen, onDouble } = {}) {
   if (v.expiresAt && v.expiresAt <= Date.now()) {
     return h('div', { class: 'vp vp-gone' }, icon('clock'), h('span', null, 'Vidéo éphémère disparue'));
   }
-  const el = noSave(h('video', { class: 'vp-video', src: v.url, poster: v.poster || undefined, preload: 'metadata', loop: true, playsinline: true, 'webkit-playsinline': '' }));
+  // Pas de source tant que la vidéo n'approche pas de l'écran : elle se télécharge alors en entier
+  const el = noSave(h('video', { class: 'vp-video', poster: v.poster || undefined, preload: 'auto', loop: true, playsinline: true, 'webkit-playsinline': '' }));
   el.muted = !soundOn;
   el.playsInline = true;
   const soundBtn = h('button', { class: 'vp-sound', type: 'button', 'aria-label': 'Son' }, icon(soundOn ? 'sound' : 'mute'));
@@ -237,8 +245,17 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
   let userPaused = false;
   const paintSound = () => soundBtn.replaceChildren(icon(el.muted ? 'mute' : 'sound'));
   const player = {
+    // À l'approche de l'écran : téléchargement complet, puis source locale (lecture immédiate)
+    near() {
+      const job = preloadVideo(v);
+      if (!job) return;
+      job.then((local) => {
+        if (local && (!el.getAttribute('src') || (el.paused && el.currentTime === 0 && el.getAttribute('src') !== local))) el.src = local;
+      });
+    },
     auto() {
       if (userPaused) return;
+      if (!el.getAttribute('src')) el.src = localVideo(v) || v.url; // pas encore téléchargée : lecture en ligne
       el.muted = !soundOn;
       paintSound();
       el.play().catch(() => {
@@ -279,6 +296,7 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
     if (el.duration) bar.firstChild.style.transform = `scaleX(${el.currentTime / el.duration})`;
   });
   io?.observe(wrap);
+  nearIo?.observe(wrap);
   return wrap;
 }
 
@@ -296,6 +314,8 @@ export function prefetchReels() {
     .get('/api/videos/feed')
     .then((d) => {
       reelsCache = { posts: d.posts, hasMore: d.hasMore, at: Date.now() };
+      const first = d.posts.find((p) => p.video);
+      if (first) preloadVideo(first.video);
       return reelsCache;
     })
     .catch(() => null)
@@ -329,8 +349,78 @@ function primeReels(url) {
   if (!url && p) p.then(() => v.pause()).catch(() => {});
 }
 
-export function openReels({ postId = null, url = null } = {}) {
-  const first = url || cachedReels()?.posts.find((p) => p.video)?.video.url || null;
+export function openReels({ postId = null, url = null, video = null } = {}) {
+  const v = video || (!url ? cachedReels()?.posts.find((p) => p.video)?.video : null);
+  const first = (v && localVideo(v)) || url || v?.url || null;
   primeReels(first);
   navigate(postId ? `/videos?p=${postId}` : '/videos');
 }
+
+// ---------------------------------------------------------------------------
+// Vidéos téléchargées d'avance, en entier : elles démarrent sans attendre le réseau.
+// Les morceaux de 1 Mo arrivent en parallèle (6 à la fois) ; au plus 5 vidéos gardées
+// en mémoire. Rien n'est téléchargé d'avance si le téléphone économise ses données.
+// ---------------------------------------------------------------------------
+const CHUNK = 1024 * 1024;
+const MAX_KEPT = 5;
+const blobs = new Map(); // adresse de la vidéo → { promise, url, at }
+const saveData = () => Boolean(navigator.connection?.saveData);
+
+async function fetchAll(urls, limit = 6) {
+  const out = new Array(urls.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < urls.length) {
+      const i = next++;
+      const res = await fetch(urls[i]);
+      if (!res.ok) throw new Error('morceau indisponible');
+      out[i] = await res.arrayBuffer();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, urls.length) }, worker));
+  return out;
+}
+
+function trimBlobs(keep) {
+  if (blobs.size <= MAX_KEPT) return;
+  const inUse = new Set([...document.querySelectorAll('video')].map((v) => v.getAttribute('src')));
+  const old = [...blobs.entries()].filter(([k, e]) => k !== keep && e.url && !inUse.has(e.url)).sort((a, b) => a[1].at - b[1].at);
+  while (blobs.size > MAX_KEPT && old.length) {
+    const [k, e] = old.shift();
+    URL.revokeObjectURL(e.url);
+    blobs.delete(k);
+  }
+}
+
+// Lance (ou retrouve) le téléchargement complet d'une vidéo
+export function preloadVideo(v) {
+  if (!v?.url || !v.size || saveData()) return null;
+  let e = blobs.get(v.url);
+  if (!e) {
+    const base = v.url.replace(/\.(mp4|webm)$/, '');
+    const type = v.url.endsWith('.webm') ? 'video/webm' : 'video/mp4';
+    const n = Math.ceil(v.size / CHUNK);
+    e = { url: null, at: Date.now() };
+    e.promise = fetchAll(Array.from({ length: n }, (_, i) => `${base}/${i}.bin`))
+      .then((parts) => {
+        e.url = URL.createObjectURL(new Blob(parts, { type }));
+        return e.url;
+      })
+      .catch(() => {
+        blobs.delete(v.url);
+        return null;
+      });
+    blobs.set(v.url, e);
+    trimBlobs(v.url);
+  }
+  e.at = Date.now();
+  return e.promise;
+}
+
+// Adresse locale si la vidéo est déjà téléchargée, sinon null
+export const localVideo = (v) => (v?.url && blobs.get(v.url)?.url) || null;
+// La même vidéo, qu'elle soit lue en ligne ou depuis le téléphone ?
+export const sameVideo = (el, v) => {
+  const src = el.getAttribute('src');
+  return Boolean(src && (src === v.url || src === localVideo(v)));
+};

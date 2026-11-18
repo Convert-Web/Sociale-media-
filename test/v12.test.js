@@ -227,3 +227,24 @@ test('story vidéo : publiée pour 24 h, effacée avec la story', async () => {
   assert.equal(await ctx.db.get('SELECT id FROM videos WHERE id = ?', done.data.video.id), undefined);
   assert.equal((await ctx.db.get('SELECT COUNT(*) AS n FROM video_chunks WHERE video_id = ?', done.data.video.id)).n, 0);
 });
+
+test('morceaux téléchargeables d’avance : contenu exact, cache limité à la durée de vie', async () => {
+  const bytes = fakeMp4(1.5 * 1024 * 1024);
+  const done = await send(alice, bytes, { duration: 7 });
+  const posted = await alice.post('/api/posts', { body: 'Avant-goût', video: done.data.video.id });
+  const v = posted.data.post.video;
+  assert.equal(v.size, bytes.length);
+  const base = v.url.replace(/\.mp4$/, '');
+  const c0 = await client().get(`${base}/0.bin`);
+  const c1 = await client().get(`${base}/1.bin`);
+  assert.equal(c0.status, 200);
+  assert.deepEqual(Buffer.concat([c0.data, c1.data]), bytes);
+  const cc = c0.headers.get('cache-control');
+  const ttl = Number(/max-age=(\d+)/.exec(cc)[1]);
+  assert.ok(/public/.test(cc) && ttl > 23 * 3600 && ttl <= 24 * 3600, cc);
+  assert.match(c0.headers.get('cdn-cache-control'), /max-age=/);
+  assert.equal((await client().get(`${base}/2.bin`)).status, 404);
+  // Expirée : plus rien n'est servi
+  await ctx.db.run('UPDATE posts SET created_at = ? WHERE id = ?', Date.now() - 25 * 3600 * 1000, posted.data.post.id);
+  assert.equal((await client().get(`${base}/0.bin`)).status, 404);
+});
