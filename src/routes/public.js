@@ -5,6 +5,12 @@ module.exports = function publicRoutes(ctx) {
   const r = express.Router();
   const { db, config } = ctx;
 
+  // Version de l'application (jamais mise en cache)
+  r.get('/version', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ version: config.version });
+  });
+
   r.get('/public/stats', async (_req, res) => {
     const { members, lastNumber, cities } = await db.get(
       `SELECT (SELECT COUNT(*) FROM users WHERE paid_at IS NOT NULL AND is_bot = 0) AS members,

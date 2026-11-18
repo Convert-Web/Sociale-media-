@@ -3,7 +3,7 @@ import { store } from '../store.js';
 import { navigate } from '../router.js';
 import {
   h, icon, avatar, nameLine, memberChip, timeAgo, fullDate, richText, toast, popMenu,
-  confirmDialog, lightbox, autosize, spinner, clear, shrinkImage, TOO_BIG_GIF, modal, num,
+  confirmDialog, lightbox, autosize, spinner, clear, shrinkImage, TOO_BIG_GIF, modal, num, onTaps, heartBurst,
 } from '../dom.js';
 import { reportDialog } from './report.js';
 import { attachMentions } from './mentions.js';
@@ -51,14 +51,18 @@ function journalLink(j) {
   );
 }
 
-function gallery(images) {
+function gallery(images, onDouble) {
+  const tappable = (el, src) => {
+    onTaps(el, { single: () => lightbox(src), double: (e) => onDouble?.(el, e) });
+    return el;
+  };
   if (images.length === 1) {
-    return h('div', { class: 'post-image', onclick: () => lightbox(images[0]) }, h('img', { src: images[0], alt: '', loading: 'lazy', decoding: 'async' }));
+    return tappable(h('div', { class: 'post-image' }, h('img', { src: images[0], alt: '', loading: 'lazy', decoding: 'async' })), images[0]);
   }
   const track = h(
     'div',
     { class: 'carousel-track' },
-    images.map((src) => h('div', { class: 'carousel-slide', onclick: () => lightbox(src) }, h('img', { src, alt: '', loading: 'lazy', decoding: 'async' }))),
+    images.map((src) => tappable(h('div', { class: 'carousel-slide' }, h('img', { src, alt: '', loading: 'lazy', decoding: 'async' })), src)),
   );
   const dots = h('div', { class: 'carousel-dots' }, images.map((_, i) => h('i', { class: i === 0 ? 'on' : '' })));
   const counter = h('span', { class: 'carousel-count' }, `1/${images.length}`);
@@ -212,7 +216,11 @@ function reactionControl(post) {
   });
 
   paint();
-  return { btn, faces };
+  // Double-toucher sur la photo ou la vidéo : « j'aime » (sans jamais retirer une réaction)
+  const like = () => {
+    if (!post.myReaction) send('love');
+  };
+  return { btn, faces, like };
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +231,11 @@ export function postCard(post, { expanded = false } = {}) {
   post.images = post.images || (post.image ? [post.image] : []);
   const el = h('article', { class: `post${expanded ? ' big' : ''}`, dataset: { id: post.id } });
 
-  const { btn: reactBtn, faces } = reactionControl(post);
+  const { btn: reactBtn, faces, like } = reactionControl(post);
+  const doubleLike = (host, e) => {
+    heartBurst(host, e);
+    like();
+  };
 
   const commentCount = h('span', null, post.commentCount || '');
   const commentBtn = h('button', { class: 'act', 'aria-label': 'Commenter' }, icon('comment'), commentCount);
@@ -390,7 +402,7 @@ export function postCard(post, { expanded = false } = {}) {
     ),
     previewTag,
     ...(hasMedia ? [] : textParts),
-    post.video ? videoPlayer(post.video, { onOpen: () => navigate(`/videos?p=${post.id}`) }) : hasMedia ? gallery(post.images) : null,
+    post.video ? videoPlayer(post.video, { onOpen: () => navigate(`/videos?p=${post.id}`), onDouble: doubleLike }) : hasMedia ? gallery(post.images, doubleLike) : null,
     post.journal ? journalLink(post.journal) : null,
     h('div', { class: 'post-actions' }, reactBtn, faces, commentBtn, shareBtn, h('span', { class: 'grow' }), saveBtn),
     ...(hasMedia ? textParts : []),

@@ -292,6 +292,55 @@ export function tilt(card) {
   target.addEventListener('pointerleave', leave);
 }
 
+// Toucher simple (action habituelle) et double-toucher (aimer), comme sur les grands réseaux.
+// Le toucher simple attend un court instant pour ne pas se confondre avec le double.
+export function onTaps(el, { single, double }) {
+  let timer = null;
+  let last = 0;
+  el.addEventListener('click', (e) => {
+    const now = Date.now();
+    if (double && now - last < 300) {
+      clearTimeout(timer);
+      last = 0;
+      double(e);
+      return;
+    }
+    last = now;
+    if (!single) return;
+    if (!double) return single(e);
+    timer = setTimeout(() => single(e), 260);
+  });
+}
+
+// Cœur qui éclate à l'endroit touché
+export function heartBurst(host, e) {
+  const r = host.getBoundingClientRect();
+  const x = e && e.clientX ? e.clientX - r.left : r.width / 2;
+  const y = e && e.clientY ? e.clientY - r.top : r.height / 2;
+  const el = h('span', { class: 'heart-burst', style: { left: `${x}px`, top: `${y}px` } }, icon('heart-fill'));
+  host.append(el);
+  setTimeout(() => el.remove(), 1000);
+}
+
+// Partager un lien : feuille de partage du téléphone, sinon copie du lien
+export async function shareLink(title, path) {
+  const url = `${location.origin}${path}`;
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, url });
+      return;
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Lien copié.');
+  } catch {
+    toast(url);
+  }
+}
+
 export function remaining(ts) {
   const hours = Math.max(1, Math.ceil((ts - Date.now()) / 3600000));
   return hours >= 48 ? `${Math.round(hours / 24)} jours` : `${hours} h`;

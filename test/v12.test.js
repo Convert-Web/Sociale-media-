@@ -209,3 +209,21 @@ test('vidéo éphémère : invisible puis effacée après 24 h', async () => {
   assert.equal(await ctx.db.get('SELECT id FROM videos WHERE id = ?', done.data.video.id), undefined);
   assert.equal((await ctx.db.get('SELECT COUNT(*) AS n FROM video_chunks WHERE video_id = ?', done.data.video.id)).n, 0);
 });
+
+test('story vidéo : publiée pour 24 h, effacée avec la story', async () => {
+  const done = await send(bob, fakeMp4(200 * 1024), { duration: 9 });
+  const fd = new FormData();
+  fd.append('video', done.data.video.id);
+  fd.append('caption', 'Ce soir à Paris');
+  const created = await bob.post('/api/stories', fd);
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  assert.match(created.data.story.video.url, /^\/media\/v\/[a-f0-9]{32}\.mp4$/);
+  // Une vidéo déjà en story ne peut pas être republiée
+  assert.equal((await bob.post('/api/posts', { body: 'Encore', video: done.data.video.id })).status, 400);
+  const group = (await alice.get('/api/stories')).data.groups.find((g) => g.user.username === 'bob');
+  assert.equal(group.stories[0].video.duration, 9);
+  assert.equal((await client().get(group.stories[0].video.url, { range: 'bytes=0-1' })).status, 206);
+  assert.equal((await bob.del(`/api/stories/${created.data.story.id}`)).status, 200);
+  assert.equal(await ctx.db.get('SELECT id FROM videos WHERE id = ?', done.data.video.id), undefined);
+  assert.equal((await ctx.db.get('SELECT COUNT(*) AS n FROM video_chunks WHERE video_id = ?', done.data.video.id)).n, 0);
+});

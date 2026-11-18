@@ -395,6 +395,7 @@ const COLUMNS = [
   ['events', 'early_until', 'INTEGER'],
   ['events', 'announce_pending', 'INTEGER NOT NULL DEFAULT 0'],
   ['posts', 'video_id', 'TEXT'],
+  ['stories', 'video_id', 'TEXT'],
 ];
 
 async function migrate(client) {

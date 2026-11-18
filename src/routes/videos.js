@@ -85,7 +85,12 @@ module.exports = function videoRoutes(ctx) {
 
   // Annuler un envoi (avant publication)
   r.delete('/videos/:id', async (req, res) => {
-    const v = await db.get('SELECT id FROM videos WHERE id = ? AND owner_id = ? AND id NOT IN (SELECT video_id FROM posts WHERE video_id IS NOT NULL)', String(req.params.id), req.user.id);
+    const v = await db.get(
+      `SELECT id FROM videos WHERE id = ? AND owner_id = ?
+         AND id NOT IN (SELECT video_id FROM posts WHERE video_id IS NOT NULL)
+         AND id NOT IN (SELECT video_id FROM stories WHERE video_id IS NOT NULL)`,
+      String(req.params.id), req.user.id,
+    );
     if (v) await V.removeVideo(ctx, v.id);
     res.json({ ok: true });
   });
@@ -98,7 +103,8 @@ module.exports.attachVideo = async function attachVideo(ctx, user, id) {
   if (!id) return null;
   const v = await ctx.db.get(
     `SELECT * FROM videos WHERE id = ? AND owner_id = ? AND complete = 1
-       AND id NOT IN (SELECT video_id FROM posts WHERE video_id IS NOT NULL)`,
+       AND id NOT IN (SELECT video_id FROM posts WHERE video_id IS NOT NULL)
+       AND id NOT IN (SELECT video_id FROM stories WHERE video_id IS NOT NULL)`,
     String(id), user.id,
   );
   if (!v) fail(400, 'La vidéo n’a pas été entièrement envoyée. Réessayez.');

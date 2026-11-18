@@ -2,7 +2,7 @@
 // La vidéo visible démarre aussitôt ; la suivante est déjà chargée.
 import { api, enc } from '../api.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, nameLine, richText, num, toast, emptyState, spinner } from '../dom.js';
+import { h, icon, avatar, nameLine, richText, num, toast, emptyState, spinner, onTaps, heartBurst, shareLink } from '../dom.js';
 import { sound, noSave, ephemeralBadge } from '../components/video.js';
 
 function slide(post) {
@@ -25,10 +25,17 @@ function slide(post) {
     paintSound();
     if (el.paused) el.play().catch(() => {});
   });
-  el.addEventListener('click', () => {
-    userPaused = !el.paused;
-    if (el.paused) el.play().catch(() => {});
-    else el.pause();
+  // Toucher : pause ; double-toucher : j'aime, avec un cœur qui éclate
+  onTaps(el, {
+    single: () => {
+      userPaused = !el.paused;
+      if (el.paused) el.play().catch(() => {});
+      else el.pause();
+    },
+    double: (e) => {
+      heartBurst(box, e);
+      if (!post.liked) likeBtn.click();
+    },
   });
   el.addEventListener('play', () => (playMark.hidden = true));
   el.addEventListener('pause', () => (playMark.hidden = !userPaused));
@@ -58,6 +65,7 @@ function slide(post) {
       { class: 'reel-side' },
       likeBtn,
       h('a', { class: 'reel-btn', href: `/p/${post.id}`, 'aria-label': 'Commentaires' }, icon('comment'), h('small', null, num(post.commentCount || 0))),
+      h('button', { class: 'reel-btn', type: 'button', 'aria-label': 'Partager', onclick: () => shareLink(`${post.author.displayName} sur AURUM`, `/p/${post.id}`) }, icon('send'), h('small', null, 'Partager')),
       soundBtn,
     ),
     h(

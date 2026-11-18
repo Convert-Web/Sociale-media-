@@ -1860,3 +1860,25 @@ button.ig-stat:active { opacity: 0.6; }
 .preview-ephemeral { position: absolute; left: 8px; top: 8px; }
 .reel-ephemeral { margin-left: 8px; vertical-align: middle; background: rgba(0, 0, 0, 0.35); }
 .vp-gone { display: flex; align-items: center; justify-content: center; gap: 8px; aspect-ratio: 16 / 9; background: var(--fill); color: var(--muted); font-size: 14px; }
+
+/* ===================================================================== v13
+   Double-toucher pour aimer : le cœur éclate à l'endroit touché
+   ===================================================================== */
+.post-image, .carousel-slide { position: relative; }
+.heart-burst { position: absolute; z-index: 5; width: 96px; height: 96px; margin: -48px 0 0 -48px; color: #fff; pointer-events: none; filter: drop-shadow(0 6px 18px rgba(255, 45, 85, 0.55)); animation: heartBurst 0.95s cubic-bezier(0.2, 0.9, 0.3, 1.2) forwards; }
+.heart-burst .icon { width: 100%; height: 100%; color: #ff2d55; }
+@keyframes heartBurst {
+  0% { transform: scale(0.2) rotate(-12deg); opacity: 0; }
+  18% { transform: scale(1.25) rotate(6deg); opacity: 1; }
+  32% { transform: scale(0.95) rotate(-3deg); }
+  45% { transform: scale(1.05) rotate(0); opacity: 1; }
+  100% { transform: scale(1.1) translateY(-70px); opacity: 0; }
+}
+.tab-videos .icon { width: 26px; height: 26px; }
+/* Tuile « Vidéos éphémères » : couleurs de la carte Fondateur */
+.tile-pop { color: #f5f5f7; background: radial-gradient(circle, rgba(255, 46, 147, 0.75) 0 30%, transparent 34%) 0 0 / 12px 12px, linear-gradient(135deg, #2a2a30, #0d0d11 60%, #18181d); background-repeat: repeat, no-repeat; position: relative; overflow: hidden; }
+.tile-pop::before { content: ''; position: absolute; inset: 0; background: linear-gradient(115deg, #0d0d11 35%, rgba(13, 13, 17, 0.55) 70%, rgba(13, 13, 17, 0.15)); pointer-events: none; }
+.tile-pop > * { position: relative; }
+.tile-pop .tile-kicker { color: #ffd60a; }
+.tile-pop .tile-figure { background: linear-gradient(120deg, #ffd60a, #ff2e93); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.tile-pop p { color: rgba(245, 245, 247, 0.82); }

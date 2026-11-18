@@ -1,6 +1,6 @@
 // Vidéos : préparation sur le téléphone, envoi en morceaux, lecteur du fil.
 import { api, ApiError } from '../api.js';
-import { h, icon, remaining } from '../dom.js';
+import { h, icon, remaining, onTaps } from '../dom.js';
 
 export const MAX_SECONDS = 60;
 export const MAX_BYTES = 40 * 1024 * 1024;
@@ -217,7 +217,7 @@ export function noSave(el) {
 // Badge « éphémère » : temps restant avant l'effacement
 export const ephemeralBadge = (v, cls = 'vp-ephemeral') => (v.expiresAt ? h('span', { class: cls, title: 'Vidéo éphémère : effacée après ce délai' }, icon('clock', 'icon-xs'), remaining(v.expiresAt)) : null);
 
-export function videoPlayer(v, { onOpen } = {}) {
+export function videoPlayer(v, { onOpen, onDouble } = {}) {
   if (v.expiresAt && v.expiresAt <= Date.now()) {
     return h('div', { class: 'vp vp-gone' }, icon('clock'), h('span', null, 'Vidéo éphémère disparue'));
   }
@@ -259,14 +259,17 @@ export function videoPlayer(v, { onOpen } = {}) {
     paintSound();
     if (el.paused) el.play().catch(() => {});
   });
-  el.addEventListener('click', () => {
-    if (el.paused) {
-      userPaused = false;
-      el.play().catch(() => {});
-    } else {
-      userPaused = true;
-      el.pause();
-    }
+  onTaps(el, {
+    single: () => {
+      if (el.paused) {
+        userPaused = false;
+        el.play().catch(() => {});
+      } else {
+        userPaused = true;
+        el.pause();
+      }
+    },
+    double: onDouble ? (e) => onDouble(wrap, e) : null,
   });
   el.addEventListener('play', () => (playMark.hidden = true));
   el.addEventListener('pause', () => (playMark.hidden = !userPaused));

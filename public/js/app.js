@@ -144,6 +144,7 @@ function buildShell() {
 
   const links = [
     { key: 'salon', href: '/salon', icon: 'home', label: 'Salon' },
+    { key: 'videos', href: '/videos', icon: 'video', label: 'Vidéos' },
     { key: 'explorer', href: '/explorer', icon: 'compass', label: 'Explorer' },
     { key: 'journal', href: '/journal', icon: 'newspaper', label: 'Journal' },
     { key: 'notifications', href: '/notifications', icon: 'bell', label: 'Activité', badge: 'notifications' },
@@ -266,7 +267,8 @@ function buildShell() {
     'nav',
     { class: 'tabbar', 'aria-label': 'Navigation' },
     register('salon', h('a', { href: '/salon' }, h('span', { class: 'tab-icon' }, icon('home'), badge('any', true)), 'Salon')),
-    register('explorer', h('a', { href: '/explorer' }, icon('search'), 'Explorer')),
+    // Les vidéos à un toucher (l'Explorer passe sur la loupe du Salon)
+    h('a', { href: '/videos', class: 'tab-videos' }, icon('video'), 'Vidéos'),
     h('a', { href: '#', 'aria-label': 'Publier', onclick: (e) => (e.preventDefault(), openComposer()) }, h('span', { class: 'plus' }, icon('plus'))),
     register('journal', h('a', { href: '/journal' }, icon('newspaper'), 'Journal')),
     register('profil', h('a', { href: `/@${u.username}`, class: 'tab-me' }, tabAvatar, 'Profil')),
@@ -473,6 +475,8 @@ setRenderer(render);
     syncPush();
   }
   registerServiceWorker();
+  // Application démarrée : on peut comparer la version gardée avec celle du serveur
+  window.__aurumBooted?.();
   // Toucher une notification ouvre la bonne page
   navigator.serviceWorker?.addEventListener('message', (e) => {
     if (e.data?.type === 'navigate' && typeof e.data.url === 'string') {

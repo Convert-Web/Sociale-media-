@@ -37,7 +37,8 @@ async function cleanup(ctx) {
   const stale = await ctx.db.all(
     `SELECT id, poster FROM videos
      WHERE (complete = 0 AND created_at < ?)
-        OR (complete = 1 AND created_at < ? AND id NOT IN (SELECT video_id FROM posts WHERE video_id IS NOT NULL))
+        OR (complete = 1 AND created_at < ? AND id NOT IN (SELECT video_id FROM posts WHERE video_id IS NOT NULL)
+            AND id NOT IN (SELECT video_id FROM stories WHERE video_id IS NOT NULL))
      LIMIT 50`,
     now - 6 * 3600 * 1000, now - 24 * 3600 * 1000,
   );

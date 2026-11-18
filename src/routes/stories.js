@@ -5,6 +5,8 @@ const { fail, text, intParam } = require('../http');
 const { assertClean } = require('../contentFilter');
 const { single, saveImage, deleteUpload } = require('../uploads');
 const { authorOf } = require('../social');
+const V = require('../videos');
+const { attachVideo } = require('./videos');
 
 const DAY = 24 * 3600 * 1000;
 
@@ -19,11 +21,12 @@ module.exports = function storyRoutes(ctx) {
     const now = Date.now();
     if (now - lastCleanup < 10 * 60 * 1000) return;
     lastCleanup = now;
-    const old = await db.all('SELECT id, media FROM stories WHERE expires_at <= ?', now);
+    const old = await db.all('SELECT id, media, video_id FROM stories WHERE expires_at <= ?', now);
     for (const s of old) {
       await db.run('DELETE FROM story_views WHERE story_id = ?', s.id);
       await db.run('DELETE FROM stories WHERE id = ?', s.id);
       deleteUpload(ctx, s.media);
+      await V.removeVideo(ctx, s.video_id); // story vidéo : effacée avec la story
     }
   }
 
@@ -39,11 +42,13 @@ module.exports = function storyRoutes(ctx) {
     await cleanup();
     const me = req.user.id;
     const rows = await db.all(
-      `SELECT s.id, s.user_id, s.media, s.caption, s.created_at,
+      `SELECT s.id, s.user_id, s.media, s.caption, s.created_at, s.video_id,
+              vid.mime AS v_mime, vid.duration AS v_duration, vid.width AS v_width, vid.height AS v_height,
               u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
               EXISTS(SELECT 1 FROM story_views sv WHERE sv.story_id = s.id AND sv.user_id = ?) AS viewed,
               (SELECT COUNT(*) FROM story_views sv WHERE sv.story_id = s.id) AS views
        FROM stories s JOIN users u ON u.id = s.user_id
+       LEFT JOIN videos vid ON vid.id = s.video_id
        WHERE s.expires_at > ? AND u.paid_at IS NOT NULL
          AND s.user_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)
        ORDER BY s.id ASC`,
@@ -55,6 +60,9 @@ module.exports = function storyRoutes(ctx) {
       groups.get(row.user_id).stories.push({
         id: row.id,
         media: row.media,
+        video: row.video_id
+          ? { url: V.videoUrl(row.video_id, V.TYPES[row.v_mime] || 'mp4'), duration: row.v_duration || null, width: row.v_width || null, height: row.v_height || null }
+          : null,
         caption: row.caption,
         createdAt: row.created_at,
         viewed: row.user_id === me || Boolean(row.viewed),
@@ -70,17 +78,29 @@ module.exports = function storyRoutes(ctx) {
     res.json({ groups: list });
   });
 
+  // Story photo (champ « image ») ou vidéo (« video » : identifiant d'une vidéo déjà envoyée)
   r.post('/stories', single('image'), async (req, res) => {
-    if (!req.file) fail(400, 'Ajoutez une photo à votre story.');
+    const video = await attachVideo(ctx, req.user, req.body?.video);
+    if (!req.file && !video) fail(400, 'Ajoutez une photo ou une vidéo à votre story.');
     const caption = text(req.body?.caption, { field: 'Légende', max: 200 });
     assertClean('Légende', caption);
-    const media = await saveImage(ctx, req.file);
+    const media = video ? video.poster || '' : await saveImage(ctx, req.file);
     const now = Date.now();
     const { lastInsertRowid } = await db.run(
-      'INSERT INTO stories (user_id, media, caption, created_at, expires_at) VALUES (?, ?, ?, ?, ?)',
-      req.user.id, media, caption, now, now + DAY,
+      'INSERT INTO stories (user_id, media, video_id, caption, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+      req.user.id, media, video ? video.id : null, caption, now, now + DAY,
     );
-    res.status(201).json({ story: { id: lastInsertRowid, media, caption, createdAt: now, viewed: true, views: 0 } });
+    res.status(201).json({
+      story: {
+        id: lastInsertRowid,
+        media,
+        video: video ? { url: V.videoUrl(video.id, V.TYPES[video.mime]), duration: video.duration, width: video.width, height: video.height } : null,
+        caption,
+        createdAt: now,
+        viewed: true,
+        views: 0,
+      },
+    });
   });
 
   r.post('/stories/:id/view', async (req, res) => {
@@ -109,6 +129,7 @@ module.exports = function storyRoutes(ctx) {
     await db.run('DELETE FROM story_views WHERE story_id = ?', story.id);
     await db.run('DELETE FROM stories WHERE id = ?', story.id);
     deleteUpload(ctx, story.media);
+    await V.removeVideo(ctx, story.video_id);
     res.json({ ok: true });
   });
 

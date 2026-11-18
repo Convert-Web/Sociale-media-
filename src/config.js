@@ -22,6 +22,8 @@ const config = {
   isProd,
   port,
   appName: env.APP_NAME || 'AURUM',
+  // Version déployée (change à chaque mise en ligne) : sert à rafraîchir l'application gardée sur le téléphone
+  version: env.VERCEL_GIT_COMMIT_SHA || env.VERCEL_DEPLOYMENT_ID || `local-${Date.now()}`,
   baseUrl: (
     env.BASE_URL ||
     env.RENDER_EXTERNAL_URL ||

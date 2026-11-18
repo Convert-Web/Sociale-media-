@@ -317,6 +317,7 @@ export function feedView(ctx) {
       { class: 'page-head salon-head' },
       h('a', { href: '/salon', class: 'wordmark', 'aria-label': 'AURUM, le Salon' }, 'AURUM'),
       h('span', { class: 'grow' }),
+      h('a', { href: '/explorer', class: 'head-icon', 'aria-label': 'Explorer' }, icon('search')),
       h('a', { href: '/notifications', class: 'head-icon', 'aria-label': 'Activité' }, icon('heart'), headBadge('activity')),
       h('a', { href: '/messages', class: 'head-icon', 'aria-label': 'Messages' }, icon('send'), headBadge('messages')),
     ),

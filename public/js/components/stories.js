@@ -1,6 +1,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { h, icon, avatar, timeAgo, toast, modal, spinner, clear, nameLine, shrinkImage, confirmDialog } from '../dom.js';
+import { isVideoFile, readVideoInfo, uploadVideo, noSave, sound, clockLabel, MAX_SECONDS } from './video.js';
 
 const DURATION = 5000; // durée d'affichage d'une story
 
@@ -10,11 +11,12 @@ const DURATION = 5000; // durée d'affichage d'une story
 export function storiesBar() {
   const bar = h('div', { class: 'stories-bar', role: 'list', 'aria-label': 'Stories' });
   let groups = [];
-  const picker = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true });
+  // Photo ou vidéo (une minute au plus)
+  const picker = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,video/*', hidden: true });
   picker.addEventListener('change', () => {
     const f = picker.files[0];
     picker.value = '';
-    if (f) createStory(f, load);
+    if (f) (isVideoFile(f) ? createVideoStory : createStory)(f, load);
   });
 
   const item = (g, i) => {
@@ -99,6 +101,74 @@ function createStory(file, onDone) {
   );
 }
 
+// Story vidéo : aperçu, légende, préparation puis envoi en morceaux
+async function createVideoStory(file, onDone) {
+  let info;
+  try {
+    info = await readVideoInfo(file);
+    if (!(info.duration > 0)) throw new Error('Vidéo illisible sur cet appareil.');
+    if (info.duration > MAX_SECONDS + 1) throw new Error('Vidéo trop longue : une minute au maximum.');
+  } catch (err) {
+    return toast(err.message, 'error');
+  }
+  const posterUrl = info.poster ? URL.createObjectURL(info.poster) : null;
+  const caption = h('input', { class: 'input', maxlength: 200, placeholder: 'Ajouter une légende (facultatif)' });
+  const publish = h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Publier la story');
+  const progress = h('div', { class: 'upload-progress', hidden: true }, h('i'), h('span'));
+  const step = (label, ratio) => {
+    progress.hidden = false;
+    progress.lastChild.textContent = label;
+    progress.firstChild.style.transform = `scaleX(${Math.max(0.02, ratio)})`;
+  };
+  const m = modal(
+    'Nouvelle story',
+    h(
+      'form',
+      {
+        class: 'modal-body story-create',
+        onsubmit: async (e) => {
+          e.preventDefault();
+          publish.disabled = true;
+          publish.textContent = 'Publication…';
+          // Lancée dans le geste : le son de la vidéo est conservé
+          const job = uploadVideo(file, info, (kind, p) => step(kind === 'prepare' ? `Préparation ${Math.round(p * 100)} % · gardez l’app ouverte` : `Envoi ${Math.round(p * 100)} %`, p));
+          try {
+            const video = await job;
+            const fd = new FormData();
+            fd.append('video', video.id);
+            fd.append('caption', caption.value);
+            await api.post('/api/stories', fd);
+            m.close();
+            toast('Story publiée pour 24 heures.');
+            onDone?.();
+          } catch (err) {
+            publish.disabled = false;
+            publish.textContent = 'Publier la story';
+            progress.hidden = true;
+            toast(err.message, 'error');
+          }
+        },
+      },
+      h(
+        'div',
+        { class: 'story-create-preview' },
+        posterUrl ? h('img', { src: posterUrl, alt: '' }) : h('span', { class: 'preview-video-ph' }, icon('video')),
+        h('span', { class: 'preview-duration' }, icon('play', 'icon-xs'), clockLabel(info.duration)),
+      ),
+      caption,
+      progress,
+      publish,
+      h('p', { class: 'muted small', style: { textAlign: 'center' } }, 'Visible par les membres pendant 24 heures, puis effacée.'),
+    ),
+    {
+      onClose: () => {
+        if (posterUrl) URL.revokeObjectURL(posterUrl);
+        URL.revokeObjectURL(info.url);
+      },
+    },
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Lecteur plein écran
 // ---------------------------------------------------------------------------
@@ -128,9 +198,12 @@ export function openViewer(groups, startGroup, onClose) {
   const bars = h('div', { class: 'story-progress' });
   const head = h('div', { class: 'story-head' });
   const img = h('img', { class: 'story-media', alt: '' });
+  // Story vidéo : même cadre, durée de la vidéo au lieu de 5 secondes
+  const vid = noSave(h('video', { class: 'story-media', playsinline: true, 'webkit-playsinline': '', preload: 'auto', hidden: true }));
+  vid.playsInline = true;
   const caption = h('p', { class: 'story-caption' });
   const footer = h('div', { class: 'story-footer' });
-  const frame = h('div', { class: 'story-frame' }, img, h('div', { class: 'story-shade' }), bars, head, caption, footer);
+  const frame = h('div', { class: 'story-frame' }, img, vid, h('div', { class: 'story-shade' }), bars, head, caption, footer);
   const root = h('div', { class: 'story-viewer', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Story' }, frame);
 
   const group = () => groups[gi];
@@ -154,6 +227,7 @@ export function openViewer(groups, startGroup, onClose) {
     if (paused || !timer) return;
     paused = true;
     stop();
+    if (!vid.hidden) vid.pause();
     remaining -= performance.now() - started;
     const cur = bars.children[si]?.firstChild;
     if (cur) {
@@ -165,15 +239,16 @@ export function openViewer(groups, startGroup, onClose) {
   const resume = () => {
     if (!paused) return;
     paused = false;
+    if (!vid.hidden) vid.play().catch(() => {});
     run();
   };
 
   function show() {
     stop();
     paused = false;
-    remaining = DURATION;
     const g = group();
     const s = story();
+    remaining = s.video?.duration ? Math.max(1500, s.video.duration * 1000) : DURATION;
     bars.replaceChildren(
       ...g.stories.map((_, i) => h('i', null, h('b', { style: { width: i < si ? '100%' : '0%' } }))),
     );
@@ -205,6 +280,15 @@ export function openViewer(groups, startGroup, onClose) {
           },
         }, icon('trash')),
       );
+    }
+    if (s.video) {
+      const soundBtn = h('button', { class: 'story-btn', 'aria-label': 'Son' }, icon(sound.get() ? 'sound' : 'mute'));
+      soundBtn.addEventListener('click', () => {
+        sound.set(vid.muted);
+        vid.muted = !sound.get();
+        soundBtn.replaceChildren(icon(vid.muted ? 'mute' : 'sound'));
+      });
+      extra.unshift(soundBtn);
     }
     head.replaceChildren(
       h('a', { href: `/@${g.user.username}`, class: 'story-author', onclick: () => exit() }, avatar(g.user, 'sm'), h('b', null, g.user.displayName), h('small', null, timeAgo(s.createdAt))),
@@ -247,7 +331,6 @@ export function openViewer(groups, startGroup, onClose) {
       footer.replaceChildren();
     }
 
-    img.src = s.media;
     const startWhenReady = () => {
       if (story() !== s) return;
       run();
@@ -257,6 +340,24 @@ export function openViewer(groups, startGroup, onClose) {
         api.post(`/api/stories/${s.id}/view`).catch(() => {});
       }
     };
+    if (s.video) {
+      img.hidden = true;
+      vid.hidden = false;
+      vid.poster = s.media || '';
+      vid.src = s.video.url;
+      vid.muted = !sound.get();
+      const play = () => vid.play().catch(() => {
+        vid.muted = true; // son refusé sans geste : lecture muette
+        return vid.play().catch(() => {});
+      });
+      play().then(() => story() === s && startWhenReady());
+      return;
+    }
+    vid.pause();
+    vid.removeAttribute('src');
+    vid.hidden = true;
+    img.hidden = false;
+    img.src = s.media;
     if (img.complete && img.naturalWidth) startWhenReady();
     else img.decode().then(startWhenReady, startWhenReady);
   }
@@ -321,6 +422,8 @@ export function openViewer(groups, startGroup, onClose) {
 
   function exit() {
     stop();
+    vid.pause();
+    vid.removeAttribute('src');
     document.removeEventListener('keydown', onKey, true);
     document.removeEventListener('visibilitychange', onVisibility);
     root.classList.add('closing');
