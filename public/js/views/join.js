@@ -332,7 +332,7 @@ export function welcomeView(ctx) {
         'p',
         { class: 'text-2 fade-up', style: { animationDelay: '1.4s', fontSize: '17px' } },
         u.founder
-          ? `Vous faites partie des ${store.config.founderLimit} Fondateurs d'AURUM. Votre couronne est permanente, et votre carte est en or.`
+          ? `Vous faites partie des ${store.config.founderLimit} Fondateurs d'AURUM : entrée gratuite à vie, et les avant-premières du cercle avant tout le monde.`
           : 'Votre numéro vous appartient désormais, pour toujours. Il ne sera jamais réattribué.',
       ),
       h(

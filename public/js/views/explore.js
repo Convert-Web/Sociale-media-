@@ -12,7 +12,7 @@ function memberCardSmall(u) {
     h(
       'a',
       { href: `/@${u.username}`, class: 'meta' },
-      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null, u.founder ? icon('crown', 'crown') : null),
+      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null),
       h('small', null, u.profession || `@${u.username}`),
       memberChip(u),
     ),

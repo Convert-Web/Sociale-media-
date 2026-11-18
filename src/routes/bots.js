@@ -10,6 +10,7 @@ module.exports = function botRoutes(ctx) {
   // Déclenché par l'application à l'ouverture du Salon : publie ce qui est dû
   r.post('/bots/tick', requireMember, async (req, res) => {
     const force = Boolean(req.body?.force) && Boolean(req.user.is_admin);
+    await require('../founders').releaseDue(ctx).catch(() => {});
     res.json(await tick(ctx, { force }));
   });
 

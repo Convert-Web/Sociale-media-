@@ -46,8 +46,9 @@ async function buildLettre(ctx) {
   const events = (
     await db.all(
       `SELECT e.*, (SELECT COUNT(*) FROM event_attendees a WHERE a.event_id = e.id) AS going
-       FROM events e WHERE e.starts_at > ? AND e.starts_at < ? ORDER BY e.starts_at ASC LIMIT 3`,
-      now, now + 21 * DAY,
+       FROM events e WHERE e.starts_at > ? AND e.starts_at < ? AND (e.early_until IS NULL OR e.early_until <= ?)
+       ORDER BY e.starts_at ASC LIMIT 3`,
+      now, now + 21 * DAY, now,
     )
   ).map((e) => ({ title: e.title, when: longDate(e.starts_at, true), location: e.location, going: e.going, capacity: e.capacity, cover: abs(e.cover), url: `${config.baseUrl}/agenda/${e.id}` }));
 

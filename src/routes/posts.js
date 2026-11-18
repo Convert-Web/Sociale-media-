@@ -50,6 +50,8 @@ module.exports = function postRoutes(ctx) {
   });
 
   r.get('/feed', async (req, res) => {
+    // Avant-premières arrivées à échéance : publiées pour tous, en tête du fil
+    if (!intParam(req.query.before)) await require('../founders').releaseDue(ctx);
     const before = intParam(req.query.before);
     const limit = Math.min(intParam(req.query.limit) || 15, 50);
     const scope = req.query.scope === 'following' ? 'following' : 'all';

@@ -129,8 +129,19 @@ export function settingsView(ctx) {
     'div',
     { class: 'card' },
     h('h2', null, 'Votre carte'),
-    h('p', { class: 'desc' }, u.founder ? 'Membre fondateur — carte or, à vie.' : 'Membre du cercle, à vie.'),
+    h('p', { class: 'desc' }, u.founder ? 'Carte Fondateur : entrée gratuite à vie et avant-premières du cercle.' : 'Membre du cercle, à vie.'),
     h('div', { style: { maxWidth: '380px' } }, memberCard({ name: u.displayName, number: u.memberNumber, since: cardSince(u.joinedAt), founder: u.founder })),
+    u.founder
+      ? h(
+          'ul',
+          { class: 'founder-perks' },
+          [
+            ['sparkles', 'Avant-premières', 'Les annonces de la Direction, avant tout le monde.'],
+            ['calendar', 'Agenda en avance', 'Les événements de la Direction s’ouvrent d’abord aux Fondateurs, pendant 48 h.'],
+            ['gem', 'Entrée gratuite, à vie', 'Votre numéro ne sera jamais réattribué.'],
+          ].map(([ic, t, d]) => h('li', null, icon(ic), h('div', null, h('b', null, t), h('small', null, d)))),
+        )
+      : null,
     h(
       'div',
       { class: 'profile-meta', style: { marginTop: '0' } },

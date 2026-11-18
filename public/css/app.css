@@ -1712,3 +1712,98 @@ button.ig-stat:active { opacity: 0.6; }
 .post > .sensitive .post-body, .post > .sensitive .see-translation, .post > .sensitive-own .post-body { padding-left: 0; padding-right: 0; margin-left: 0; margin-right: 0; }
 .post > .sensitive-own { padding: 0 var(--gutter-r) 0 var(--gutter); }
 .post > .sensitive-own .sensitive-note { margin: 6px 0 0; }
+
+/* ===================================================================== v11
+   Carte Fondateur : métal noir brossé, trame pop art, médaillon, lettres en relief
+   ===================================================================== */
+.mcard.founder {
+  color: #f5f5f7;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 3px),
+    linear-gradient(135deg, #2a2a30 0%, #0d0d11 42%, #1b1b20 68%, #050507 100%);
+  box-shadow: 0 30px 60px -22px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.mcard.founder::after { background: radial-gradient(60% 60% at var(--mx) var(--my), rgba(255, 255, 255, 0.35), transparent 62%); mix-blend-mode: screen; opacity: 0.55; }
+.mcard.founder > .mcard-art { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.mcard-art-a { font: 900 20px/1 -apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', Arial, sans-serif; font-style: italic; }
+.mcard.founder .mcard-top { align-items: flex-start; }
+.mcard.founder .mcard-logo { color: #ffffff; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6); }
+.mcard.founder .mcard-logo small { opacity: 0.7; }
+.mcard-pop-label {
+  font: 800 2.5cqw/1 var(--font);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #0b0b0f;
+  background: #ffd60a;
+  padding: 1.3cqw 2.2cqw 1.2cqw 2.4cqw;
+  border: 0.45cqw solid #0b0b0f;
+  box-shadow: 0.9cqw 0.9cqw 0 #ff2e93;
+  transform: rotate(-4deg) translateY(0.6cqw);
+}
+.mcard.founder .mcard-chip { width: 11cqw; margin-top: 1cqw; background: linear-gradient(135deg, #f3e2b8, #c69c55 50%, #f0dcae); box-shadow: inset 0 0 0 0.35cqw rgba(0, 0, 0, 0.25), 0 0.4cqw 0.8cqw rgba(0, 0, 0, 0.35); }
+.mcard.founder .emboss {
+  background: linear-gradient(180deg, #ffffff 0%, #d4d4da 46%, #f7f7f9 54%, #a2a2ab 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0.25cqw 0 rgba(0, 0, 0, 0.85)) drop-shadow(0 -0.12cqw 0 rgba(255, 255, 255, 0.3));
+}
+.mcard.founder .mcard-number { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-weight: 600; letter-spacing: 0.1em; }
+.mcard.founder .mcard-bottom small { opacity: 0.75; letter-spacing: 0.16em; }
+.mcard.founder .mcard-bottom b { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-weight: 600; letter-spacing: 0.08em; max-width: 62cqw; }
+
+/* Avant-premières des Fondateurs : couleurs de la carte (encre, rose, jaune) */
+.previews:empty { display: none; }
+.previews { display: grid; gap: 10px; margin: 10px var(--gutter-r) 6px var(--gutter); }
+.preview-card {
+  position: relative;
+  padding: 14px 16px 16px;
+  border-radius: 18px;
+  color: #f5f5f7;
+  background:
+    radial-gradient(circle, rgba(255, 46, 147, 0.55) 0 32%, transparent 36%) right -6px top -6px / 9px 9px,
+    linear-gradient(135deg, #2a2a30 0%, #0d0d11 55%, #18181d 100%);
+  background-repeat: no-repeat, no-repeat;
+  overflow: hidden;
+  box-shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.5);
+  animation: fadeUp 0.4s var(--ease) both;
+}
+.preview-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto auto;
+  width: 46%;
+  height: 70%;
+  background: radial-gradient(circle, #ff2e93 0 30%, transparent 34%) 0 0 / 8px 8px;
+  -webkit-mask-image: radial-gradient(circle at 100% 0, #000 0%, transparent 70%);
+  mask-image: radial-gradient(circle at 100% 0, #000 0%, transparent 70%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.preview-card > * { position: relative; }
+.preview-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.preview-head small { min-width: 0; color: rgba(245, 245, 247, 0.7); font-size: 12.5px; line-height: 1.3; }
+.preview-label { flex: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px 4px 8px; background: #ffd60a; color: #0b0b0f; border: 2px solid #0b0b0f; box-shadow: 3px 3px 0 #ff2e93; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; transform: rotate(-2deg); }
+.preview-del { margin-left: auto; color: rgba(245, 245, 247, 0.75); }
+.preview-author { display: flex; align-items: center; gap: 8px; }
+.preview-author .name-line b, .preview-author a { color: #f5f5f7; }
+.preview-author .muted { color: rgba(245, 245, 247, 0.6); }
+.preview-body { margin-top: 8px; font-size: 16px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.preview-body a { color: #ffd60a; }
+.preview-images { display: grid; gap: 6px; margin-top: 10px; }
+.preview-images[data-count="2"] { grid-template-columns: 1fr 1fr; }
+.preview-images img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; }
+.preview-tag { display: flex; align-items: center; gap: 6px; margin: 0 var(--gutter-r) 4px var(--gutter); font-size: 12.5px; font-weight: 600; color: #d61f7a; }
+@media (prefers-color-scheme: dark) { .preview-tag { color: #ff6fb1; } }
+.early-toggle { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 999px; background: var(--fill); color: var(--text-2); font-size: 13px; font-weight: 600; }
+.early-toggle.on { background: #ffd60a; color: #0b0b0f; box-shadow: 2px 2px 0 #ff2e93; }
+.early-hours { margin-left: 6px; padding: 5px 8px; border-radius: 10px; border: 0; background: var(--fill); color: var(--text); font: inherit; font-size: 13px; }
+.composer-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.tag-pop { background: #ffd60a; color: #0b0b0f; font-weight: 700; }
+.event-early { color: #d61f7a; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .event-early { color: #ff6fb1; } }
+.founder-perks { list-style: none; margin: 16px 0 6px; padding: 0; display: grid; gap: 12px; max-width: 420px; }
+.founder-perks li { display: flex; gap: 12px; align-items: flex-start; }
+.founder-perks li > .icon { flex: none; width: 22px; height: 22px; color: #d61f7a; margin-top: 2px; }
+.founder-perks b { display: block; font-size: 15px; }
+.founder-perks small { display: block; color: var(--muted); font-size: 13.5px; line-height: 1.35; }

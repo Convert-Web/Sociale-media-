@@ -134,6 +134,8 @@ async function deleteUser(ctx, userId) {
     await t.run('DELETE FROM event_attendees WHERE user_id = ? OR event_id IN (SELECT id FROM events WHERE owner_id = ?)', userId, userId);
     await t.run('DELETE FROM notifications WHERE event_id IN (SELECT id FROM events WHERE owner_id = ?)', userId);
     await t.run('DELETE FROM events WHERE owner_id = ?', userId);
+    for (const p of await t.all('SELECT images FROM previews WHERE author_id = ?', userId)) media.push(...JSON.parse(p.images || '[]'));
+    await t.run('DELETE FROM previews WHERE author_id = ?', userId);
     await t.run('DELETE FROM place_endorsements WHERE user_id = ? OR place_id IN (SELECT id FROM places WHERE author_id = ?)', userId, userId);
     await t.run('DELETE FROM notifications WHERE place_id IN (SELECT id FROM places WHERE author_id = ?)', userId);
     await t.run('DELETE FROM places WHERE author_id = ?', userId);

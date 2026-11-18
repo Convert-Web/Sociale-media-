@@ -123,7 +123,7 @@ export async function invitationLanding(ctx) {
       ),
       h('div', { class: 'invite-card fade-up', style: { animationDelay: '.3s' } }, memberCard({ name: 'Votre nom ici', number: null, since: cardSince(Date.now()), founder: d.foundersLeft > 0 })),
       d.foundersLeft > 0
-        ? h('p', { class: 'invite-founders fade-up', style: { animationDelay: '.4s' } }, icon('crown'), `Plus que ${d.foundersLeft} place${d.foundersLeft > 1 ? 's' : ''} de Fondateur sur ${d.founderLimit} — entrée gratuite`)
+        ? h('p', { class: 'invite-founders fade-up', style: { animationDelay: '.4s' } }, icon('sparkles'), `Plus que ${d.foundersLeft} place${d.foundersLeft > 1 ? 's' : ''} de Fondateur sur ${d.founderLimit} — entrée gratuite`)
         : d.paidEntry
           ? h('p', { class: 'invite-founders fade-up', style: { animationDelay: '.4s' } }, icon('ticket'), `Droit d’entrée unique de ${money(d.priceCents, d.currency)}, sans abonnement`)
           : null,

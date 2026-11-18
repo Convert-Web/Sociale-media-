@@ -364,6 +364,7 @@ export function postCard(post, { expanded = false } = {}) {
   // « Voir la traduction » : publication écrite dans une autre langue
   const bodyTranslate = translateLink(post.body, post.lang, { show: ([t]) => paintBody(t), hide: () => paintBody() });
   // Filtre automatique : texte flouté derrière un avertissement (sauf pour son auteur)
+  const previewTag = post.preview ? h('p', { class: 'preview-tag' }, icon('sparkles', 'icon-xs'), 'Dévoilé en avant-première aux Fondateurs') : null;
   const textParts = post.flagged ? [sensitive(h('div', null, bodyEl, bodyTranslate), post.flagged, { mine: post.mine })] : [bodyEl, bodyTranslate];
 
   // « Voir les N commentaires » sous la publication
@@ -386,6 +387,7 @@ export function postCard(post, { expanded = false } = {}) {
       ),
       menuBtn,
     ),
+    previewTag,
     ...(hasMedia ? [] : textParts),
     hasMedia ? gallery(post.images) : null,
     post.journal ? journalLink(post.journal) : null,
@@ -527,6 +529,23 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
   const fileInput = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', multiple: true, hidden: true });
   const submit = h('button', { class: 'btn btn-primary btn-sm', type: 'submit', disabled: true }, 'Publier');
   const addBtn = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Ajouter des photos', onclick: () => fileInput.click() }, icon('image'));
+  // Direction : annonce réservée d'abord aux Fondateurs, publiée pour tous ensuite
+  let early = false;
+  const canEarly = Boolean(store.user?.isAdmin) && endpoint === '/api/posts';
+  const hoursSel = h('select', { class: 'early-hours', hidden: true, 'aria-label': 'Durée de l’avant-première' }, [24, 48, 168].map((n) => h('option', { value: String(n) }, n === 168 ? '7 jours' : `${n} h`)));
+  hoursSel.value = '48';
+  const idleLabel = () => (early ? 'Envoyer' : 'Publier');
+  const earlyBtn = canEarly
+    ? h('button', { class: 'early-toggle', type: 'button', 'aria-pressed': 'false', title: 'Visible d’abord par les Fondateurs, puis par tous' }, icon('sparkles', 'icon-sm'), 'Avant-première')
+    : null;
+  earlyBtn?.addEventListener('click', () => {
+    early = !early;
+    earlyBtn.setAttribute('aria-pressed', String(early));
+    earlyBtn.classList.toggle('on', early);
+    hoursSel.hidden = !early;
+    submit.textContent = idleLabel();
+    ta.placeholder = early ? 'Annonce réservée aux Fondateurs, puis publiée pour tous…' : placeholder || 'Que souhaitez-vous partager ?';
+  });
 
   const update = () => {
     const len = ta.value.length;
@@ -596,6 +615,20 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
             fd.append('images', small, small.name || 'photo');
           }
           if (total > MAX_UPLOAD) throw new Error('Photos trop lourdes : retirez-en une ou deux.');
+          if (early) {
+            fd.append('hours', hoursSel.value);
+            const res = await api.post('/api/previews', fd);
+            ta.value = '';
+            files.forEach((f) => URL.revokeObjectURL(f.url));
+            files = [];
+            paintPreviews();
+            fit();
+            const label = res.hours === 168 ? '7 jours' : `${res.hours} h`;
+            toast(`Avant-première envoyée aux Fondateurs. Publiée pour tous dans ${label}.`);
+            store.emit('preview:created', res.preview);
+            onPosted?.(null);
+            return;
+          }
           const { post } = await api.post(endpoint, fd);
           ta.value = '';
           files.forEach((f) => URL.revokeObjectURL(f.url));
@@ -609,7 +642,7 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
         } catch (err) {
           toast(err.message, 'error');
         } finally {
-          submit.textContent = 'Publier';
+          submit.textContent = idleLabel();
           update();
         }
       },
@@ -623,7 +656,7 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
       h(
         'div',
         { class: 'composer-bar' },
-        h('div', { class: 'composer-tools' }, addBtn, fileInput),
+        h('div', { class: 'composer-tools' }, addBtn, fileInput, earlyBtn, canEarly ? hoursSel : null),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '14px' } }, counter, submit),
       ),
     ),

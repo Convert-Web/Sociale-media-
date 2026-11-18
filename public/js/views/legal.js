@@ -28,7 +28,7 @@ function pages() {
         h('h2', null, '1. Objet'),
         h('p', null, "Les présentes conditions régissent l'accès au réseau social privé AURUM, réservé aux personnes majeures admises dans le cercle."),
         h('h2', null, "2. Conditions d'entrée"),
-        h('p', null, `Les ${limit} premières places, dites de Fondateur, sont gratuites et le restent à vie. Une fois ces places attribuées, l'accès au cercle est subordonné au paiement d'un droit d'entrée unique de ${price} TTC. Il ne s'agit pas d'un abonnement : aucun prélèvement ultérieur n'est effectué. Le paiement est traité par la société Stripe ; AURUM n'a jamais accès à vos coordonnées bancaires.`),
+        h('p', null, `Les ${limit} premières places, dites de Fondateur, sont gratuites et le restent à vie. Elles donnent droit à la carte Fondateur et aux avant-premières du cercle (annonces de la Direction et événements ouverts d'abord aux Fondateurs), sans autre avantage financier. Une fois ces places attribuées, l'accès au cercle est subordonné au paiement d'un droit d'entrée unique de ${price} TTC. Il ne s'agit pas d'un abonnement : aucun prélèvement ultérieur n'est effectué. Le paiement est traité par la société Stripe ; AURUM n'a jamais accès à vos coordonnées bancaires.`),
         h('h2', null, '3. Droit de rétractation'),
         h('p', null, "Conformément à l'article L221-28 13° du Code de la consommation, le membre qui demande l'accès immédiat au service, avant la fin du délai de rétractation de quatorze jours, reconnaît expressément perdre son droit de rétractation dès l'activation de son accès."),
         h('h2', null, '4. Règles de conduite et modération'),

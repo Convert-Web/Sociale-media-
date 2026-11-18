@@ -40,10 +40,15 @@ const muted = (t) => `<p style="margin:14px 0 0;font-size:13.5px;color:#86868b">
 function welcomeEmail(config, user) {
   const url = `${config.baseUrl}/salon`;
   const founder = user.member_number && user.member_number <= config.founderLimit;
-  const card = `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:6px 0 20px"><tr><td style="border-radius:16px;padding:22px 22px;background:${founder ? 'linear-gradient(135deg,#efe0bf,#c9a56b)' : 'linear-gradient(135deg,#f5f5f7,#e1e1e6)'};background-color:${founder ? '#d9bf8f' : '#ececf0'}">
-      <div style="font:600 12px ${FONT};letter-spacing:0.38em;color:#3a2f22">AURUM</div>
-      <div style="font:500 26px ${FONT};letter-spacing:0.08em;color:#1d1d1f;margin:18px 0 12px">${memberNo(user.member_number)}</div>
-      <div style="font:13px ${FONT};color:#3a2f22">${esc(user.display_name)}${founder ? ' · Fondateur' : ''}</div>
+  // Carte Fondateur : métal noir et touches pop art ; carte des membres : titane clair
+  const ink = founder ? '#f5f5f7' : '#1d1d1f';
+  const label = founder
+    ? `<span style="display:inline-block;margin-left:8px;padding:3px 8px;background:#ffd60a;border:2px solid #0b0b0f;color:#0b0b0f;font:800 10px ${FONT};letter-spacing:0.16em">FONDATEUR</span>`
+    : '';
+  const card = `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:6px 0 20px"><tr><td style="border-radius:16px;padding:22px 22px;background:${founder ? 'linear-gradient(135deg,#2a2a30,#0d0d11 45%,#1b1b20 70%,#ff2e93 140%)' : 'linear-gradient(135deg,#f5f5f7,#e1e1e6)'};background-color:${founder ? '#111114' : '#ececf0'}">
+      <div style="font:600 12px ${FONT};letter-spacing:0.38em;color:${ink}">AURUM${label}</div>
+      <div style="font:500 26px ${FONT};letter-spacing:0.08em;color:${ink};margin:18px 0 12px">${memberNo(user.member_number)}</div>
+      <div style="font:13px ${FONT};color:${ink};opacity:0.85">${esc(user.display_name)}</div>
     </td></tr></table>`;
   const html = layout({
     baseUrl: config.baseUrl,
@@ -51,7 +56,7 @@ function welcomeEmail(config, user) {
     body:
       h1(`Bienvenue dans le cercle, ${esc(firstName(user.display_name))}.`) +
       card +
-      p(founder ? `Vous faites partie des ${config.founderLimit} Fondateurs d’AURUM : votre carte est en or, et votre couronne est permanente.` : 'Votre numéro vous appartient pour toujours : il ne sera jamais réattribué.') +
+      p(founder ? `Vous faites partie des ${config.founderLimit} Fondateurs d’AURUM : entrée gratuite à vie, et les avant-premières du cercle (annonces et événements) avant tout le monde.` : 'Votre numéro vous appartient pour toujours : il ne sera jamais réattribué.') +
       p('Pour bien commencer : complétez votre profil, parcourez le Journal, inscrivez-vous à un événement de l’Agenda et partagez vos meilleures adresses dans le Carnet.') +
       button('Entrer dans le Salon', url),
   });

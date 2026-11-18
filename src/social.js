@@ -66,7 +66,7 @@ const REACTIONS = ['love', 'like', 'bravo', 'fire', 'haha', 'wow'];
 // Le seul paramètre de POST_SELECT est l'identifiant du membre qui consulte (v.id) ;
 // il précède tous les paramètres de la clause WHERE ajoutée par l'appelant.
 const POST_SELECT = `
-  SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.groupe_id, p.journal_id, p.flagged,
+  SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.groupe_id, p.journal_id, p.flagged, p.preview_at,
          ji.kind AS j_kind, ji.title AS j_title, ji.image AS j_image, ji.url AS j_url, ji.site_name AS j_site, ji.summary AS j_summary,
          u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count,
@@ -137,6 +137,8 @@ function serializePost(ctx, row, viewer) {
     canDelete: mine || Boolean(viewer.is_admin),
     // Filtre automatique : texte masqué derrière un avertissement (catégories détectées)
     flagged: flaggedLabels(row.flagged),
+    // Annonce dévoilée d'abord aux Fondateurs
+    preview: Boolean(row.preview_at),
   };
 }
 

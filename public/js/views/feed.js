@@ -1,11 +1,59 @@
 import { api } from '../api.js';
 import { store, isPolling } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, clear, spinner, emptyState, infinite, skeletonPosts, avatar } from '../dom.js';
+import { h, icon, clear, spinner, emptyState, infinite, skeletonPosts, avatar, nameLine, richText, remaining, timeAgo, confirmDialog, toast } from '../dom.js';
 import { postCard } from '../components/post.js';
 import { storiesBar } from '../components/stories.js';
 import { nextEventCard } from './events.js';
 import { journalStrip } from './journal.js';
+
+// Avant-premières : annonces de la Direction réservées aux Fondateurs, en tête du Salon
+function previewsSection(ctx) {
+  const host = h('div', { class: 'previews' });
+  const card = (p) => {
+    const el = h(
+      'article',
+      { class: 'preview-card' },
+      h(
+        'div',
+        { class: 'preview-head' },
+        h('span', { class: 'preview-label' }, icon('sparkles', 'icon-xs'), 'Avant-première'),
+        h('small', null, `Fondateurs · pour tous dans ${remaining(p.releaseAt)}`),
+        p.canDelete
+          ? h('button', {
+              class: 'icon-btn preview-del',
+              type: 'button',
+              'aria-label': 'Retirer l’avant-première',
+              onclick: async () => {
+                if (!(await confirmDialog('Retirer cette avant-première ?', 'Elle ne sera pas publiée pour les autres membres.', 'Retirer'))) return;
+                try {
+                  await api.del(`/api/previews/${p.id}`);
+                  el.remove();
+                } catch (err) {
+                  toast(err.message, 'error');
+                }
+              },
+            }, icon('x'))
+          : null,
+      ),
+      h('div', { class: 'preview-author' }, avatar(p.author, 'xs'), nameLine(p.author), h('span', { class: 'muted small' }, timeAgo(p.createdAt))),
+      p.body ? h('div', { class: 'preview-body' }, richText(p.body)) : null,
+      p.images.length ? h('div', { class: 'preview-images', dataset: { count: String(Math.min(p.images.length, 2)) } }, p.images.slice(0, 2).map((src) => h('img', { src, alt: '', loading: 'lazy' }))) : null,
+    );
+    return el;
+  };
+  const load = async () => {
+    try {
+      const { previews } = await api.get('/api/previews');
+      host.replaceChildren(...previews.map(card));
+    } catch {
+      /* la section reste vide */
+    }
+  };
+  load();
+  ctx.onCleanup(store.on('preview:created', load));
+  return host;
+}
 
 // Carte d'accueil des nouveaux membres : 4 étapes, masquable.
 function onboardingCard() {
@@ -280,6 +328,7 @@ export function feedView(ctx) {
       h('span', { class: 'grow' }, 'Que souhaitez-vous partager ?'),
       h('span', { class: 'compose-photo' }, icon('image')),
     ),
+    previewsSection(ctx),
     onboardingCard(),
     nextEventCard(),
     h('div', { class: 'tabs feed-tabs' }, tabAll, tabFollow),

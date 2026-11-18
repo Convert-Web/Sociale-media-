@@ -164,6 +164,18 @@ CREATE TABLE IF NOT EXISTS blocks (
 );
 
 -- Version 3 : notifications push, amis, groupes privés
+-- Version 11 : avant-premières de la Direction pour les Fondateurs
+CREATE TABLE IF NOT EXISTS previews (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  author_id   INTEGER NOT NULL,
+  body        TEXT NOT NULL DEFAULT '',
+  images      TEXT NOT NULL DEFAULT '[]',
+  created_at  INTEGER NOT NULL,
+  release_at  INTEGER NOT NULL,
+  post_id     INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_previews_due ON previews(post_id, release_at);
+
 CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,
   value  TEXT NOT NULL
@@ -357,6 +369,9 @@ const COLUMNS = [
   ['posts', 'flagged', 'TEXT'],
   ['comments', 'flagged', 'TEXT'],
   ['messages', 'flagged', 'TEXT'],
+  ['posts', 'preview_at', 'INTEGER'],
+  ['events', 'early_until', 'INTEGER'],
+  ['events', 'announce_pending', 'INTEGER NOT NULL DEFAULT 0'],
 ];
 
 async function migrate(client) {

@@ -129,9 +129,9 @@ export async function landingView(ctx) {
         ),
         tile(
           'tile-gold',
-          icon('crown', 'icon-lg'),
+          icon('sparkles', 'icon-lg'),
           h('h3', null, 'Fondateurs.'),
-          h('p', null, `Les ${num(cfg.founderLimit)} premiers membres reçoivent la carte or, à vie.`),
+          h('p', null, `Les ${num(cfg.founderLimit)} premiers membres : entrée gratuite, carte Fondateur et avant-premières du cercle.`),
           h('p', { class: 'tile-meta' }, stats.founderSpotsLeft > 0 ? `${num(stats.founderSpotsLeft)} place${stats.founderSpotsLeft > 1 ? 's' : ''} restante${stats.founderSpotsLeft > 1 ? 's' : ''}` : 'Complet'),
         ),
         tile('tile-dark', h('p', { class: 'tile-figure' }, '0'), h('h3', null, 'Publicité.'), h('p', null, 'Aucune. Jamais. Vos données ne sont ni vendues ni exploitées.')),

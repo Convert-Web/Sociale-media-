@@ -131,7 +131,7 @@ export function initials(name = '') {
 }
 
 export function avatar(user, size = '', { presence = false } = {}) {
-  const cls = ['avatar', size && `avatar-${size}`, user?.founder && 'founder'].filter(Boolean).join(' ');
+  const cls = ['avatar', size && `avatar-${size}`].filter(Boolean).join(' ');
   const el = h('span', { class: cls });
   if (user?.avatar) {
     el.append(h('img', { src: user.avatar, alt: '', loading: 'lazy', decoding: 'async' }));
@@ -166,7 +166,6 @@ export function nameLine(user, { link = true } = {}) {
   const parts = [
     h('b', null, user.displayName),
     user.verified ? verifiedMark() : null,
-    user.founder ? h('span', { title: 'Membre fondateur' }, icon('crown', 'crown')) : null,
     user.bot ? botChip() : null,
   ];
   return link
@@ -178,33 +177,96 @@ export function memberChip(user) {
   return user.memberNumber ? h('span', { class: 'member-no', title: 'Numéro de membre' }, memberNo(user.memberNumber)) : null;
 }
 
-export function founderBadge() {
-  return h('span', { class: 'founder-badge' }, icon('crown'), 'Fondateur');
+// ---------------------------------------------------------------------------
+// Carte de membre 3D : titane pour les membres, carte métal pop art pour les Fondateurs
+// ---------------------------------------------------------------------------
+
+// Trame pop art (points de tailles variables, façon impression en demi-teintes) :
+// un seul tracé par couleur, calculé une fois pour toutes les cartes.
+function halftone(w, hgt, step, size) {
+  let d = '';
+  for (let y = step / 2, row = 0; y < hgt; y += step, row++) {
+    for (let x = step / 2 + (row % 2 ? step / 2 : 0); x < w; x += step) {
+      const r = Math.min(1, Math.max(0, size(x / w, y / hgt))) * step * 0.52;
+      if (r < 0.14) continue;
+      const f = (n) => n.toFixed(2);
+      d += `M${f(x - r)} ${f(y)}a${f(r)} ${f(r)} 0 1 0 ${f(2 * r)} 0a${f(r)} ${f(r)} 0 1 0 ${f(-2 * r)} 0`;
+    }
+  }
+  return d;
+}
+function burst(cx, cy, points, outer, inner) {
+  const pts = [];
+  for (let i = 0; i < points * 2; i++) {
+    const a = (Math.PI * i) / points - Math.PI / 2;
+    const r = i % 2 ? inner : outer;
+    pts.push(`${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`);
+  }
+  return pts.join(' ');
+}
+let popArt = '';
+function popArtSvg() {
+  if (popArt) return popArt;
+  const W = 160;
+  const H = 101;
+  // Le motif reste à droite : le nom et le numéro, à gauche, se lisent sur le métal
+  const pink = halftone(W, H, 4.2, (u, v) => 1.15 - Math.hypot(u - 1, v * 0.64) / 0.6);
+  const cyan = halftone(W, H, 3.4, (u, v) => 1 - Math.hypot(u - 1.02, (v - 0.8) * 0.64) / 0.3);
+  const yellow = halftone(W, H, 2.8, (u, v) => 1 - Math.hypot(u - 0.66, (v - 1.12) * 0.64) / 0.28);
+  popArt = `<svg class="mcard-art" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <path d="${cyan}" fill="#19c6ff" opacity="0.85"/>
+    <path d="${yellow}" fill="#ffd60a" opacity="0.8"/>
+    <path d="${pink}" fill="#ff2e93" opacity="0.9"/>
+    <g transform="translate(2.2 2.2)"><polygon points="${burst(115, 54, 16, 26.5, 20)}" fill="#ff2e93"/></g>
+    <polygon points="${burst(115, 54, 16, 26.5, 20)}" fill="#ffd60a" stroke="#0b0b0f" stroke-width="1.6" stroke-linejoin="round"/>
+    <circle cx="115" cy="54" r="16" fill="#fbfbfd" stroke="#0b0b0f" stroke-width="1.6"/>
+    <circle cx="115" cy="54" r="13.3" fill="none" stroke="#0b0b0f" stroke-width="0.5" stroke-dasharray="1 1.2"/>
+    <text x="116.4" y="63.6" text-anchor="middle" class="mcard-art-a" fill="#19c6ff">A</text>
+    <text x="115" y="62.2" text-anchor="middle" class="mcard-art-a" fill="#ff2e93" stroke="#0b0b0f" stroke-width="1.3" paint-order="stroke">A</text>
+  </svg>`;
+  return popArt;
 }
 
-// ---------------------------------------------------------------------------
-// Carte de membre 3D
-// ---------------------------------------------------------------------------
 export function memberCard({ name, number, since, founder, interactive = true }) {
-  const card = h(
-    'div',
-    { class: `mcard${founder ? ' gold' : ''}` },
-    h(
+  let card;
+  if (founder) {
+    card = h(
       'div',
-      { class: 'mcard-top' },
-      h('div', { class: 'mcard-logo' }, 'AURUM', h('small', null, 'LE CERCLE PRIVÉ')),
+      { class: 'mcard founder' },
+      h(
+        'div',
+        { class: 'mcard-top' },
+        h('div', { class: 'mcard-logo' }, 'AURUM', h('small', null, 'LE CERCLE PRIVÉ')),
+        h('div', { class: 'mcard-pop-label' }, 'Fondateur'),
+      ),
       h('div', { class: 'mcard-chip' }),
-    ),
-    h('div', { class: 'mcard-number' }, memberNo(number)),
-    h(
+      h('div', { class: 'mcard-number emboss' }, memberNo(number)),
+      h(
+        'div',
+        { class: 'mcard-bottom' },
+        h('div', null, h('small', null, `Membre depuis ${since || '—'}`), h('b', { class: 'emboss' }, (name || 'Votre nom').toUpperCase())),
+      ),
+    );
+    card.insertAdjacentHTML('afterbegin', popArtSvg());
+  } else {
+    card = h(
       'div',
-      { class: 'mcard-bottom' },
-      h('div', null, h('small', null, 'Membre'), h('b', null, name || 'Votre nom')),
-      founder
-        ? h('div', { class: 'mcard-founder' }, icon('crown'), 'Fondateur')
-        : h('div', { style: { textAlign: 'right' } }, h('small', null, 'Depuis'), h('b', null, since || '—')),
-    ),
-  );
+      { class: 'mcard' },
+      h(
+        'div',
+        { class: 'mcard-top' },
+        h('div', { class: 'mcard-logo' }, 'AURUM', h('small', null, 'LE CERCLE PRIVÉ')),
+        h('div', { class: 'mcard-chip' }),
+      ),
+      h('div', { class: 'mcard-number' }, memberNo(number)),
+      h(
+        'div',
+        { class: 'mcard-bottom' },
+        h('div', null, h('small', null, 'Membre'), h('b', null, name || 'Votre nom')),
+        h('div', { style: { textAlign: 'right' } }, h('small', null, 'Depuis'), h('b', null, since || '—')),
+      ),
+    );
+  }
   if (interactive) tilt(card);
   return h('div', { class: 'mcard-wrap' }, card);
 }
@@ -228,6 +290,11 @@ export function tilt(card) {
   };
   target.addEventListener('pointermove', move);
   target.addEventListener('pointerleave', leave);
+}
+
+export function remaining(ts) {
+  const hours = Math.max(1, Math.ceil((ts - Date.now()) / 3600000));
+  return hours >= 48 ? `${Math.round(hours / 24)} jours` : `${hours} h`;
 }
 
 export function cardSince(ts) {

@@ -8,6 +8,7 @@ const { single, saveImage, deleteUpload } = require('../uploads');
 const { authorOf, notify, retractNotification } = require('../social');
 const { sendPush } = require('../push');
 const { announceEvent } = require('../bots');
+const { seesEarly, notifyFounders, releaseDue, HOUR } = require('../founders');
 
 const SIX_HOURS = 6 * 3600 * 1000;
 
@@ -47,15 +48,20 @@ module.exports = function eventRoutes(ctx) {
     past: row.starts_at < Date.now() - SIX_HOURS,
     host: authorOf(ctx, row),
     canEdit: row.owner_id === viewer.id || Boolean(viewer.is_admin),
+    // Avant-première : ouvert d'abord aux Fondateurs, jusqu'à cette date
+    earlyUntil: row.early_until && row.early_until > Date.now() ? row.early_until : null,
     attendees: preview ? (await attendeesPreview(row.id)).map((x) => authorOf(ctx, x)) : undefined,
   });
 
   const load = async (id, viewer) => {
     const eid = intParam(id);
     const row = eid && (await db.get(`${EVENT_SELECT} WHERE e.id = ?`, viewer.id, eid));
-    if (!row) fail(404, 'Cet événement est introuvable.');
+    if (!row || !visible(row, viewer)) fail(404, 'Cet événement est introuvable.');
     return row;
   };
+  // Pendant l'avant-première, seuls les Fondateurs (et l'organisateur) voient l'événement
+  const visible = (row, viewer) => !row.early_until || row.early_until <= Date.now() || row.owner_id === viewer.id || seesEarly(ctx, viewer);
+  const EARLY_FILTER = '(e.early_until IS NULL OR e.early_until <= ? OR e.owner_id = v.id OR ? = 1)';
 
   const readFields = (body, current = {}) => {
     const title = text(body.title ?? current.title, { field: 'Titre', min: 3, max: 80, required: true });
@@ -76,9 +82,11 @@ module.exports = function eventRoutes(ctx) {
     const scope = ['upcoming', 'mine', 'past'].includes(req.query.scope) ? req.query.scope : 'upcoming';
     const limit = Math.min(Number(req.query.limit) || 50, 100);
     const since = Date.now() - SIX_HOURS;
+    await releaseDue(ctx);
+    const early = [Date.now(), seesEarly(ctx, req.user) ? 1 : 0];
     let rows;
     if (scope === 'past') {
-      rows = await db.all(`${EVENT_SELECT} WHERE e.starts_at < ? ORDER BY e.starts_at DESC LIMIT ?`, req.user.id, since, limit);
+      rows = await db.all(`${EVENT_SELECT} WHERE e.starts_at < ? AND ${EARLY_FILTER} ORDER BY e.starts_at DESC LIMIT ?`, req.user.id, since, ...early, limit);
     } else if (scope === 'mine') {
       rows = await db.all(
         `${EVENT_SELECT} WHERE e.starts_at >= ? AND (e.owner_id = v.id OR EXISTS(SELECT 1 FROM event_attendees a WHERE a.event_id = e.id AND a.user_id = v.id))
@@ -86,7 +94,7 @@ module.exports = function eventRoutes(ctx) {
         req.user.id, since, limit,
       );
     } else {
-      rows = await db.all(`${EVENT_SELECT} WHERE e.starts_at >= ? ORDER BY e.starts_at ASC LIMIT ?`, req.user.id, since, limit);
+      rows = await db.all(`${EVENT_SELECT} WHERE e.starts_at >= ? AND ${EARLY_FILTER} ORDER BY e.starts_at ASC LIMIT ?`, req.user.id, since, ...early, limit);
     }
     res.json({ events: await Promise.all(rows.map((x) => serialize(x, req.user))) });
   });
@@ -96,15 +104,23 @@ module.exports = function eventRoutes(ctx) {
     if (f.startsAt < Date.now() - 3600 * 1000) fail(400, 'La date choisie est déjà passée.');
     const cover = await saveImage(ctx, req.file);
     const now = Date.now();
+    // Avant-première Fondateurs (Direction) : 48 h avant l'ouverture à tous
+    const early = Boolean(req.user.is_admin) && ['1', 'true', 'on'].includes(String(req.body?.early));
+    const earlyUntil = early ? now + 48 * HOUR : null;
     const { lastInsertRowid: id } = await db.run(
-      `INSERT INTO events (title, description, location, cover, starts_at, ends_at, capacity, owner_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      f.title, f.description, f.location, cover, f.startsAt, f.endsAt, f.capacity, req.user.id, now,
+      `INSERT INTO events (title, description, location, cover, starts_at, ends_at, capacity, owner_id, created_at, early_until, announce_pending)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      f.title, f.description, f.location, cover, f.startsAt, f.endsAt, f.capacity, req.user.id, now, earlyUntil, early ? 1 : 0,
     );
     // L'organisateur participe d'office
     await db.run('INSERT INTO event_attendees (event_id, user_id, created_at) VALUES (?, ?, ?)', id, req.user.id, now);
     const created = await load(id, req.user);
-    await announceEvent(ctx, created, req.user).catch((err) => console.warn('[bots] annonce :', err.message));
+    if (early) {
+      // Annonce publique à la fin de l'avant-première (voir founders.releaseDue)
+      await notifyFounders(ctx, { title: 'Avant-première Fondateurs', body: `${f.title} — réservez avant l’ouverture à tous.`, url: `/agenda/${id}`, tag: `event-early-${id}` }, req.user.id);
+    } else {
+      await announceEvent(ctx, created, req.user).catch((err) => console.warn('[bots] annonce :', err.message));
+    }
     res.status(201).json({ event: await serialize(created, req.user) });
   });
 

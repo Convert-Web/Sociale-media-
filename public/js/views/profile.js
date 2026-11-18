@@ -1,7 +1,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, memberChip, founderBadge, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox, popMenu, confirmDialog, verifiedMark, botChip } from '../dom.js';
+import { h, icon, avatar, memberChip, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox, popMenu, confirmDialog, verifiedMark, botChip } from '../dom.js';
 import { postList, backHead } from './feed.js';
 import { reportDialog } from '../components/report.js';
 import { friendButton } from './friends.js';
@@ -15,7 +15,7 @@ export function userRow(u, { follow = true } = {}) {
     h(
       'a',
       { href: `/@${u.username}`, class: 'meta' },
-      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null, u.founder ? icon('crown', 'crown') : null, u.bot ? botChip() : null),
+      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null, u.bot ? botChip() : null),
       h('small', null, memberChip(u), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, `@${u.username}${u.profession ? ` · ${u.profession}` : ''}`)),
       u.bio ? h('span', { class: 'bio' }, u.bio) : null,
     ),
@@ -268,7 +268,7 @@ export async function profileView(ctx) {
       'section',
       { class: 'profile-top' },
       h('div', { class: 'profile-row' }, avatarEl, stats),
-      h('div', { class: 'profile-name' }, h('h1', null, user.displayName), user.verified ? verifiedMark() : null, user.founder ? founderBadge() : null),
+      h('div', { class: 'profile-name' }, h('h1', null, user.displayName), user.verified ? verifiedMark() : null),
       h(
         'div',
         { class: 'profile-handle' },

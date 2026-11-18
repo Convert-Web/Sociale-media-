@@ -77,7 +77,7 @@ function personRow(u, actions) {
     h(
       'a',
       { href: `/@${u.username}`, class: 'meta' },
-      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null, u.founder ? icon('crown', 'crown') : null),
+      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null),
       h('small', null, memberChip(u), h('span', null, u.profession || `@${u.username}`)),
     ),
     h('div', { class: 'row-actions' }, actions),

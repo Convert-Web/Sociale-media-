@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, nameLine, memberChip, toast, popMenu, confirmDialog, emptyState, spinner, num, modal, autosize, verifiedMark } from '../dom.js';
+import { h, icon, avatar, nameLine, memberChip, toast, popMenu, confirmDialog, emptyState, spinner, num, modal, autosize, verifiedMark, remaining } from '../dom.js';
 import { cropImage } from '../components/cropper.js';
 import { backHead } from './feed.js';
 
@@ -72,6 +72,11 @@ function eventDialog(existing = null) {
   const capacity = h('input', { class: 'input', type: 'number', min: 1, max: 10000, inputmode: 'numeric', placeholder: 'Illimité', value: existing?.capacity || '' });
   const description = h('textarea', { class: 'textarea', maxlength: 2000, rows: 4, placeholder: 'Programme, tenue, informations pratiques…' });
   description.value = existing?.description || '';
+  // Direction : événement ouvert d'abord aux Fondateurs pendant 48 h
+  const early = h('input', { type: 'checkbox' });
+  const earlyField = !existing && store.user?.isAdmin
+    ? h('label', { class: 'check' }, early, h('span', null, h('b', null, 'Avant-première Fondateurs'), ' — visible et ouvert aux inscriptions pour les seuls Fondateurs pendant 48 h, puis pour tous.'))
+    : null;
   const preview = h('div', { class: 'event-cover-pick' }, icon('image'), h('span', null, 'Ajouter une photo'));
   const picker = h('input', { type: 'file', accept: 'image/*', hidden: true });
   const submit = h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, existing ? 'Enregistrer' : 'Publier l’événement');
@@ -121,6 +126,7 @@ function eventDialog(existing = null) {
             if (capacity.value) fd.append('capacity', capacity.value);
             fd.append('description', description.value);
             if (cover) fd.append('cover', cover, 'cover.jpg');
+            if (early.checked) fd.append('early', '1');
             ({ event } = await api.post('/api/events', fd));
           }
           m.close();
@@ -139,6 +145,7 @@ function eventDialog(existing = null) {
     h('label', { class: 'field' }, h('span', null, 'Lieu'), place),
     h('label', { class: 'field' }, h('span', null, 'Nombre de places'), capacity),
     h('label', { class: 'field' }, h('span', null, 'Description'), description),
+    earlyField,
     submit,
   );
   open();
@@ -166,6 +173,7 @@ function eventCard(e) {
           stack,
           h('span', null, `${num(e.goingCount)} participant${e.goingCount > 1 ? 's' : ''}`),
           e.going ? h('span', { class: 'tag tag-gold' }, icon('check', 'icon-xs'), 'J’y vais') : e.full ? h('span', { class: 'tag' }, 'Complet') : null,
+          e.earlyUntil ? h('span', { class: 'tag tag-pop' }, icon('sparkles', 'icon-xs'), 'Avant-première') : null,
         ),
       ),
     ),
@@ -343,6 +351,7 @@ export async function eventView(ctx) {
           ? h('li', null, icon('pin'), h('span', { class: 'grow' }, e.location), h('a', { href: mapsUrl(e.location), target: '_blank', rel: 'noopener', class: 'btn btn-ghost btn-sm' }, icon('navigation', 'icon-sm'), 'Itinéraire'))
           : null,
         h('li', null, icon('users'), h('span', null, places)),
+        e.earlyUntil ? h('li', { class: 'event-early' }, icon('sparkles'), h('span', null, `Avant-première Fondateurs · ouvert à tous dans ${remaining(e.earlyUntil)}`)) : null,
         h('li', null, avatar(e.host, 'xs'), h('span', null, 'Organisé par ', h('a', { href: `/@${e.host.username}` }, e.host.displayName), e.host.verified ? verifiedMark() : null)),
       ),
       e.description ? h('p', { class: 'event-desc' }, e.description) : null,
