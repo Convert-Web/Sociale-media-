@@ -122,6 +122,8 @@ function serializePost(ctx, row, viewer) {
         width: row.v_width || null,
         height: row.v_height || null,
         duration: row.v_duration || null,
+        // Éphémère : effacée à cette date (comme une story)
+        expiresAt: require('./videos').expiresAt(ctx, row.created_at),
       }
     : null;
   const images = video ? [] : [row.image, ...(row.media ? row.media.split('|') : [])].filter(Boolean);

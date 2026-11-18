@@ -34,6 +34,8 @@ module.exports = function postRoutes(ctx) {
     const postId = intParam(id);
     const post = postId && (await db.get('SELECT * FROM posts WHERE id = ?', postId));
     if (!post) fail(404, 'Publication introuvable.');
+    // Vidéo éphémère expirée : elle a disparu, même avant le ménage automatique
+    if (post.video_id && post.created_at <= Date.now() - ctx.config.videoTtlHours * 3600 * 1000) fail(404, 'Cette vidéo éphémère a disparu.');
     if (viewer && post.user_id !== viewer.id && (await isBlocked(ctx, viewer.id, post.user_id))) fail(404, 'Publication introuvable.');
     if (viewer && post.groupe_id && !viewer.is_admin) {
       const member = await db.get(
@@ -52,25 +54,29 @@ module.exports = function postRoutes(ctx) {
 
   r.get('/feed', async (req, res) => {
     // Avant-premières arrivées à échéance : publiées pour tous, en tête du fil
-    if (!intParam(req.query.before)) await require('../founders').releaseDue(ctx);
+    if (!intParam(req.query.before)) {
+      await require('../founders').releaseDue(ctx);
+      await require('../videos').purgeExpired(ctx);
+    }
     const before = intParam(req.query.before);
     const limit = Math.min(intParam(req.query.limit) || 15, 50);
     const scope = req.query.scope === 'following' ? 'following' : 'all';
     const me = req.user.id;
+    const live = Date.now() - ctx.config.videoTtlHours * 3600 * 1000; // vidéos éphémères encore visibles
     const rows =
       scope === 'following'
         ? await db.all(
             `${POST_SELECT}
-             WHERE (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${PUBLIC_POST}
+             WHERE (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${PUBLIC_POST} AND (p.video_id IS NULL OR p.created_at > ?)
                AND (p.user_id = v.id OR p.user_id IN (SELECT followee_id FROM follows WHERE follower_id = v.id))
              ORDER BY p.id DESC LIMIT ?`,
-            me, before, before, limit,
+            me, before, before, live, limit,
           )
         : await db.all(
             `${POST_SELECT}
-             WHERE (? IS NULL OR p.id < ?) AND u.paid_at IS NOT NULL AND ${NOT_BLOCKED} AND ${PUBLIC_POST}
+             WHERE (? IS NULL OR p.id < ?) AND u.paid_at IS NOT NULL AND ${NOT_BLOCKED} AND ${PUBLIC_POST} AND (p.video_id IS NULL OR p.created_at > ?)
              ORDER BY p.id DESC LIMIT ?`,
-            me, before, before, limit,
+            me, before, before, live, limit,
           );
     res.json(page(rows, req.user, limit));
   });

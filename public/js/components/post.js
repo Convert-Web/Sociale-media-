@@ -576,6 +576,7 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
           { class: 'preview preview-video' },
           video.posterUrl ? h('img', { src: video.posterUrl, alt: '' }) : h('span', { class: 'preview-video-ph' }, icon('video')),
           h('span', { class: 'preview-duration' }, icon('play', 'icon-xs'), clockLabel(video.info.duration)),
+          h('span', { class: 'preview-ephemeral' }, icon('clock', 'icon-xs'), `Éphémère · effacée après ${store.config?.videoTtlHours || 24} h`),
           h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Retirer la vidéo', onclick: () => clearVideo() }, icon('x')),
         ),
       );

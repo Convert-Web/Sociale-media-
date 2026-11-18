@@ -34,6 +34,7 @@ module.exports = function authRoutes(ctx) {
         foundersLeft: config.paidEntry ? 0 : await foundersLeft(ctx),
         admission: await admissionMode(ctx),
         realtime: config.realtime,
+        videoTtlHours: config.videoTtlHours,
       },
     });
   });

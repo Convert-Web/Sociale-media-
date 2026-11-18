@@ -1,6 +1,6 @@
 // Vidéos : préparation sur le téléphone, envoi en morceaux, lecteur du fil.
 import { api, ApiError } from '../api.js';
-import { h, icon } from '../dom.js';
+import { h, icon, remaining } from '../dom.js';
 
 export const MAX_SECONDS = 60;
 export const MAX_BYTES = 40 * 1024 * 1024;
@@ -204,8 +204,24 @@ const io = typeof IntersectionObserver !== 'undefined'
     }, { threshold: [0, 0.6, 1] })
   : null;
 
+// Pas d'enregistrement depuis le lecteur : ni bouton de téléchargement, ni menu, ni image incrustée
+export function noSave(el) {
+  el.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
+  el.disablePictureInPicture = true;
+  el.setAttribute('disablepictureinpicture', '');
+  el.disableRemotePlayback = true;
+  el.addEventListener('contextmenu', (e) => e.preventDefault());
+  return el;
+}
+
+// Badge « éphémère » : temps restant avant l'effacement
+export const ephemeralBadge = (v, cls = 'vp-ephemeral') => (v.expiresAt ? h('span', { class: cls, title: 'Vidéo éphémère : effacée après ce délai' }, icon('clock', 'icon-xs'), remaining(v.expiresAt)) : null);
+
 export function videoPlayer(v, { onOpen } = {}) {
-  const el = h('video', { class: 'vp-video', src: v.url, poster: v.poster || undefined, preload: 'metadata', loop: true, playsinline: true, 'webkit-playsinline': '' });
+  if (v.expiresAt && v.expiresAt <= Date.now()) {
+    return h('div', { class: 'vp vp-gone' }, icon('clock'), h('span', null, 'Vidéo éphémère disparue'));
+  }
+  const el = noSave(h('video', { class: 'vp-video', src: v.url, poster: v.poster || undefined, preload: 'metadata', loop: true, playsinline: true, 'webkit-playsinline': '' }));
   el.muted = !soundOn;
   el.playsInline = true;
   const soundBtn = h('button', { class: 'vp-sound', type: 'button', 'aria-label': 'Son' }, icon(soundOn ? 'sound' : 'mute'));
@@ -214,6 +230,7 @@ export function videoPlayer(v, { onOpen } = {}) {
   const ratio = v.width && v.height ? Math.max(v.width / v.height, 4 / 5) : 4 / 5;
   const wrap = h('div', { class: 'vp', style: { aspectRatio: String(ratio) } }, el, playMark, bar, soundBtn,
     v.duration ? h('span', { class: 'vp-time' }, clockLabel(v.duration)) : null,
+    ephemeralBadge(v),
     onOpen ? h('button', { class: 'vp-open', type: 'button', 'aria-label': 'Plein écran', onclick: (e) => { e.stopPropagation(); onOpen(); } }, icon('expand')) : null,
   );
   let userPaused = false;

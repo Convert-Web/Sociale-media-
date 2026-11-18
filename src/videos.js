@@ -53,6 +53,31 @@ async function removeVideo(ctx, id) {
   if (row?.poster) require('./uploads').deleteUpload(ctx, row.poster);
 }
 
+// Vidéos éphémères : la publication et la vidéo sont effacées définitivement après
+// config.videoTtlHours (24 h par défaut). Vérifié au plus une fois par minute, à l'ouverture
+// du Salon, des profils, des groupes et du fil des vidéos.
+const lastPurge = new WeakMap();
+async function purgeExpired(ctx, { force = false } = {}) {
+  const now = Date.now();
+  if (!force && now - (lastPurge.get(ctx.db) || 0) < 60 * 1000) return 0;
+  lastPurge.set(ctx.db, now);
+  const rows = await ctx.db.all(
+    'SELECT id, image, video_id FROM posts WHERE video_id IS NOT NULL AND created_at < ? LIMIT 25',
+    now - ctx.config.videoTtlHours * 3600 * 1000,
+  );
+  const { deletePost } = require('./membership');
+  const { deleteUpload } = require('./uploads');
+  for (const p of rows) {
+    const media = await deletePost(ctx, p.id);
+    await removeVideo(ctx, p.video_id); // morceaux, fiche et image d'aperçu
+    for (const url of media) if (!idFromUrl(url)) deleteUpload(ctx, url);
+  }
+  await cleanup(ctx);
+  return rows.length;
+}
+
+const expiresAt = (ctx, createdAt) => createdAt + ctx.config.videoTtlHours * 3600 * 1000;
+
 // Diffusion par plages d'octets (lecture, avance rapide)
 function videoHandler(ctx) {
   // Morceaux les plus regardés gardés en mémoire : démarrage plus rapide des vidéos
@@ -63,12 +88,17 @@ function videoHandler(ctx) {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     const m = /^\/([a-f0-9]{32})\.(mp4|webm)$/.exec(req.path);
     if (!m) return next();
-    const v = await ctx.db.get('SELECT mime, size FROM videos WHERE id = ? AND complete = 1', m[1]);
-    if (!v) return next();
+    const v = await ctx.db.get(
+      'SELECT v.mime, v.size, p.created_at AS posted_at FROM videos v LEFT JOIN posts p ON p.video_id = v.id WHERE v.id = ? AND v.complete = 1',
+      m[1],
+    );
+    // Vidéo expirée : plus jamais diffusée, même avant le ménage
+    if (!v || (v.posted_at && expiresAt(ctx, v.posted_at) <= Date.now())) return next();
     const type = v.mime === 'video/webm' ? 'video/webm' : 'video/mp4';
     res.setHeader('Content-Type', type);
     res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    // Éphémère : le navigateur ne la garde pas au-delà de la journée
+    res.setHeader('Cache-Control', `private, max-age=${Math.min(86400, ctx.config.videoTtlHours * 3600)}`);
     // Le CDN de Vercel ne garde pas ces réponses partielles (chaque plage est différente) ;
     // le navigateur, lui, les garde en cache.
     res.setHeader('CDN-Cache-Control', 'no-store');
@@ -123,4 +153,4 @@ function videoHandler(ctx) {
   };
 }
 
-module.exports = { CHUNK, MAX_BYTES, MAX_SECONDS, PER_DAY, TYPES, newId, videoUrl, idFromUrl, looksLikeVideo, storageUsed, cleanup, removeVideo, videoHandler };
+module.exports = { purgeExpired, expiresAt, CHUNK, MAX_BYTES, MAX_SECONDS, PER_DAY, TYPES, newId, videoUrl, idFromUrl, looksLikeVideo, storageUsed, cleanup, removeVideo, videoHandler };

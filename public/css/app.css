@@ -1853,3 +1853,10 @@ button.ig-stat:active { opacity: 0.6; }
 .reel-bar { bottom: env(safe-area-inset-bottom); }
 .reels-loading, .reels-empty { height: 100dvh; display: grid; place-items: center; scroll-snap-align: start; }
 .reels-empty .empty { color: #fff; }
+/* Vidéos éphémères */
+.vp, .reel { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.vp-ephemeral, .reel-ephemeral, .preview-ephemeral { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 12px; font-weight: 600; }
+.vp-ephemeral { position: absolute; left: 12px; top: 12px; }
+.preview-ephemeral { position: absolute; left: 8px; top: 8px; }
+.reel-ephemeral { margin-left: 8px; vertical-align: middle; background: rgba(0, 0, 0, 0.35); }
+.vp-gone { display: flex; align-items: center; justify-content: center; gap: 8px; aspect-ratio: 16 / 9; background: var(--fill); color: var(--muted); font-size: 14px; }

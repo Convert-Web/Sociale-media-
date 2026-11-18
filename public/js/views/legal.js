@@ -62,7 +62,7 @@ function pages() {
         h('h2', null, 'Sous-traitants'),
         h('p', null, 'Stripe (paiement du droit d’entrée), Vercel Inc. (hébergement, serveurs à Francfort), Turso (base de données, serveurs à Francfort), Brevo (envoi des courriels, France), et les services de notification d’Apple, Google ou Mozilla pour les notifications sur téléphone.'),
         h('h2', null, 'Durée de conservation'),
-        h('p', null, 'Les données sont conservées tant que le compte est actif, puis supprimées. Les justificatifs de paiement sont conservés dix ans (obligation comptable).'),
+        h('p', null, `Les données sont conservées tant que le compte est actif, puis supprimées. Les vidéos sont éphémères : elles sont effacées définitivement ${store.config?.videoTtlHours || 24} heures après leur publication, avec leurs réactions et commentaires. Les justificatifs de paiement sont conservés dix ans (obligation comptable).`),
         h('h2', null, 'Vos droits'),
         h('p', null, "Accès, rectification, effacement, portabilité (export en un clic depuis vos réglages), opposition et limitation. Vous pouvez saisir la CNIL (cnil.fr)."),
       ],

@@ -189,3 +189,23 @@ test('supprimer la publication supprime la vidéo et son aperçu', async () => {
   assert.equal((await ctx.db.get('SELECT COUNT(*) AS n FROM video_chunks WHERE video_id = ?', video.id)).n, 0);
   assert.equal((await client().get(video.url, { range: 'bytes=0-1' })).status, 404);
 });
+
+test('vidéo éphémère : invisible puis effacée après 24 h', async () => {
+  const done = await send(alice, fakeMp4(300 * 1024), { duration: 6 });
+  const posted = await alice.post('/api/posts', { body: 'Éphémère', video: done.data.video.id });
+  const { post } = posted.data;
+  assert.ok(Math.abs(post.video.expiresAt - (post.createdAt + 24 * 3600 * 1000)) < 2000);
+  assert.equal((await client().get(post.video.url, { range: 'bytes=0-1' })).status, 206);
+  // 25 heures plus tard
+  await ctx.db.run('UPDATE posts SET created_at = ? WHERE id = ?', Date.now() - 25 * 3600 * 1000, post.id);
+  assert.equal((await client().get(post.video.url, { range: 'bytes=0-1' })).status, 404);
+  assert.ok(!(await bob.get('/api/feed')).data.posts.some((p) => p.id === post.id));
+  assert.ok(!(await bob.get('/api/videos/feed')).data.posts.some((p) => p.id === post.id));
+  assert.ok(!(await bob.get('/api/users/alice/posts')).data.posts.some((p) => p.id === post.id));
+  assert.equal((await bob.get(`/api/posts/${post.id}`)).status, 404);
+  // Le ménage efface tout : publication, morceaux, fiche
+  await require('../src/videos').purgeExpired(ctx, { force: true });
+  assert.equal(await ctx.db.get('SELECT id FROM posts WHERE id = ?', post.id), undefined);
+  assert.equal(await ctx.db.get('SELECT id FROM videos WHERE id = ?', done.data.video.id), undefined);
+  assert.equal((await ctx.db.get('SELECT COUNT(*) AS n FROM video_chunks WHERE video_id = ?', done.data.video.id)).n, 0);
+});

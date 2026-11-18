@@ -78,8 +78,8 @@ module.exports = function userRoutes(ctx) {
     const before = intParam(req.query.before);
     const limit = 15;
     const rows = await db.all(
-      `${POST_SELECT} WHERE p.user_id = ? AND (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${PUBLIC_POST} ORDER BY p.id DESC LIMIT ?`,
-      req.user.id, u.id, before, before, limit,
+      `${POST_SELECT} WHERE p.user_id = ? AND (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${PUBLIC_POST} AND (p.video_id IS NULL OR p.created_at > ?) ORDER BY p.id DESC LIMIT ?`,
+      req.user.id, u.id, before, before, Date.now() - ctx.config.videoTtlHours * 3600 * 1000, limit,
     );
     res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)), hasMore: rows.length === limit });
   });

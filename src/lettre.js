@@ -58,7 +58,7 @@ async function buildLettre(ctx) {
               (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS reactions,
               (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comments
        FROM posts p JOIN users u ON u.id = p.user_id
-       WHERE p.groupe_id IS NULL AND u.is_bot = 0 AND p.created_at > ?
+       WHERE p.groupe_id IS NULL AND p.video_id IS NULL AND u.is_bot = 0 AND p.created_at > ?
        ORDER BY (reactions * 2 + comments * 3) DESC, p.id DESC LIMIT 3`,
       now - 7 * DAY,
     )

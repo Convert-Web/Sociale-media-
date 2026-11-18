@@ -3,12 +3,12 @@
 import { api, enc } from '../api.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, nameLine, richText, num, toast, emptyState, spinner } from '../dom.js';
-import { sound } from '../components/video.js';
+import { sound, noSave, ephemeralBadge } from '../components/video.js';
 
 function slide(post) {
   const v = post.video;
   const landscape = v.width && v.height && v.width > v.height;
-  const el = h('video', { class: `reel-video${landscape ? ' contain' : ''}`, src: v.url, poster: v.poster || undefined, preload: 'metadata', loop: true, playsinline: true, 'webkit-playsinline': '' });
+  const el = noSave(h('video', { class: `reel-video${landscape ? ' contain' : ''}`, src: v.url, poster: v.poster || undefined, preload: 'metadata', loop: true, playsinline: true, 'webkit-playsinline': '' }));
   el.muted = !sound.get();
   el.playsInline = true;
   const playMark = h('span', { class: 'reel-play', hidden: true }, icon('play'));
@@ -64,6 +64,7 @@ function slide(post) {
       'div',
       { class: 'reel-info' },
       h('a', { href: `/@${enc(post.author.username)}`, class: 'reel-author' }, avatar(post.author, 'sm'), nameLine(post.author, { link: false })),
+      ephemeralBadge(v, 'reel-ephemeral'),
       post.body ? h('div', { class: 'reel-text' }, richText(post.body)) : null,
     ),
     bar,
@@ -111,7 +112,7 @@ export async function videosView(ctx) {
 
   const add = (posts) => {
     for (const p of posts) {
-      if (!p.video || seen.has(p.id)) continue;
+      if (!p.video || seen.has(p.id) || (p.video.expiresAt && p.video.expiresAt <= Date.now())) continue;
       seen.add(p.id);
       const s = slide(p);
       track.append(s);
