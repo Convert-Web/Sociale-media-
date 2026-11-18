@@ -1882,3 +1882,46 @@ button.ig-stat:active { opacity: 0.6; }
 .tile-pop .tile-kicker { color: #ffd60a; }
 .tile-pop .tile-figure { background: linear-gradient(120deg, #ffd60a, #ff2e93); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
 .tile-pop p { color: rgba(245, 245, 247, 0.82); }
+
+/* ===================================================================== v14
+   Coin Vidéos : sobre, plein écran, haut noir
+   ===================================================================== */
+html.reels-mode, html.reels-mode body { background: #000; }
+.reels { position: fixed; inset: 0; z-index: 60; background: #000; color: #fff; overflow: hidden; }
+.reels-top { position: absolute; z-index: 4; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; align-items: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 4px) 6px 0; height: calc(env(safe-area-inset-top, 0px) + 60px); box-sizing: border-box;
+  background: linear-gradient(rgba(0, 0, 0, 0.32), transparent); pointer-events: none; }
+.reels-top button { pointer-events: auto; width: 46px; height: 46px; display: grid; place-items: center; color: #fff; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35)); }
+.reels-top .icon { width: 24px; height: 24px; stroke-width: 1.8; }
+.reels-hint { position: absolute; z-index: 5; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 64px); transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 16px; border-radius: 999px; background: rgba(28, 28, 30, 0.55); -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%);
+  color: #fff; font: 600 13.5px/1 var(--font); letter-spacing: -0.01em; box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.18); }
+.reel-preload { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.reel { background: #000; }
+.reel-poster, .reel .reel-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.reel-poster.contain, .reel .reel-video.contain { object-fit: contain; }
+.reel .reel-video { opacity: 0; transition: opacity 0.25s ease; background: transparent; }
+.reel.is-ready .reel-video { opacity: 1; }
+.reel-holder { position: absolute; inset: 0; }
+.reel-shade { position: absolute; left: 0; right: 0; bottom: 0; height: 45%; background: linear-gradient(transparent, rgba(0, 0, 0, 0.5)); pointer-events: none; }
+.reel .reel-play { width: 72px; height: 72px; margin: -36px 0 0 -36px; background: rgba(28, 28, 30, 0.35); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.reel .reel-play .icon { width: 30px; height: 30px; }
+.reel .reel-side { right: 10px; bottom: calc(env(safe-area-inset-bottom, 0px) + 96px); display: flex; flex-direction: column; align-items: center; gap: 24px; }
+.reel-act { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 48px; color: #fff; font: 600 12.5px/1 var(--font); letter-spacing: -0.01em; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)); }
+.reel-act .icon { width: 30px; height: 30px; stroke-width: 1.6; }
+.reel-act small:empty { display: none; }
+.reel-act.liked .icon { color: #ff2d55; }
+.reel .reel-info { left: 16px; right: 84px; bottom: calc(env(safe-area-inset-bottom, 0px) + 28px); text-shadow: none; }
+.reel .reel-author { display: inline-flex; align-items: center; gap: 10px; color: #fff; font: 600 15px/1.2 var(--font); letter-spacing: -0.01em; }
+.reel .reel-author .avatar { --s: 32px; box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.9); }
+.reel .reel-text { margin-top: 10px; max-height: none; font-size: 14.5px; line-height: 1.4; color: rgba(255, 255, 255, 0.92); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.reel .reel-bar { height: 2px; bottom: env(safe-area-inset-bottom, 0px); background: rgba(255, 255, 255, 0.16); }
+.reel .reel-bar i { background: rgba(255, 255, 255, 0.85); }
+/* Lecteur du fil : commandes en verre dépoli, discrètes */
+.vp-sound, .vp-open { width: 32px; height: 32px; background: rgba(28, 28, 30, 0.45); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.15); }
+.vp-sound { right: 10px; bottom: 10px; }
+.vp-open { right: 50px; bottom: 10px; }
+.vp-sound .icon, .vp-open .icon { width: 16px; height: 16px; stroke-width: 1.8; }
+.vp-bar { height: 2px; background: rgba(255, 255, 255, 0.16); }
+.post-ephemeral { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: 12.5px; }
+.post-ephemeral .icon { width: 12px; height: 12px; }

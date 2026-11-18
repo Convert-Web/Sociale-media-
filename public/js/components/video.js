@@ -1,6 +1,7 @@
 // Vidéos : préparation sur le téléphone, envoi en morceaux, lecteur du fil.
 import { api, ApiError } from '../api.js';
 import { h, icon, remaining, onTaps } from '../dom.js';
+import { navigate } from '../router.js';
 
 export const MAX_SECONDS = 60;
 export const MAX_BYTES = 40 * 1024 * 1024;
@@ -190,7 +191,7 @@ export async function uploadVideo(file, info, onStep) {
 // Lecteur du fil : lecture automatique (muette) dès que la vidéo est à l'écran,
 // son au toucher du haut-parleur, pause au toucher de l'image.
 // ---------------------------------------------------------------------------
-let soundOn = false; // le choix du son vaut pour toutes les vidéos de la session
+let soundOn = true; // son activé par défaut ; le choix vaut pour toutes les vidéos de la session
 export const sound = { get: () => soundOn, set: (v) => (soundOn = Boolean(v)) };
 const players = new Set();
 const io = typeof IntersectionObserver !== 'undefined'
@@ -229,8 +230,6 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
   const bar = h('span', { class: 'vp-bar' }, h('i'));
   const ratio = v.width && v.height ? Math.max(v.width / v.height, 4 / 5) : 4 / 5;
   const wrap = h('div', { class: 'vp', style: { aspectRatio: String(ratio) } }, el, playMark, bar, soundBtn,
-    v.duration ? h('span', { class: 'vp-time' }, clockLabel(v.duration)) : null,
-    ephemeralBadge(v),
     onOpen ? h('button', { class: 'vp-open', type: 'button', 'aria-label': 'Plein écran', onclick: (e) => { e.stopPropagation(); onOpen(); } }, icon('expand')) : null,
   );
   let userPaused = false;
@@ -278,4 +277,57 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
   });
   io?.observe(wrap);
   return wrap;
+}
+
+// ---------------------------------------------------------------------------
+// Plein écran : un seul lecteur, « déverrouillé » par le toucher qui ouvre les vidéos.
+// Les téléphones n'autorisent le son que si la lecture démarre pendant ce toucher :
+// la vidéo démarre donc tout de suite, avec le son, puis le même lecteur passe d'une
+// vidéo à l'autre. La liste est chargée d'avance pour que rien n'attende le réseau.
+// ---------------------------------------------------------------------------
+let reelsCache = null;
+let reelsLoading = null;
+export function prefetchReels() {
+  if (reelsLoading) return reelsLoading;
+  reelsLoading = api
+    .get('/api/videos/feed')
+    .then((d) => {
+      reelsCache = { posts: d.posts, hasMore: d.hasMore, at: Date.now() };
+      return reelsCache;
+    })
+    .catch(() => null)
+    .finally(() => {
+      reelsLoading = null;
+    });
+  return reelsLoading;
+}
+export const cachedReels = () => (reelsCache && Date.now() - reelsCache.at < 3 * 60 * 1000 ? reelsCache : null);
+export const rememberReels = (posts, hasMore) => {
+  reelsCache = { posts, hasMore, at: Date.now() };
+};
+
+let shared = null;
+export function reelsPlayer() {
+  if (!shared) {
+    shared = noSave(h('video', { class: 'reel-video', playsinline: true, 'webkit-playsinline': '', preload: 'auto', loop: true }));
+    shared.playsInline = true;
+  }
+  return shared;
+}
+
+// À appeler dans le geste : la première vidéo démarre aussitôt, son compris
+function primeReels(url) {
+  const v = reelsPlayer();
+  v.muted = !soundOn;
+  const src = url || '/img/unlock.mp4';
+  if (v.getAttribute('src') !== src) v.src = src;
+  const p = v.play();
+  if (p) p.catch(() => {});
+  if (!url && p) p.then(() => v.pause()).catch(() => {});
+}
+
+export function openReels({ postId = null, url = null } = {}) {
+  const first = url || cachedReels()?.posts.find((p) => p.video)?.video.url || null;
+  primeReels(first);
+  navigate(postId ? `/videos?p=${postId}` : '/videos');
 }

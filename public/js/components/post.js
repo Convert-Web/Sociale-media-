@@ -3,13 +3,13 @@ import { store } from '../store.js';
 import { navigate } from '../router.js';
 import {
   h, icon, avatar, nameLine, memberChip, timeAgo, fullDate, richText, toast, popMenu,
-  confirmDialog, lightbox, autosize, spinner, clear, shrinkImage, TOO_BIG_GIF, modal, num, onTaps, heartBurst,
+  confirmDialog, lightbox, autosize, spinner, clear, shrinkImage, TOO_BIG_GIF, modal, num, onTaps, heartBurst, remaining,
 } from '../dom.js';
 import { reportDialog } from './report.js';
 import { attachMentions } from './mentions.js';
 import { translateLink } from './translate.js';
 import { sensitive, flaggedNotice } from './sensitive.js';
-import { readVideoInfo, uploadVideo, videoPlayer, isVideoFile, clockLabel, MAX_SECONDS } from './video.js';
+import { readVideoInfo, uploadVideo, videoPlayer, isVideoFile, clockLabel, MAX_SECONDS, openReels } from './video.js';
 
 const MAX_POST = 2000;
 const MAX_PHOTOS = 6;
@@ -396,13 +396,21 @@ export function postCard(post, { expanded = false } = {}) {
         'div',
         { class: 'who' },
         nameLine(post.author),
-        h('span', { class: 'handle' }, memberChip(post.author), h('a', { href: link, title: fullDate(post.createdAt) }, timeAgo(post.createdAt)), edited),
+        h(
+          'span',
+          { class: 'handle' },
+          memberChip(post.author),
+          h('a', { href: link, title: fullDate(post.createdAt) }, timeAgo(post.createdAt)),
+          edited,
+          // Vidéo éphémère : temps restant, discret, à côté de l'heure
+          post.video?.expiresAt ? h('span', { class: 'post-ephemeral', title: 'Vidéo éphémère : effacée après ce délai' }, icon('clock', 'icon-xs'), remaining(post.video.expiresAt)) : null,
+        ),
       ),
       menuBtn,
     ),
     previewTag,
     ...(hasMedia ? [] : textParts),
-    post.video ? videoPlayer(post.video, { onOpen: () => navigate(`/videos?p=${post.id}`), onDouble: doubleLike }) : hasMedia ? gallery(post.images, doubleLike) : null,
+    post.video ? videoPlayer(post.video, { onOpen: () => openReels({ postId: post.id, url: post.video.url }), onDouble: doubleLike }) : hasMedia ? gallery(post.images, doubleLike) : null,
     post.journal ? journalLink(post.journal) : null,
     h('div', { class: 'post-actions' }, reactBtn, faces, commentBtn, shareBtn, h('span', { class: 'grow' }), saveBtn),
     ...(hasMedia ? textParts : []),

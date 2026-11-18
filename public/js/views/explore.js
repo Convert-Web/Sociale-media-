@@ -1,5 +1,6 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
+import { openReels } from '../components/video.js';
 import { h, icon, avatar, memberChip, clear, spinner, emptyState, debounce, num, verifiedMark } from '../dom.js';
 import { postCard } from '../components/post.js';
 import { userRow, followButton } from './profile.js';
@@ -100,7 +101,7 @@ export function exploreView(ctx) {
       'header',
       { class: 'page-head' },
       h('div', { class: 'grow' }, h('h1', null, 'Explorer'), h('div', { class: 'sub' }, 'Les membres et les sujets du cercle')),
-      h('a', { href: '/videos', class: 'btn btn-primary btn-sm videos-entry' }, icon('play', 'icon-sm'), 'Vidéos'),
+      h('a', { href: '/videos', class: 'btn btn-primary btn-sm videos-entry', onclick: (e) => { e.preventDefault(); openReels(); } }, icon('play', 'icon-sm'), 'Vidéos'),
     ),
     h('div', { class: 'explore-search' }, h('div', { class: 'search-box' }, icon('search'), input)),
     shortcuts,

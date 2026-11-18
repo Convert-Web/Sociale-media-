@@ -22,6 +22,7 @@ import { agendaView, eventView } from './views/events.js';
 import { carnetView, placeView } from './views/places.js';
 import { journalView, journalItemView } from './views/journal.js';
 import { videosView } from './views/videos.js';
+import { openReels, prefetchReels } from './components/video.js';
 import { stop as stopPlayer } from './components/player.js';
 import { registerServiceWorker, syncPush } from './push.js';
 document.addEventListener('aurum:logout', () => stopPlayer());
@@ -268,7 +269,8 @@ function buildShell() {
     { class: 'tabbar', 'aria-label': 'Navigation' },
     register('salon', h('a', { href: '/salon' }, h('span', { class: 'tab-icon' }, icon('home'), badge('any', true)), 'Salon')),
     // Les vidéos à un toucher (l'Explorer passe sur la loupe du Salon)
-    h('a', { href: '/videos', class: 'tab-videos' }, icon('video'), 'Vidéos'),
+    // Le toucher lance la première vidéo tout de suite, avec le son
+    h('a', { href: '/videos', class: 'tab-videos', onclick: (e) => { e.preventDefault(); openReels(); } }, icon('video'), 'Vidéos'),
     h('a', { href: '#', 'aria-label': 'Publier', onclick: (e) => (e.preventDefault(), openComposer()) }, h('span', { class: 'plus' }, icon('plus'))),
     register('journal', h('a', { href: '/journal' }, icon('newspaper'), 'Journal')),
     register('profil', h('a', { href: `/@${u.username}`, class: 'tab-me' }, tabAvatar, 'Profil')),
@@ -473,6 +475,8 @@ setRenderer(render);
   if (store.isMember) {
     connectRealtime();
     syncPush();
+    // Les vidéos sont prêtes avant qu'on touche l'onglet
+    setTimeout(() => prefetchReels(), 1200);
   }
   registerServiceWorker();
   // Application démarrée : on peut comparer la version gardée avec celle du serveur
