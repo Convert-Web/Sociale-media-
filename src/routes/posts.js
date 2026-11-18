@@ -3,6 +3,7 @@ const express = require('express');
 const { requireMember } = require('../auth');
 const { deletePost } = require('../membership');
 const { fail, text, intParam } = require('../http');
+const { throttle } = require('../antispam');
 const { moderate, autoReport } = require('../contentFilter');
 const { attachVideo } = require('./videos');
 const { photos, saveImage, deleteUpload } = require('../uploads');
@@ -96,6 +97,7 @@ module.exports = function postRoutes(ctx) {
   });
 
   r.post('/posts', photos(), async (req, res) => {
+    await throttle(ctx, req.user, 'post');
     const body = text(req.body?.body, { field: 'Publication', max: 2000 });
     const files = [...(req.files?.image || []), ...(req.files?.images || [])].slice(0, 6);
     // Vidéo déjà envoyée en morceaux (voir routes/videos.js) : une par publication, sans photo
@@ -218,6 +220,7 @@ module.exports = function postRoutes(ctx) {
   });
 
   r.post('/posts/:id/comments', async (req, res) => {
+    await throttle(ctx, req.user, 'comment');
     const post = await loadPost(req.params.id, req.user);
     const body = text(req.body.body, { field: 'Commentaire', max: 1000, required: true });
     const flagged = moderate(body);

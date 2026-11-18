@@ -32,6 +32,7 @@ function securityHeaders(config) {
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
+    ...(config.cookieSecure ? ['upgrade-insecure-requests'] : []),
   ].join('; ');
   return (_req, res, next) => {
     res.setHeader('Content-Security-Policy', csp);
@@ -39,7 +40,7 @@ function securityHeaders(config) {
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    if (config.cookieSecure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    if (config.cookieSecure) res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
     next();
   };
 }
@@ -73,6 +74,11 @@ async function createApp(config, overrides = {}) {
       '/api/auth',
       rateLimit({ windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: 'draft-7', legacyHeaders: false, message: tooMany }),
     );
+    // Créations de compte : 8 par heure et par adresse IP
+    app.use(
+      '/api/auth/signup',
+      rateLimit({ windowMs: 60 * 60 * 1000, limit: 8, standardHeaders: 'draft-7', legacyHeaders: false, message: tooMany }),
+    );
     app.use(
       '/api',
       rateLimit({
@@ -90,6 +96,17 @@ async function createApp(config, overrides = {}) {
   for (const name of routes) app.use('/api', require(`./routes/${name}`)(ctx));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ressource introuvable.' }));
 
+  // Moteurs de recherche : règles d'exploration et plan du site (adresse réelle du site)
+  const { isPage, robotsTxt, sitemapXml } = require('./pages');
+  app.get('/robots.txt', (_req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.type('text/plain').send(robotsTxt(config.baseUrl));
+  });
+  app.get('/sitemap.xml', (_req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.type('application/xml').send(sitemapXml(config.baseUrl, '2026-11-18'));
+  });
+
   // Photos envoyées par les membres (stockées dans la base)
   app.use('/media/v', videoHandler(ctx));
   app.use('/media', mediaHandler(ctx));
@@ -102,10 +119,15 @@ async function createApp(config, overrides = {}) {
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     if (STATIC_PREFIX.test(req.path)) return next();
-    if (ASSET_EXT.test(req.path) && !/^\/(@|messages\/)/.test(req.path)) return next();
-    res.setHeader('Cache-Control', 'no-cache');
+    const page = isPage(req.path);
+    if (!page && ASSET_EXT.test(req.path)) return next();
     // Jamais en cache : les règles de sécurité (CSP) de la page doivent toujours être les dernières
     res.setHeader('Cache-Control', 'no-store, max-age=0');
+    // Adresse inconnue : vraie réponse 404 (pour les moteurs), avec la page « introuvable » de l'application
+    if (!page) {
+      res.setHeader('X-Robots-Tag', 'noindex');
+      res.status(404);
+    }
     res.sendFile(INDEX_HTML);
   });
 

@@ -13,9 +13,10 @@ export function siteFooter() {
         'nav',
         null,
         h('a', { href: '/mentions-legales' }, 'Mentions légales'),
-        h('a', { href: '/cgv' }, 'Conditions'),
+        h('a', { href: '/cgu' }, 'CGU'),
+        h('a', { href: '/cgv' }, 'CGV'),
         h('a', { href: '/confidentialite' }, 'Confidentialité'),
-        h('a', { href: '/connexion' }, 'Se connecter'),
+        h('a', { href: '/confidentialite#cookies' }, 'Cookies'),
       ),
       h('p', null, `© ${new Date().getFullYear()} AURUM. Tous droits réservés.`),
     ),
@@ -36,7 +37,7 @@ export function siteTopbar() {
         null,
         u
           ? h('a', { href: u.isMember ? '/salon' : '/rejoindre', class: 'btn btn-primary btn-sm' }, u.isMember ? 'Ouvrir' : 'Finaliser')
-          : [h('a', { href: '/connexion', class: 'topbar-link' }, 'Se connecter'), h('a', { href: '/inscription', class: 'btn btn-primary btn-sm' }, 'Rejoindre')],
+          : h('a', { href: '/connexion', class: 'topbar-link' }, 'Se connecter'), // une seule action principale : celle de la page
       ),
     ),
   );
@@ -64,8 +65,9 @@ export async function landingView(ctx) {
       : `Paiement unique de ${price}. Accès à vie.`
     : `Gratuit pour les ${num(cfg.founderLimit)} Fondateurs — plus que ${places}. Ensuite : ${price}, une seule fois.`;
   const joinHref = store.user ? '/rejoindre' : '/inscription';
-  const cta = (label = 'Obtenir ma carte', cls = 'btn btn-primary btn-lg') => h('a', { href: joinHref, class: cls }, label);
-  const more = (label, href) => h('a', { href, class: 'link-more' }, label, icon('chevron', 'icon-sm'));
+  // Un seul appel à l'action, identique partout sur la page
+  const ctaLabel = onInvite ? 'Demander mon admission' : paid ? `Obtenir ma carte — ${price}` : 'Obtenir ma carte';
+  const cta = (label = ctaLabel, cls = 'btn btn-primary btn-lg') => h('a', { href: joinHref, class: cls }, label);
 
   // ---------------------------------------------------------------- Ouverture
   const hero = h(
@@ -80,7 +82,7 @@ export async function landingView(ctx) {
         h('p', { class: 'eyebrow' }, 'Le réseau social privé'),
         h('h1', null, 'Un cercle.', h('br'), h('span', { class: 'muted-strong' }, 'Pas une foule.')),
         h('p', { class: 'lead' }, 'Vidéos, stories et messages entre les personnes qui comptent. Sans publicité. Sans algorithme. Sans bruit.'),
-        h('div', { class: 'hero-cta' }, cta(onInvite ? 'Demander mon admission' : paid ? `Obtenir ma carte — ${price}` : 'Obtenir ma carte'), more('Se connecter', '/connexion')),
+        h('div', { class: 'hero-cta' }, cta()),
         h('p', { class: 'hero-note' }, heroNote),
       ),
       h(
@@ -173,7 +175,7 @@ export async function landingView(ctx) {
           : `Pour les ${num(cfg.founderLimit)} premiers membres, les Fondateurs : plus que ${places}. Ensuite, droit d’entrée unique de ${price}.${onInvite ? ' Une invitation d’un membre vous ouvre la porte aussitôt ; sans invitation, la Direction étudie chaque demande.' : ''}`,
       ),
       h('ul', { class: 'checklist' }, included.map((t) => h('li', null, icon('check', 'icon-sm'), t))),
-      cta(onInvite ? 'Demander mon admission' : paid ? `Obtenir ma carte — ${price}` : 'Obtenir ma carte', 'btn btn-primary btn-lg'),
+      cta(),
       paid ? h('p', { class: 'secure-note' }, icon('lock', 'icon-sm'), 'Paiement sécurisé par Stripe') : null,
     ),
   );

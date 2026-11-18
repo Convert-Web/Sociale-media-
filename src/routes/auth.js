@@ -3,6 +3,7 @@ const express = require('express');
 const { hashPassword, verifyPassword, burnPasswordCheck, newToken, sha256 } = require('../security');
 const { createSession, destroySession, requireAuth, autoAdmit } = require('../auth');
 const { fail, text, USERNAME_RE, EMAIL_RE, RESERVED } = require('../http');
+const { assertHuman, isDisposable, assertNotLocked, loginFailed, loginSucceeded } = require('../antispam');
 const { selfUser, counters } = require('../social');
 const { admitMember } = require('../membership');
 const { assertClean } = require('../contentFilter');
@@ -40,6 +41,7 @@ module.exports = function authRoutes(ctx) {
   });
 
   r.post('/auth/signup', async (req, res) => {
+    assertHuman(req.body); // champ piège et délai minimal : les robots sont refusés
     const displayName = text(req.body.displayName, { field: 'Nom', min: 2, max: 40, required: true });
     const username = text(req.body.username, { field: "Nom d'utilisateur", required: true, max: 20 }).replace(/^@/, '');
     const email = text(req.body.email, { field: 'E-mail', required: true, max: 120 }).toLowerCase();
@@ -51,6 +53,7 @@ module.exports = function authRoutes(ctx) {
     if (RESERVED.has(username.toLowerCase())) fail(409, "Ce nom d'utilisateur est réservé.");
     assertClean('Nom', displayName, username.replace(/[._]/g, ' '));
     if (!EMAIL_RE.test(email)) fail(400, 'Adresse e-mail invalide.');
+    if (isDisposable(email)) fail(400, 'Les adresses e-mail jetables ne sont pas acceptées. Utilisez votre adresse habituelle.');
     if (await db.get('SELECT 1 FROM users WHERE username = ?', username)) fail(409, "Ce nom d'utilisateur est déjà pris.");
     if (await db.get('SELECT 1 FROM users WHERE email = ?', email)) fail(409, 'Un compte existe déjà avec cet e-mail.');
     // Invitation d'un membre : vérifiée avant de créer le compte
@@ -95,8 +98,13 @@ module.exports = function authRoutes(ctx) {
     const login = text(req.body.login, { field: 'Identifiant', required: true, max: 120 }).replace(/^@/, '');
     const password = typeof req.body.password === 'string' ? req.body.password : '';
     const user = await db.get('SELECT * FROM users WHERE email = ? OR username = ?', login, login);
+    assertNotLocked(user); // compte bloqué 15 min après 8 essais ratés
     const ok = user ? await verifyPassword(password, user.password_hash) : await burnPasswordCheck(password);
-    if (!ok) fail(401, 'Identifiants incorrects.');
+    if (!ok) {
+      await loginFailed(ctx, user);
+      fail(401, 'Identifiants incorrects.');
+    }
+    await loginSucceeded(ctx, user);
     if (!user.is_admin && config.adminEmails.includes(user.email.toLowerCase())) {
       await db.run('UPDATE users SET is_admin = 1 WHERE id = ?', user.id);
     }
@@ -114,7 +122,9 @@ module.exports = function authRoutes(ctx) {
   r.post('/auth/forgot', async (req, res) => {
     const email = text(req.body.email, { field: 'E-mail', required: true, max: 120 }).toLowerCase();
     const user = await db.get('SELECT * FROM users WHERE email = ?', email);
-    if (user) {
+    // Un seul courriel toutes les 2 minutes par compte (pas de bombardement de la boîte)
+    const recent = user && (await db.get('SELECT 1 FROM password_resets WHERE user_id = ? AND expires_at > ?', user.id, Date.now() + 3600 * 1000 - 120 * 1000));
+    if (user && !recent) {
       const token = newToken();
       await db.run('DELETE FROM password_resets WHERE user_id = ?', user.id);
       await db.run(

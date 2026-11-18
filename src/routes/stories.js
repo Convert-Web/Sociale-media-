@@ -2,6 +2,7 @@
 const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam } = require('../http');
+const { throttle } = require('../antispam');
 const { assertClean } = require('../contentFilter');
 const { single, saveImage, deleteUpload } = require('../uploads');
 const { authorOf } = require('../social');
@@ -80,6 +81,7 @@ module.exports = function storyRoutes(ctx) {
 
   // Story photo (champ « image ») ou vidéo (« video » : identifiant d'une vidéo déjà envoyée)
   r.post('/stories', single('image'), async (req, res) => {
+    await throttle(ctx, req.user, 'story');
     const video = await attachVideo(ctx, req.user, req.body?.video);
     if (!req.file && !video) fail(400, 'Ajoutez une photo ou une vidéo à votre story.');
     const caption = text(req.body?.caption, { field: 'Légende', max: 200 });

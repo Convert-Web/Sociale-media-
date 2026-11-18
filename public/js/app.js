@@ -4,6 +4,8 @@ import { store, connectRealtime, disconnectRealtime } from './store.js';
 import { navigate, setRenderer, compile } from './router.js';
 import { h, icon, avatar, memberCard, cardSince, spinner, emptyState, closeModal, closeMenu, modal, num, clear } from './dom.js';
 import { composer } from './components/post.js';
+import { installFormValidation } from './forms.js';
+import { trackPage, cookieBanner } from './components/cookies.js';
 import { landingView } from './views/landing.js';
 import { loginView, signupView, forgotView, resetView } from './views/auth.js';
 import { joinView, welcomeView, logout } from './views/join.js';
@@ -71,7 +73,9 @@ const ROUTES = [
   { path: '/invitations', view: invitationsView, access: 'member', layout: 'app', nav: 'invitations' },
   { path: '/invitation/:code', view: invitationLanding, access: 'public' },
   { path: '/admin', view: adminView, access: 'admin', layout: 'app', nav: 'admin' },
+  { path: '/cgu', view: legalView, access: 'public', layout: 'auto', page: 'cgu' },
   { path: '/cgv', view: legalView, access: 'public', layout: 'auto', page: 'cgv' },
+  { path: '/rgpd', view: legalView, access: 'public', layout: 'auto', page: 'confidentialite' },
   { path: '/confidentialite', view: legalView, access: 'public', layout: 'auto', page: 'confidentialite' },
   { path: '/mentions-legales', view: legalView, access: 'public', layout: 'auto', page: 'mentions-legales' },
 ].map((r) => ({ ...r, ...compile(r.path) }));
@@ -257,6 +261,7 @@ function buildShell() {
     h(
       'footer',
       { class: 'rail-footer' },
+      h('a', { href: '/cgu' }, 'CGU'),
       h('a', { href: '/cgv' }, 'CGV'),
       h('a', { href: '/confidentialite' }, 'Confidentialité'),
       h('a', { href: '/mentions-legales' }, 'Mentions légales'),
@@ -344,8 +349,25 @@ function errorView(err) {
   );
 }
 
-function notFoundView() {
-  return emptyState('compass', 'Page introuvable', "Cette page n'existe pas, ou plus.", h('a', { href: '/', class: 'btn btn-primary' }, "Retour à l'accueil"));
+// Page 404 : le serveur répond aussi avec le statut 404 (moteurs de recherche)
+function notFoundView(ctx) {
+  ctx.title = 'Page introuvable — AURUM';
+  ctx.description = 'Cette page n’existe pas ou plus.';
+  const member = store.user?.isMember;
+  return h(
+    'section',
+    { class: `nf${member ? '' : ' nf-bare'}` },
+    member ? null : h('a', { href: '/', class: 'logo nf-logo', 'aria-label': 'AURUM, accueil' }, 'AURUM'),
+    h('div', { class: 'nf-code', 'aria-hidden': 'true' }, '404'),
+    h('h1', null, 'Cette page n’existe pas.'),
+    h('p', null, 'Le lien est peut-être incomplet, ou la page a été retirée.'),
+    h(
+      'div',
+      { class: 'nf-actions' },
+      h('a', { href: member ? '/salon' : '/', class: 'btn btn-primary btn-lg' }, member ? 'Retour au Salon' : 'Retour à l’accueil'),
+      history.length > 1 ? h('button', { type: 'button', class: 'btn btn-ghost btn-lg', onclick: () => history.back() }, 'Page précédente') : null,
+    ),
+  );
 }
 
 function match(pathname) {
@@ -439,7 +461,7 @@ async function render(opts = {}) {
 
   let el;
   try {
-    el = route ? await route.view(ctx) : notFoundView();
+    el = route ? await route.view(ctx) : notFoundView(ctx);
   } catch (err) {
     console.error(err);
     el = errorView(err);
@@ -454,18 +476,43 @@ async function render(opts = {}) {
   const swap = () => {
     container.replaceChildren(el);
     if (back) restoreScroll(back);
-    else if (!location.hash && !opts.same) window.scrollTo(0, 0);
+    else if (location.hash) {
+      // Ancre (#cookies…) : une seconde fois quand polices et tableaux ont pris leur place
+      const go = () => document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
+      go();
+      setTimeout(go, 350);
+    }
+    else if (!opts.same) window.scrollTo(0, 0);
   };
   const smooth = !opts.same && !opts.pop && layout === 'app' && document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (smooth) document.startViewTransition(swap);
   else swap();
   baseTitle = ctx.title || 'AURUM';
   paintTitle();
+  paintMeta(ctx, url);
+  // Mesure d'audience anonyme : le modèle de l'adresse (/@:username), jamais l'adresse réelle
+  if (!opts.same) trackPage(route ? route.path : '404');
+}
+
+// Description et adresse canonique de la page (moteurs de recherche, partage de lien)
+const DEFAULT_DESC = document.querySelector('meta[name="description"]')?.content || '';
+function paintMeta(ctx, url) {
+  const desc = document.querySelector('meta[name="description"]');
+  if (desc) desc.content = ctx.description || DEFAULT_DESC;
+  let canon = document.querySelector('link[rel="canonical"]');
+  if (!canon) {
+    canon = document.createElement('link');
+    canon.rel = 'canonical';
+    document.head.append(canon);
+  }
+  canon.href = location.origin + (url.pathname === '/rgpd' ? '/confidentialite' : url.pathname);
 }
 
 // ---------------------------------------------------------------------------
-// Liens internes, historique, session
+// Liens internes, historique, session, validation des formulaires
 // ---------------------------------------------------------------------------
+installFormValidation();
+
 document.addEventListener('click', (e) => {
   if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   const a = e.target.closest('a[href]');
@@ -530,5 +577,6 @@ setRenderer(render);
     }
   });
   render();
+  setTimeout(() => cookieBanner(), 1500);
 })();
 

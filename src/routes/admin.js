@@ -7,6 +7,8 @@ const { authorOf } = require('../social');
 const { deleteUser, admitMember } = require('../membership');
 const { admissionMode, setAdmissionMode, MODES, entryIsPaid, foundersLeft } = require('../admission');
 const { botsEnabled } = require('../bots');
+const { FIELDS, getLegal, saveLegal, missing } = require('../legal');
+const analytics = require('../analytics');
 
 module.exports = function adminRoutes(ctx) {
   const r = express.Router();
@@ -115,6 +117,22 @@ module.exports = function adminRoutes(ctx) {
   });
 
   // Mode d'entrée : libre ou sur invitation
+  // Mesure d'audience (30 derniers jours)
+  r.get('/admin/analytics', async (_req, res) => {
+    res.json(await analytics.summary(ctx, 30));
+  });
+
+  // Informations légales de l'éditeur (affichées dans les mentions légales, CGU, CGV et RGPD)
+  r.get('/admin/legal', async (_req, res) => {
+    const legal = await getLegal(ctx);
+    const fields = Object.entries(FIELDS).map(([key, f]) => ({ key, label: f.label, required: Boolean(f.required), max: f.max }));
+    res.json({ legal, fields, missing: missing(legal) });
+  });
+  r.put('/admin/legal', async (req, res) => {
+    const legal = await saveLegal(ctx, req.body);
+    res.json({ legal, missing: missing(legal) });
+  });
+
   r.post('/admin/settings', async (req, res) => {
     if (req.body?.admission !== undefined) {
       if (!MODES.includes(req.body.admission)) fail(400, 'Mode d’entrée inconnu.');

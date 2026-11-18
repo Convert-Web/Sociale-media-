@@ -337,7 +337,7 @@ export async function eventView(ctx) {
     'div',
     null,
     backHead('Événement', when(e)),
-    h('div', { class: 'cover event-hero' }, e.cover ? h('img', { src: e.cover, alt: '' }) : h('span', { class: 'event-cover-icon' }, icon('calendar'))),
+    h('div', { class: 'cover event-hero' }, e.cover ? h('img', { src: e.cover, alt: `Photo de l’événement ${e.title}` }) : h('span', { class: 'event-cover-icon' }, icon('calendar'))),
     coverPicker,
     h(
       'section',

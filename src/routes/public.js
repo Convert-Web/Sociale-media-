@@ -1,5 +1,7 @@
 'use strict';
 const express = require('express');
+const { getLegal } = require('../legal');
+const analytics = require('../analytics');
 
 module.exports = function publicRoutes(ctx) {
   const r = express.Router();
@@ -9,6 +11,18 @@ module.exports = function publicRoutes(ctx) {
   r.get('/version', (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json({ version: config.version });
+  });
+
+  // Informations légales de l'éditeur (pages publiques)
+  r.get('/legal', async (_req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    res.json({ legal: await getLegal(ctx), videoTtlHours: config.videoTtlHours, founderLimit: config.founderLimit, priceCents: config.priceCents, currency: config.currency });
+  });
+
+  // Mesure d'audience anonyme (sans cookie) : une page vue
+  r.post('/a', async (req, res) => {
+    await analytics.record(ctx, req).catch((err) => console.error('[audience]', err.message));
+    res.status(204).end();
   });
 
   r.get('/public/stats', async (_req, res) => {

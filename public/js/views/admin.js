@@ -11,14 +11,14 @@ function svg(tag, attrs, ...kids) {
   return el;
 }
 
-function signupChart(days) {
+function signupChart(days, label = 'Nouveaux membres sur 14 jours') {
   // Largeur proche de celle d'un téléphone : les chiffres restent lisibles une fois réduits
   const W = 400;
   const H = 170;
   const pad = { t: 16, b: 26, l: 4, r: 4 };
   const max = Math.max(1, ...days.map((d) => d.count));
   const bw = (W - pad.l - pad.r) / days.length;
-  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Nouveaux membres sur 14 jours' });
+  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': label });
   root.append(svg('line', { x1: pad.l, x2: W - pad.r, y1: H - pad.b, y2: H - pad.b, class: 'chart-axis' }));
   days.forEach((d, i) => {
     const hgt = ((H - pad.t - pad.b) * d.count) / max;
@@ -96,6 +96,114 @@ async function reportsSection() {
     host.append(card);
   }
   return host;
+}
+
+// Informations légales de l'éditeur : affichées dans les mentions légales, CGU, CGV et RGPD.
+// Elles sont gardées dans la base (jamais dans le code publié).
+async function legalSection() {
+  const host = h('div', { class: 'card emails-card legal-card' });
+  let d;
+  try {
+    d = await api.get('/api/admin/legal');
+  } catch (err) {
+    host.append(h('p', { class: 'muted' }, err.message));
+    return host;
+  }
+  const status = h('div', { class: 'push-status' });
+  const paint = (missing) => {
+    status.className = `push-status${missing.length ? '' : ' on'}`;
+    status.replaceChildren(h('span', { class: 'push-dot' }), missing.length ? `${missing.length} information${missing.length > 1 ? 's' : ''} obligatoire${missing.length > 1 ? 's' : ''} à compléter` : 'Pages légales complètes');
+  };
+  paint(d.missing);
+  const inputs = {};
+  const save = h('button', { class: 'btn btn-primary btn-sm', type: 'submit' }, 'Enregistrer');
+  const form = h(
+    'form',
+    {
+      class: 'legal-form',
+      onsubmit: async (e) => {
+        e.preventDefault();
+        save.disabled = true;
+        try {
+          const body = Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.value]));
+          const r = await api.put('/api/admin/legal', body);
+          paint(r.missing);
+          toast('Informations légales enregistrées.');
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+        save.disabled = false;
+      },
+    },
+    d.fields.map((f) => {
+      const type = f.key === 'email' ? 'email' : f.key === 'mediatorUrl' ? 'url' : 'text';
+      const el = h('input', { class: 'input', type, maxlength: f.max, value: d.legal[f.key] || '', placeholder: PLACEHOLDERS[f.key] || '', autocomplete: 'off' });
+      inputs[f.key] = el;
+      return h('label', { class: 'field' }, h('span', null, f.label, f.required ? null : h('small', { class: 'muted' }, ' — facultatif')), el);
+    }),
+    h('div', { class: 'legal-form-foot' }, h('a', { href: '/mentions-legales', target: '_blank', class: 'small' }, 'Voir les pages légales'), save),
+  );
+  host.append(status, h('p', { class: 'small muted' }, 'Ces informations apparaissent dans les mentions légales, les CGU, les CGV et la politique de confidentialité. Elles sont obligatoires pour un service payant.'), form);
+  return host;
+}
+const PLACEHOLDERS = {
+  editorName: 'Ex. : Prénom Nom, ou AURUM SAS',
+  legalForm: 'Ex. : Entrepreneur individuel (micro-entreprise)',
+  capital: 'Ex. : 1 000 € (sociétés uniquement)',
+  address: 'Numéro, rue, code postal, ville',
+  siren: '9 chiffres (SIREN) ou 14 (SIRET)',
+  registry: 'Ex. : RCS Paris, ou Registre national des entreprises',
+  vat: 'Ex. : TVA non applicable, art. 293 B du CGI',
+  director: 'Prénom Nom',
+  email: 'contact@…',
+  phone: 'Facultatif',
+  mediatorName: 'Ex. : CM2C, Medicys…',
+  mediatorUrl: 'https://…',
+};
+
+const kpi = (label, value, gold, sub) => h('div', { class: `kpi${gold ? ' gold' : ''}` }, h('small', null, label), h('b', { class: gold ? 'accent' : '' }, value), sub ? h('span', { class: 'muted small' }, sub) : null);
+
+// Audience : mesure anonyme, sans cookie, faite par AURUM
+const PAGE_NAMES = {
+  '/': 'Accueil', '/inscription': 'Inscription', '/connexion': 'Connexion', '/rejoindre': 'Droit d’entrée', '/bienvenue': 'Bienvenue',
+  '/salon': 'Salon', '/videos': 'Vidéos', '/explorer': 'Explorer', '/journal': 'Journal', '/journal/:id': 'Articles du Journal',
+  '/messages': 'Messages', '/messages/:username': 'Conversations', '/@:username': 'Profils', '/p/:id': 'Publications',
+  '/notifications': 'Activité', '/agenda': 'Agenda', '/agenda/:id': 'Événements', '/carnet': 'Carnet', '/carnet/:id': 'Adresses',
+  '/groupes': 'Groupes', '/groupes/:id': 'Groupe', '/amis': 'Amis', '/invitations': 'Invitations', '/invitation/:code': 'Liens d’invitation',
+  '/reglages': 'Réglages', '/cgu': 'CGU', '/cgv': 'CGV', '/confidentialite': 'Confidentialité', '/rgpd': 'RGPD', '/mentions-legales': 'Mentions légales', '404': 'Page introuvable',
+};
+const DEVICE_NAMES = { mobile: 'Téléphone', ordinateur: 'Ordinateur', tablette: 'Tablette' };
+async function audienceSection() {
+  let a;
+  try {
+    a = await api.get('/api/admin/analytics');
+  } catch (err) {
+    return h('p', { class: 'muted', style: { margin: '0 var(--gutter)' } }, err.message);
+  }
+  const list = (title, rows, name = (k) => k, empty = 'Rien pour l’instant') =>
+    h(
+      'div',
+      { class: 'card stat-list' },
+      h('b', null, title),
+      rows.length
+        ? h('ol', null, rows.map((r) => h('li', null, h('span', null, name(r.key)), h('small', null, num(r.n)))))
+        : h('p', { class: 'small muted' }, empty),
+    );
+  return h(
+    'div',
+    null,
+    h('div', { class: 'kpis' }, kpi('Visites', num(a.visits), true, '30 derniers jours'), kpi('Pages vues', num(a.views), false, '30 derniers jours'), kpi('Aujourd’hui', num(a.today), false, 'visites')),
+    h('div', { class: 'chart' }, signupChart(a.daily, 'Visites sur 14 jours')),
+    h(
+      'div',
+      { class: 'stat-grid' },
+      list('Provenance', a.sources, (k) => (k === 'direct' ? 'Accès direct ou application' : k)),
+      list('Campagnes (utm_source)', a.campaigns, (k) => k, 'Ajoutez ?utm_source=tiktok à vos liens pour les suivre'),
+      list('Pages les plus vues', a.pages, (k) => PAGE_NAMES[k] || k),
+      list('Appareils', a.devices, (k) => DEVICE_NAMES[k] || k),
+    ),
+    h('p', { class: 'small muted', style: { margin: '10px var(--gutter-r) 0 var(--gutter)' } }, 'Mesure anonyme, sans cookie et sans service extérieur. Vos propres visites (Direction) ne sont pas comptées.'),
+  );
 }
 
 // Courriels : état de l'envoi, essais et Lettre du cercle
@@ -262,7 +370,7 @@ export async function adminView(ctx) {
   const data = await api.get('/api/admin/overview');
   botsState = { enabled: Boolean(data.config.bots), available: Boolean(data.config.botsAvailable) };
   const admissions = await admissionsSection(data.config.admission);
-  const emails = await emailsSection();
+  const [emails, legal, audience] = await Promise.all([emailsSection(), legalSection(), audienceSection()]);
   const reports = await reportsSection();
   const t = data.totals;
   const c = data.config;
@@ -299,7 +407,6 @@ export async function adminView(ctx) {
         ),
   );
 
-  const kpi = (label, value, gold, sub) => h('div', { class: `kpi${gold ? ' gold' : ''}` }, h('small', null, label), h('b', { class: gold ? 'accent' : '' }, value), sub ? h('span', { class: 'muted small' }, sub) : null);
 
   const memberRows = data.recentMembers.map((m) => {
     const row = h(
@@ -368,10 +475,14 @@ export async function adminView(ctx) {
       kpi('Messages privés', num(t.messages)),
       kpi('Vidéos', num(t.videos || 0), false, `${num(Math.round((t.videoBytes || 0) / 1048576))} Mo sur ${num(Math.round(c.videoStorageBytes / 1048576))} Mo`),
     ),
+    h('div', { class: 'section-title' }, 'Audience — 30 jours'),
+    audience,
     h('div', { class: 'section-title' }, 'Entrée dans le cercle'),
     entry,
     h('div', { class: 'section-title' }, 'Courriels'),
     h('div', { class: 'admissions' }, emails),
+    h('div', { class: 'section-title' }, 'Informations légales'),
+    h('div', { class: 'admissions' }, legal),
     admissions ? h('div', { class: 'section-title' }, `Demandes d’admission${data.totals.admissions ? ` · ${data.totals.admissions}` : ''}`) : null,
     admissions,
     h('div', { class: 'section-title' }, 'Signalements'),

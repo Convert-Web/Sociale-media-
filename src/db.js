@@ -203,6 +203,15 @@ CREATE TABLE IF NOT EXISTS settings (
   value  TEXT NOT NULL
 );
 
+-- Mesure d'audience : totaux anonymes par jour (aucun identifiant)
+CREATE TABLE IF NOT EXISTS analytics_daily (
+  day   TEXT NOT NULL,
+  kind  TEXT NOT NULL,
+  key   TEXT NOT NULL,
+  n     INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, kind, key)
+);
+
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER NOT NULL,
@@ -384,6 +393,8 @@ const COLUMNS = [
   ['users', 'admission_declined_at', 'INTEGER'],
   ['users', 'admission_note', "TEXT NOT NULL DEFAULT ''"],
   ['users', 'is_bot', 'INTEGER NOT NULL DEFAULT 0'],
+  ['users', 'login_failures', 'INTEGER NOT NULL DEFAULT 0'],
+  ['users', 'login_locked_until', 'INTEGER'],
   ['posts', 'journal_id', 'INTEGER'],
   ['users', 'email_digest', 'INTEGER NOT NULL DEFAULT 1'],
   ['users', 'lang', 'TEXT'],
@@ -399,9 +410,13 @@ const COLUMNS = [
 ];
 
 async function migrate(client) {
+  // Toutes les colonnes existantes en une seule requête (démarrage rapide sur Vercel)
+  const { rows } = await client.execute(
+    "SELECT m.name AS t, p.name AS c FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type = 'table'",
+  );
+  const have = new Set(rows.map((r) => `${r.t}.${r.c}`));
   for (const [table, column, ddl] of COLUMNS) {
-    const { rows } = await client.execute({ sql: 'SELECT name FROM pragma_table_info(?)', args: [table] });
-    if (!rows.some((r) => r.name === column)) {
+    if (!have.has(`${table}.${column}`)) {
       try {
         await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
       } catch (err) {

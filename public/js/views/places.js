@@ -251,7 +251,7 @@ export async function placeView(ctx) {
     'div',
     null,
     backHead(p.name, `${CATEGORIES[p.category]?.one || 'Adresse'} · ${p.city}`),
-    p.photo ? h('div', { class: 'place-hero' }, h('img', { src: p.photo, alt: '' })) : null,
+    p.photo ? h('div', { class: 'place-hero' }, h('img', { src: p.photo, alt: `Photo de ${p.name}` })) : null,
     h(
       'section',
       { class: 'event-top' },

@@ -5,7 +5,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api/|media/|fonts/|js/|css/|img/|manifest\\.webmanifest|sw\\.js).*)",
+      "source": "/((?:connexion|inscription|mot-de-passe-oublie|reinitialiser|rejoindre|bienvenue|salon|explorer|notifications|videos|reglages|enregistres|amis|invitations|admin|cgu|cgv|rgpd|confidentialite|mentions-legales|messages(?:/[^/]+)?|p/[^/]+|@[^/]+|groupes(?:/[^/]+)?|journal(?:/[^/]+)?|agenda(?:/[^/]+)?|carnet(?:/[^/]+)?|invitation/[^/]+)/?)?",
       "destination": "/index.html"
     }
   ],
@@ -15,7 +15,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://www.dailymotion.com https://geo.dailymotion.com https://open.spotify.com https://embed.podcasts.apple.com https://w.soundcloud.com https://widget.deezer.com; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+          "value": "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://www.dailymotion.com https://geo.dailymotion.com https://open.spotify.com https://embed.podcasts.apple.com https://w.soundcloud.com https://widget.deezer.com; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
         },
         {
           "key": "X-Content-Type-Options",
@@ -35,12 +35,12 @@
         },
         {
           "key": "Strict-Transport-Security",
-          "value": "max-age=31536000; includeSubDomains"
+          "value": "max-age=63072000; includeSubDomains; preload"
         }
       ]
     },
     {
-      "source": "/((?!api/|media/|fonts/|js/|css/|img/|manifest\\.webmanifest|sw\\.js).*)",
+      "source": "/((?:connexion|inscription|mot-de-passe-oublie|reinitialiser|rejoindre|bienvenue|salon|explorer|notifications|videos|reglages|enregistres|amis|invitations|admin|cgu|cgv|rgpd|confidentialite|mentions-legales|messages(?:/[^/]+)?|p/[^/]+|@[^/]+|groupes(?:/[^/]+)?|journal(?:/[^/]+)?|agenda(?:/[^/]+)?|carnet(?:/[^/]+)?|invitation/[^/]+)/?)?",
       "headers": [
         {
           "key": "Cache-Control",
@@ -67,6 +67,15 @@
         {
           "key": "Service-Worker-Allowed",
           "value": "/"
+        }
+      ]
+    },
+    {
+      "source": "/(favicon\\.ico|apple-touch-icon\\.png)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800"
         }
       ]
     }

@@ -51,18 +51,19 @@ function journalLink(j) {
   );
 }
 
-function gallery(images, onDouble) {
+function gallery(images, onDouble, author = '') {
+  const alt = (i) => `Photo publiée par ${author || 'un membre'}${images.length > 1 ? ` (${i + 1} sur ${images.length})` : ''}`;
   const tappable = (el, src) => {
     onTaps(el, { single: () => lightbox(src), double: (e) => onDouble?.(el, e) });
     return el;
   };
   if (images.length === 1) {
-    return tappable(h('div', { class: 'post-image' }, h('img', { src: images[0], alt: '', loading: 'lazy', decoding: 'async' })), images[0]);
+    return tappable(h('div', { class: 'post-image' }, h('img', { src: images[0], alt: alt(0), loading: 'lazy', decoding: 'async' })), images[0]);
   }
   const track = h(
     'div',
     { class: 'carousel-track' },
-    images.map((src) => tappable(h('div', { class: 'carousel-slide' }, h('img', { src, alt: '', loading: 'lazy', decoding: 'async' })), src)),
+    images.map((src, i) => tappable(h('div', { class: 'carousel-slide' }, h('img', { src, alt: alt(i), loading: 'lazy', decoding: 'async' })), src)),
   );
   const dots = h('div', { class: 'carousel-dots' }, images.map((_, i) => h('i', { class: i === 0 ? 'on' : '' })));
   const counter = h('span', { class: 'carousel-count' }, `1/${images.length}`);
@@ -410,7 +411,7 @@ export function postCard(post, { expanded = false } = {}) {
     ),
     previewTag,
     ...(hasMedia ? [] : textParts),
-    post.video ? videoPlayer(post.video, { onOpen: () => openReels({ postId: post.id, url: post.video.url }), onDouble: doubleLike }) : hasMedia ? gallery(post.images, doubleLike) : null,
+    post.video ? videoPlayer(post.video, { onOpen: () => openReels({ postId: post.id, url: post.video.url }), onDouble: doubleLike }) : hasMedia ? gallery(post.images, doubleLike, post.author?.displayName) : null,
     post.journal ? journalLink(post.journal) : null,
     h('div', { class: 'post-actions' }, reactBtn, faces, commentBtn, shareBtn, h('span', { class: 'grow' }), saveBtn),
     ...(hasMedia ? textParts : []),

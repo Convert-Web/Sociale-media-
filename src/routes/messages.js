@@ -3,6 +3,7 @@ const { detectLang } = require('../translate');
 const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam } = require('../http');
+const { throttle } = require('../antispam');
 const { authorOf, counters, pushCounters, isBlocked, flaggedLabels } = require('../social');
 const { moderate, autoReport } = require('../contentFilter');
 const { sendPush } = require('../push');
@@ -113,6 +114,7 @@ module.exports = function messageRoutes(ctx) {
     if (other.is_bot) fail(400, 'C’est un compte automatique : il ne lit pas les messages. Écrivez plutôt à la Direction.');
     if (await isBlocked(ctx, req.user.id, other.id)) fail(403, 'Vous ne pouvez pas écrire à ce membre.');
     const body = text(req.body.body, { field: 'Message', max: 2000, required: true });
+    await throttle(ctx, req.user, 'message');
     // Filtre automatique : propos haineux ou menaces refusés, insultes masquées et signalées
     const flagged = moderate(body);
     const { lastInsertRowid } = await db.run(

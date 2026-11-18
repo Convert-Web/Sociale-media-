@@ -41,6 +41,10 @@ Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (bar
 | **Direction (admin)** | Membres, chiffre d'affaires, conversion, inscriptions sur 14 jours, derniers paiements, exclusion de membres, modération des publications. |
 | **RGPD** | Export de toutes ses données en un clic, suppression du compte, aucun traceur, polices hébergées localement. |
 | **Sécurité** | Mots de passe chiffrés (scrypt), sessions httpOnly, protection CSRF, limitation des tentatives, CSP stricte, vérification binaire des images envoyées. |
+| **Pages légales** | Mentions légales, **CGU**, **CGV** et politique de confidentialité **RGPD** (`/rgpd`, section `#cookies`). Les informations de l'éditeur (nom, adresse, SIREN, médiateur…) se saisissent dans **Direction → Informations légales** : elles restent dans la base, jamais dans le code. |
+| **Mesure d'audience** | Faite maison, **sans cookie ni identifiant** : visites, pages vues, provenance (TikTok, Instagram…), campagnes `?utm_source=`, appareils, dans **Direction → Audience**. Refus possible depuis la bannière cookies ; « Ne pas suivre » respecté ; la Direction n'est pas comptée. |
+| **Anti-spam** | Champ piège et délai minimal à l'inscription, adresses jetables refusées, 8 inscriptions par heure et par adresse IP, compte bloqué 15 min après 8 mots de passe erronés, limites de publications, commentaires, messages et stories, un courriel de mot de passe toutes les 2 minutes. |
+| **Référencement** | Titre et description par page, adresse canonique, image de partage 1200×630 (`/img/og.jpg`), `favicon.ico`, `robots.txt` et `sitemap.xml` (adresse réelle du site), **vraie page 404** (statut 404). |
 
 ## Mettre le site en ligne gratuitement (Vercel + Turso)
 

@@ -348,7 +348,7 @@ export async function groupView(ctx) {
     'div',
     null,
     backHead(g.name, `Groupe privé · ${plural(g.memberCount, 'membre', 'membres')}`),
-    h('div', { class: 'cover group-cover' }, g.cover ? h('img', { src: g.cover, alt: '' }) : h('span', { class: 'group-cover-icon' }, icon('groups'))),
+    h('div', { class: 'cover group-cover' }, g.cover ? h('img', { src: g.cover, alt: `Photo du groupe ${g.name}` }) : h('span', { class: 'group-cover-icon' }, icon('groups'))),
     coverPicker,
     h(
       'section',

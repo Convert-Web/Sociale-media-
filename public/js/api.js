@@ -21,6 +21,21 @@ async function request(method, url, body) {
   } catch {
     throw new ApiError(0, 'Connexion impossible. Vérifiez votre réseau.');
   }
+  return handle(res);
+}
+
+// Réponse déjà demandée ailleurs (session lancée par boot.js dès l'ouverture)
+export async function fromResponse(promise) {
+  let res;
+  try {
+    res = await promise;
+  } catch {
+    throw new ApiError(0, 'Connexion impossible. Vérifiez votre réseau.');
+  }
+  return handle(res);
+}
+
+async function handle(res) {
   const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null;
   if (!res.ok) {
     const err = new ApiError(res.status, data?.error || 'Une erreur est survenue.', data?.code);
@@ -34,6 +49,7 @@ export const api = {
   get: (url) => request('GET', url),
   post: (url, body = {}) => request('POST', url, body),
   patch: (url, body = {}) => request('PATCH', url, body),
+  put: (url, body = {}) => request('PUT', url, body),
   del: (url, body) => request('DELETE', url, body),
 };
 

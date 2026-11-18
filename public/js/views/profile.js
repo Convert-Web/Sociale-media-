@@ -216,7 +216,7 @@ export async function profileView(ctx) {
       const { photos } = await api.get(`/api/users/${enc(user.username)}/photos`);
       content.replaceChildren(
         photos.length
-          ? h('div', { class: 'photo-grid' }, photos.map((ph) => h('a', { href: `/p/${ph.postId}`, class: 'photo-cell' }, h('img', { src: ph.url, alt: '', loading: 'lazy', decoding: 'async' }))))
+          ? h('div', { class: 'photo-grid' }, photos.map((ph) => h('a', { href: `/p/${ph.postId}`, class: 'photo-cell' }, h('img', { src: ph.url, alt: `Photo de ${user.displayName}`, loading: 'lazy', decoding: 'async' }))))
           : emptyState('image', 'Aucune photo', user.isMe ? 'Vos photos publiées apparaîtront ici.' : 'Aucune photo publiée pour le moment.'),
       );
     } catch (err) {
@@ -233,7 +233,7 @@ export async function profileView(ctx) {
   }
   if (user.isMe) ctx.onCleanup(store.on('post:created', () => tabPosts.classList.contains('active') && showPosts()));
 
-  const coverEl = h('div', { class: 'cover' }, user.cover ? h('img', { src: user.cover, alt: '', style: { cursor: 'zoom-in' }, onclick: () => lightbox(user.cover) }) : null);
+  const coverEl = h('div', { class: 'cover' }, user.cover ? h('img', { src: user.cover, alt: `Photo de couverture de ${user.displayName}`, style: { cursor: 'zoom-in' }, onclick: () => lightbox(user.cover) }) : null);
   const avatarEl = avatar(user, 'xl', { presence: !user.isMe });
   if (user.avatar) {
     avatarEl.style.cursor = 'zoom-in';

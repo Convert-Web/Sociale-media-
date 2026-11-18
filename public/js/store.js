@@ -1,5 +1,5 @@
 // État global + bus d'événements + connexion temps réel (SSE).
-import { api } from './api.js';
+import { api, fromResponse } from './api.js';
 
 const listeners = new Map();
 
@@ -24,7 +24,10 @@ export const store = {
   },
 
   async refresh() {
-    const data = await api.get('/api/session');
+    // Première fois : la session demandée par boot.js dès l'ouverture de la page
+    const early = window.__aurumSession;
+    window.__aurumSession = null;
+    const data = early ? await fromResponse(early).catch(() => api.get('/api/session')) : await api.get('/api/session');
     this.user = data.user;
     this.config = data.config;
     if (data.counters) this.setCounters(data.counters);

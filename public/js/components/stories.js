@@ -378,6 +378,7 @@ export function openViewer(groups, startGroup, onClose) {
     vid.removeAttribute('src');
     vid.hidden = true;
     img.hidden = false;
+    img.alt = `Story de ${group().user.displayName}${s.caption ? ` : ${s.caption}` : ''}`;
     img.src = s.media;
     if (img.complete && img.naturalWidth) startWhenReady();
     else img.decode().then(startWhenReady, startWhenReady);

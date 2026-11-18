@@ -28,9 +28,16 @@ module.exports = function emailRoutes(ctx) {
   // Tâche planifiée de Vercel : chaque dimanche matin
   r.get('/cron/lettre', async (req, res) => {
     if (config.mail.cronSecret && req.get('authorization') !== `Bearer ${config.mail.cronSecret}`) fail(401, 'Accès refusé.');
+    // Ménage RGPD : demandes d'admission refusées depuis plus de 6 mois (comptes jamais admis)
+    const { deleteUser } = require('../membership');
+    const { deleteUpload } = require('../uploads');
+    const old = await db.all('SELECT id FROM users WHERE paid_at IS NULL AND is_admin = 0 AND admission_declined_at IS NOT NULL AND admission_declined_at < ?', Date.now() - 182 * 86400e3);
+    for (const u of old) for (const img of await deleteUser(ctx, u.id)) deleteUpload(ctx, img);
+    const purged = old.length;
+    await require('../analytics').purgeOld(ctx); // statistiques de plus de 25 mois
     const { weekday, hour } = parisParts(Date.now());
-    if (weekday !== 'dimanche' || hour < 7) return res.json({ sent: 0, skipped: 'La Lettre part le dimanche matin.' });
-    res.json(await sendLettre(ctx));
+    if (weekday !== 'dimanche' || hour < 7) return res.json({ sent: 0, purged, skipped: 'La Lettre part le dimanche matin.' });
+    res.json({ ...(await sendLettre(ctx)), purged });
   });
 
   // Réglage du membre : recevoir la Lettre ou non

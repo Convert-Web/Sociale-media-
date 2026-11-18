@@ -86,6 +86,7 @@ export function loginView(ctx) {
     btn,
   );
   ctx.title = 'Connexion — AURUM';
+  ctx.description = 'Connectez-vous à votre cercle AURUM.';
   return authLayout([
     h('span', { class: 'eyebrow' }, 'Membres'),
     h('h1', null, 'Bon retour parmi nous.'),
@@ -120,12 +121,15 @@ export function signupView(ctx) {
   const err = errorBox();
   let usernameTouched = false;
   const displayName = h('input', { class: 'input', autocomplete: 'name', required: true, minlength: 2, maxlength: 40, placeholder: 'Victoire de Montclar' });
-  const username = h('input', { class: 'input', autocomplete: 'username', required: true, maxlength: 20, placeholder: 'victoire', pattern: '[A-Za-z0-9_.]{3,20}' });
+  const username = h('input', { class: 'input', autocomplete: 'username', required: true, maxlength: 20, placeholder: 'victoire', pattern: '[A-Za-z0-9_.]{3,20}', dataset: { hint: '3 à 20 caractères : lettres sans accent, chiffres, « _ » ou « . ».' } });
   const email = h('input', { class: 'input', type: 'email', autocomplete: 'email', required: true, placeholder: 'vous@exemple.com' });
   const password = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minlength: 8, placeholder: '8 caractères minimum' });
   const meter = h('div', { class: 'pw-meter', dataset: { score: '0' } }, h('i'), h('i'), h('i'), h('i'));
   const consent = h('input', { type: 'checkbox', required: true });
   const btn = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'submit' }, store.config.paidEntry ? 'Continuer' : 'Créer mon compte', icon('arrow'));
+  // Anti-robots : champ invisible pour les humains (les robots le remplissent) et délai d'envoi
+  const trap = h('input', { name: 'website', type: 'text', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true' });
+  const shownAt = Date.now();
 
   // Entrée sur invitation : code d'un parrain (lien d'invitation) ou demande d'admission
   const onInvitation = store.config.admission === 'invitation';
@@ -178,6 +182,8 @@ export function signupView(ctx) {
             password: password.value,
             invitation: code || undefined,
             note: noteField.hidden ? undefined : note.value,
+            website: trap.value,
+            elapsed: Date.now() - shownAt,
           });
           if (user.isMember || user.admission?.approved) rememberInvitation(null);
           afterAuth(user, '/bienvenue');
@@ -189,6 +195,7 @@ export function signupView(ctx) {
     },
     inviteBox,
     err.el,
+    h('div', { class: 'hp', 'aria-hidden': 'true' }, h('label', null, 'Ne pas remplir', trap)),
     field('Nom complet', displayName, 'Tel qu’il apparaîtra sur votre carte.'),
     field("Nom d'utilisateur", h('div', { class: 'input-prefix' }, h('b', null, '@'), username)),
     field('E-mail', email),
@@ -202,7 +209,7 @@ export function signupView(ctx) {
         'span',
         null,
         "J'ai 18 ans ou plus et j'accepte les ",
-        h('a', { href: '/cgv', target: '_blank' }, 'conditions générales'),
+        h('a', { href: '/cgu', target: '_blank' }, 'conditions d’utilisation'),
         ' et la ',
         h('a', { href: '/confidentialite', target: '_blank' }, 'politique de confidentialité'),
         '.',
@@ -212,6 +219,7 @@ export function signupView(ctx) {
   );
 
   ctx.title = 'Inscription — AURUM';
+  ctx.description = 'Rejoignez AURUM, le réseau social privé : votre carte et votre numéro de membre en quelques secondes.';
   const paid = store.config.paidEntry;
   return authLayout([
     paid ? h('div', { class: 'steps' }, h('i', { class: 'on' }), h('i'), h('span', null, 'Étape 1 sur 2 — Votre identité')) : null,

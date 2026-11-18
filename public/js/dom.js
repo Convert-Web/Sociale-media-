@@ -421,7 +421,7 @@ export function closeModal() {
 
 // Visionneuse : ouverture zoomée, fermeture d'un geste vers le bas (comme Photos sur iPhone), Échap ou toucher.
 export function lightbox(src) {
-  const img = h('img', { src, alt: '', draggable: 'false' });
+  const img = h('img', { src, alt: 'Photo agrandie', draggable: 'false' });
   const box = h('div', { class: 'lightbox', role: 'dialog', 'aria-label': 'Photo' }, img, h('button', { class: 'lightbox-close', 'aria-label': 'Fermer' }, icon('x')));
   let closing = false;
   const close = () => {

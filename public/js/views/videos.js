@@ -33,7 +33,7 @@ function slide(post) {
   const box = h(
     'section',
     { class: 'reel', dataset: { id: post.id } },
-    h('img', { class: 'reel-poster', src: v.poster || '', alt: '', decoding: 'async' }),
+    h('img', { class: 'reel-poster', src: v.poster || '', alt: `Vidéo de ${post.author.displayName}`, decoding: 'async' }),
     h('div', { class: 'reel-holder' }),
     h('div', { class: 'reel-shade' }),
     h('span', { class: 'reel-play', hidden: true }, icon('play')),

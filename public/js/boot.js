@@ -1,6 +1,14 @@
 /* AURUM — démarrage : vérifie la version de l'application gardée sur le téléphone.
    Script classique, minuscule et indépendant du reste : même si une ancienne version
    gardée ne démarrait pas, la vérification a lieu et la version suivante se charge. */
+// Session demandée tout de suite, pendant que les scripts de l'application se téléchargent
+try {
+  window.__aurumSession = fetch('/api/session', { credentials: 'same-origin', headers: { 'x-aurum': '1' } });
+  window.__aurumSession.catch(function () {});
+} catch (e) {
+  window.__aurumSession = null;
+}
+
 (function () {
   if (!('serviceWorker' in navigator)) return;
   var asked = false;
