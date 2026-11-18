@@ -66,7 +66,8 @@ const REACTIONS = ['love', 'like', 'bravo', 'fire', 'haha', 'wow'];
 // Le seul paramètre de POST_SELECT est l'identifiant du membre qui consulte (v.id) ;
 // il précède tous les paramètres de la clause WHERE ajoutée par l'appelant.
 const POST_SELECT = `
-  SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.groupe_id, p.journal_id, p.flagged, p.preview_at,
+  SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.groupe_id, p.journal_id, p.flagged, p.preview_at, p.video_id,
+         vid.mime AS v_mime, vid.width AS v_width, vid.height AS v_height, vid.duration AS v_duration,
          ji.kind AS j_kind, ji.title AS j_title, ji.image AS j_image, ji.url AS j_url, ji.site_name AS j_site, ji.summary AS j_summary,
          u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count,
@@ -78,7 +79,8 @@ const POST_SELECT = `
   FROM (SELECT ? AS id) v
   CROSS JOIN posts p
   JOIN users u ON u.id = p.user_id
-  LEFT JOIN journal_items ji ON ji.id = p.journal_id`;
+  LEFT JOIN journal_items ji ON ji.id = p.journal_id
+  LEFT JOIN videos vid ON vid.id = p.video_id`;
 
 // Publications hors groupes (fil, profils, recherche, tendances).
 const PUBLIC_POST = 'p.groupe_id IS NULL';
@@ -112,13 +114,24 @@ function flaggedLabels(value) {
 
 function serializePost(ctx, row, viewer) {
   const mine = row.user_id === viewer.id;
-  const images = [row.image, ...(row.media ? row.media.split('|') : [])].filter(Boolean);
+  // Vidéo : l'aperçu reste dans « image » (grilles, notifications), mais n'entre pas dans la galerie
+  const video = row.video_id
+    ? {
+        url: require('./videos').videoUrl(row.video_id, require('./videos').TYPES[row.v_mime] || 'mp4'),
+        poster: row.image || null,
+        width: row.v_width || null,
+        height: row.v_height || null,
+        duration: row.v_duration || null,
+      }
+    : null;
+  const images = video ? [] : [row.image, ...(row.media ? row.media.split('|') : [])].filter(Boolean);
   return {
     id: row.id,
     body: row.body,
     lang: detectLang(row.body),
-    image: images[0] || null,
+    image: video ? video.poster : images[0] || null,
     images,
+    video,
     createdAt: row.created_at,
     editedAt: row.edited_at || null,
     groupId: row.groupe_id || null,

@@ -27,7 +27,9 @@ module.exports = function adminRoutes(ctx) {
          (SELECT COUNT(DISTINCT target_type || ':' || target_id) FROM reports WHERE resolved_at IS NULL) AS openReports,
          (SELECT COUNT(*) FROM users WHERE paid_at IS NULL AND admission_declined_at IS NULL AND admission_approved_at IS NULL) AS admissions,
          (SELECT COUNT(*) FROM users WHERE paid_at IS NULL AND admission_approved_at IS NOT NULL) AS awaitingPayment,
-         (SELECT COUNT(*) FROM reports WHERE resolved_at IS NULL AND reporter_id = 0) AS autoReports`,
+         (SELECT COUNT(*) FROM reports WHERE resolved_at IS NULL AND reporter_id = 0) AS autoReports,
+         (SELECT COUNT(*) FROM videos WHERE complete = 1) AS videos,
+         (SELECT COALESCE(SUM(size), 0) FROM videos) AS videoBytes`,
     );
     const dayMs = 24 * 3600 * 1000;
     const start = new Date();
@@ -65,6 +67,7 @@ module.exports = function adminRoutes(ctx) {
         admission: await admissionMode(ctx),
         bots: await botsEnabled(ctx),
         botsAvailable: Boolean(config.bots),
+        videoStorageBytes: config.videoStorageBytes,
       },
     });
   });

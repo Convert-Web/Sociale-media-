@@ -96,7 +96,12 @@ export function exploreView(ctx) {
   return h(
     'div',
     null,
-    h('header', { class: 'page-head' }, h('div', { class: 'grow' }, h('h1', null, 'Explorer'), h('div', { class: 'sub' }, 'Les membres et les sujets du cercle'))),
+    h(
+      'header',
+      { class: 'page-head' },
+      h('div', { class: 'grow' }, h('h1', null, 'Explorer'), h('div', { class: 'sub' }, 'Les membres et les sujets du cercle')),
+      h('a', { href: '/videos', class: 'btn btn-primary btn-sm videos-entry' }, icon('play', 'icon-sm'), 'Vidéos'),
+    ),
     h('div', { class: 'explore-search' }, h('div', { class: 'search-box' }, icon('search'), input)),
     shortcuts,
     results,

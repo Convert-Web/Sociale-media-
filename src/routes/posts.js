@@ -4,6 +4,7 @@ const { requireMember } = require('../auth');
 const { deletePost } = require('../membership');
 const { fail, text, intParam } = require('../http');
 const { moderate, autoReport } = require('../contentFilter');
+const { attachVideo } = require('./videos');
 const { photos, saveImage, deleteUpload } = require('../uploads');
 const {
   POST_SELECT,
@@ -91,15 +92,18 @@ module.exports = function postRoutes(ctx) {
   r.post('/posts', photos(), async (req, res) => {
     const body = text(req.body?.body, { field: 'Publication', max: 2000 });
     const files = [...(req.files?.image || []), ...(req.files?.images || [])].slice(0, 6);
-    if (!body && !files.length) fail(400, 'Votre publication est vide.');
+    // Vidéo déjà envoyée en morceaux (voir routes/videos.js) : une par publication, sans photo
+    const video = await attachVideo(ctx, req.user, req.body?.video);
+    if (video && files.length) fail(400, 'Une publication contient soit des photos, soit une vidéo.');
+    if (!body && !files.length && !video) fail(400, 'Votre publication est vide.');
     // Filtre automatique : propos haineux ou menaces refusés, insultes masquées et signalées
     const flagged = moderate(body);
     const urls = [];
     for (const f of files) urls.push(await saveImage(ctx, f));
-    // La première photo reste dans posts.image (compatibilité), les suivantes dans post_media.
+    // La première photo (ou l'aperçu de la vidéo) reste dans posts.image, les suivantes dans post_media.
     const { lastInsertRowid } = await db.run(
-      'INSERT INTO posts (user_id, body, image, flagged, created_at) VALUES (?, ?, ?, ?, ?)',
-      req.user.id, body, urls[0] || null, flagged, Date.now(),
+      'INSERT INTO posts (user_id, body, image, video_id, flagged, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      req.user.id, body, video ? video.poster : urls[0] || null, video ? video.id : null, flagged, Date.now(),
     );
     await autoReport(ctx, 'post', lastInsertRowid, flagged);
     for (const [i, url] of urls.slice(1).entries()) {
@@ -124,7 +128,7 @@ module.exports = function postRoutes(ctx) {
     const post = await loadPost(req.params.id, req.user);
     if (post.user_id !== req.user.id) fail(403, 'Seul l’auteur peut modifier sa publication.');
     const body = text(req.body?.body, { field: 'Publication', max: 2000 });
-    if (!body && !post.image) fail(400, 'Votre publication est vide.');
+    if (!body && !post.image && !post.video_id) fail(400, 'Votre publication est vide.');
     const flagged = moderate(body);
     await db.run('UPDATE posts SET body = ?, flagged = ?, edited_at = ? WHERE id = ?', body, flagged, Date.now(), post.id);
     await autoReport(ctx, 'post', post.id, flagged);

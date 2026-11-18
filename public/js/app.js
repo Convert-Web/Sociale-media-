@@ -21,6 +21,7 @@ import { invitationLanding, invitationsView } from './views/invite.js';
 import { agendaView, eventView } from './views/events.js';
 import { carnetView, placeView } from './views/places.js';
 import { journalView, journalItemView } from './views/journal.js';
+import { videosView } from './views/videos.js';
 import { stop as stopPlayer } from './components/player.js';
 import { registerServiceWorker, syncPush } from './push.js';
 document.addEventListener('aurum:logout', () => stopPlayer());
@@ -59,6 +60,7 @@ const ROUTES = [
   { path: '/amis', view: friendsView, access: 'member', layout: 'app', nav: 'amis' },
   { path: '/groupes', view: groupsView, access: 'member', layout: 'app', nav: 'groupes' },
   { path: '/groupes/:id', view: groupView, access: 'member', layout: 'app', nav: 'groupes' },
+  { path: '/videos', view: videosView, access: 'member' },
   { path: '/journal', view: journalView, access: 'member', layout: 'app', nav: 'journal' },
   { path: '/journal/:id', view: journalItemView, access: 'member', layout: 'app', nav: 'journal' },
   { path: '/agenda', view: agendaView, access: 'member', layout: 'app', nav: 'agenda' },

@@ -91,6 +91,8 @@ async function deleteGroup(ctx, groupId) {
     const posts = 'SELECT id FROM posts WHERE groupe_id = ?';
     for (const p of await t.all('SELECT image FROM posts WHERE groupe_id = ? AND image IS NOT NULL', groupId)) media.push(p.image);
     for (const m of await t.all(`SELECT url FROM post_media WHERE post_id IN (${posts})`, groupId)) media.push(m.url);
+    const V = require('./videos');
+    for (const v of await t.all(`SELECT v.id, v.mime FROM videos v JOIN posts p ON p.video_id = v.id WHERE p.groupe_id = ?`, groupId)) media.push(V.videoUrl(v.id, V.TYPES[v.mime]));
     await t.run(`DELETE FROM post_media WHERE post_id IN (${posts})`, groupId);
     await t.run(`DELETE FROM bookmarks WHERE post_id IN (${posts})`, groupId);
     await t.run(`DELETE FROM reports WHERE target_type = 'post' AND target_id IN (${posts})`, groupId);
@@ -136,6 +138,10 @@ async function deleteUser(ctx, userId) {
     await t.run('DELETE FROM events WHERE owner_id = ?', userId);
     for (const p of await t.all('SELECT images FROM previews WHERE author_id = ?', userId)) media.push(...JSON.parse(p.images || '[]'));
     await t.run('DELETE FROM previews WHERE author_id = ?', userId);
+    // Vidéos du membre (morceaux, puis fiches ; les aperçus sont des photos ordinaires)
+    for (const v of await t.all('SELECT poster FROM videos WHERE owner_id = ? AND poster IS NOT NULL', userId)) media.push(v.poster);
+    await t.run('DELETE FROM video_chunks WHERE video_id IN (SELECT id FROM videos WHERE owner_id = ?)', userId);
+    await t.run('DELETE FROM videos WHERE owner_id = ?', userId);
     await t.run('DELETE FROM place_endorsements WHERE user_id = ? OR place_id IN (SELECT id FROM places WHERE author_id = ?)', userId, userId);
     await t.run('DELETE FROM notifications WHERE place_id IN (SELECT id FROM places WHERE author_id = ?)', userId);
     await t.run('DELETE FROM places WHERE author_id = ?', userId);
@@ -159,6 +165,9 @@ async function deleteUser(ctx, userId) {
 async function deletePost(ctx, postId) {
   return ctx.db.transaction(async (t) => {
     const media = (await t.all('SELECT url FROM post_media WHERE post_id = ?', postId)).map((m) => m.url);
+    // La vidéo (et son aperçu) disparaît avec la publication
+    const v = await t.get('SELECT videos.id, videos.mime FROM posts JOIN videos ON videos.id = posts.video_id WHERE posts.id = ?', postId);
+    if (v) media.push(require('./videos').videoUrl(v.id, require('./videos').TYPES[v.mime]));
     await t.run('DELETE FROM post_media WHERE post_id = ?', postId);
     await t.run('DELETE FROM bookmarks WHERE post_id = ?', postId);
     await t.run("DELETE FROM reports WHERE target_type = 'post' AND target_id = ?", postId);

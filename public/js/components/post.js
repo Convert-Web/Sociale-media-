@@ -9,6 +9,7 @@ import { reportDialog } from './report.js';
 import { attachMentions } from './mentions.js';
 import { translateLink } from './translate.js';
 import { sensitive, flaggedNotice } from './sensitive.js';
+import { readVideoInfo, uploadVideo, videoPlayer, isVideoFile, clockLabel, MAX_SECONDS } from './video.js';
 
 const MAX_POST = 2000;
 const MAX_PHOTOS = 6;
@@ -282,7 +283,7 @@ export function postCard(post, { expanded = false } = {}) {
   });
 
   // Avec photos : légende sous les boutons, précédée du nom (façon Instagram) ; sans photo : texte en grand
-  const hasMedia = post.images.length > 0;
+  const hasMedia = post.images.length > 0 || Boolean(post.video);
   const bodyEl = h('div', { class: `post-body${hasMedia ? ' caption' : ''}` });
   const edited = h('span', { class: 'edited', hidden: !post.editedAt, title: post.editedAt ? `Modifié ${fullDate(post.editedAt)}` : '' }, ' · modifié');
   const paintBody = (text = post.body) => {
@@ -389,7 +390,7 @@ export function postCard(post, { expanded = false } = {}) {
     ),
     previewTag,
     ...(hasMedia ? [] : textParts),
-    hasMedia ? gallery(post.images) : null,
+    post.video ? videoPlayer(post.video, { onOpen: () => navigate(`/videos?p=${post.id}`) }) : hasMedia ? gallery(post.images) : null,
     post.journal ? journalLink(post.journal) : null,
     h('div', { class: 'post-actions' }, reactBtn, faces, commentBtn, shareBtn, h('span', { class: 'grow' }), saveBtn),
     ...(hasMedia ? textParts : []),
@@ -529,6 +530,16 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
   const fileInput = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', multiple: true, hidden: true });
   const submit = h('button', { class: 'btn btn-primary btn-sm', type: 'submit', disabled: true }, 'Publier');
   const addBtn = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Ajouter des photos', onclick: () => fileInput.click() }, icon('image'));
+  // Vidéo : une par publication (une minute au plus), préparée puis envoyée en morceaux
+  let video = null; // { file, info, posterUrl }
+  const videoInput = h('input', { type: 'file', accept: 'video/mp4,video/quicktime,video/webm,video/*', hidden: true });
+  const videoBtn = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Ajouter une vidéo', onclick: () => videoInput.click() }, icon('video'));
+  const progress = h('div', { class: 'upload-progress', hidden: true }, h('i'), h('span'));
+  const showProgress = (label, ratio) => {
+    progress.hidden = false;
+    progress.lastChild.textContent = label;
+    progress.firstChild.style.transform = `scaleX(${Math.max(0.02, ratio)})`;
+  };
   // Direction : annonce réservée d'abord aux Fondateurs, publiée pour tous ensuite
   let early = false;
   const canEarly = Boolean(store.user?.isAdmin) && endpoint === '/api/posts';
@@ -551,12 +562,27 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
     const len = ta.value.length;
     counter.textContent = len > MAX_POST - 300 ? `${MAX_POST - len}` : '';
     counter.classList.toggle('warn', len > MAX_POST - 50);
-    submit.disabled = !ta.value.trim() && !files.length;
-    addBtn.disabled = files.length >= MAX_PHOTOS;
+    submit.disabled = !ta.value.trim() && !files.length && !video;
+    addBtn.disabled = files.length >= MAX_PHOTOS || Boolean(video);
+    videoBtn.disabled = files.length > 0 || Boolean(video);
   };
   ta.addEventListener('input', update);
 
   const paintPreviews = () => {
+    if (video) {
+      previewHost.replaceChildren(
+        h(
+          'div',
+          { class: 'preview preview-video' },
+          video.posterUrl ? h('img', { src: video.posterUrl, alt: '' }) : h('span', { class: 'preview-video-ph' }, icon('video')),
+          h('span', { class: 'preview-duration' }, icon('play', 'icon-xs'), clockLabel(video.info.duration)),
+          h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Retirer la vidéo', onclick: () => clearVideo() }, icon('x')),
+        ),
+      );
+      previewHost.dataset.count = '1';
+      update();
+      return;
+    }
     previewHost.replaceChildren(
       ...files.map((f, i) =>
         h(
@@ -595,6 +621,30 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
     paintPreviews();
   };
   fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
+  const clearVideo = () => {
+    if (video?.posterUrl) URL.revokeObjectURL(video.posterUrl);
+    if (video?.info?.url) URL.revokeObjectURL(video.info.url);
+    video = null;
+    paintPreviews();
+  };
+  videoInput.addEventListener('change', async () => {
+    const file = videoInput.files[0];
+    videoInput.value = '';
+    if (!file) return;
+    if (!isVideoFile(file)) return toast('Format de vidéo non pris en charge.', 'error');
+    showProgress('Lecture de la vidéo…', 0.05);
+    try {
+      const info = await readVideoInfo(file);
+      if (!(info.duration > 0)) throw new Error('Vidéo illisible sur cet appareil.');
+      if (info.duration > MAX_SECONDS + 1) throw new Error('Vidéo trop longue : une minute au maximum.');
+      video = { file, info, posterUrl: info.poster ? URL.createObjectURL(info.poster) : null };
+      paintPreviews();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+    progress.hidden = true;
+  });
+
 
   const form = h(
     'form',
@@ -603,8 +653,16 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
       onsubmit: async (e) => {
         e.preventDefault();
         if (submit.disabled) return;
+        if (early && video) return toast('Les avant-premières acceptent du texte et des photos, pas encore de vidéo.', 'error');
         submit.disabled = true;
         submit.textContent = 'Publication…';
+        // Vidéo : préparation lancée tout de suite, dans le geste (nécessaire pour garder le son)
+        const videoJob = video
+          ? uploadVideo(video.file, video.info, (step, p) =>
+              showProgress(step === 'prepare' ? `Préparation ${Math.round(p * 100)} % · gardez l’app ouverte` : `Envoi ${Math.round(p * 100)} %`, p),
+            )
+          : null;
+        videoJob?.catch(() => {});
         try {
           const fd = new FormData();
           fd.append('body', ta.value);
@@ -629,10 +687,12 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
             onPosted?.(null);
             return;
           }
+          if (videoJob) fd.append('video', (await videoJob).id);
           const { post } = await api.post(endpoint, fd);
           ta.value = '';
           files.forEach((f) => URL.revokeObjectURL(f.url));
           files = [];
+          if (video) clearVideo();
           paintPreviews();
           fit();
           if (post.flagged) flaggedNotice(post);
@@ -643,6 +703,7 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
           toast(err.message, 'error');
         } finally {
           submit.textContent = idleLabel();
+          progress.hidden = true;
           update();
         }
       },
@@ -653,10 +714,11 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
       { class: 'composer-main' },
       ta,
       previewHost,
+      progress,
       h(
         'div',
         { class: 'composer-bar' },
-        h('div', { class: 'composer-tools' }, addBtn, fileInput, earlyBtn, canEarly ? hoursSel : null),
+        h('div', { class: 'composer-tools' }, addBtn, fileInput, videoBtn, videoInput, earlyBtn, canEarly ? hoursSel : null),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '14px' } }, counter, submit),
       ),
     ),

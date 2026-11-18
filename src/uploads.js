@@ -39,6 +39,8 @@ async function saveImage(ctx, file) {
 }
 
 function deleteUpload(ctx, publicPath) {
+  const videoId = require('./videos').idFromUrl(publicPath);
+  if (videoId) return void require('./videos').removeVideo(ctx, videoId).catch(() => {});
   const m = typeof publicPath === 'string' && /^\/media\/([a-f0-9]{32})\.\w+$/.exec(publicPath);
   if (!m) return;
   ctx.mediaCache?.delete(m[1]);
@@ -129,4 +131,4 @@ function single(field) {
   };
 }
 
-module.exports = { single, photos, saveImage, deleteUpload, detectImage, mediaHandler };
+module.exports = { single, photos, saveImage, deleteUpload, detectImage, mediaHandler, MediaCache };

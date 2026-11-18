@@ -3,6 +3,7 @@ const express = require('express');
 const { requireMember } = require('../auth');
 const { fail, text, intParam } = require('../http');
 const { moderate, autoReport, assertClean } = require('../contentFilter');
+const { attachVideo } = require('./videos');
 const { single, photos, saveImage, deleteUpload } = require('../uploads');
 const { POST_SELECT, NOT_BLOCKED, serializePost, getPost, authorOf, notify, notifyMentions, isBlocked } = require('../social');
 const { deleteGroup } = require('../membership');
@@ -152,13 +153,15 @@ module.exports = function groupRoutes(ctx) {
     if (g.status !== 'member') fail(403, 'Rejoignez le groupe pour y publier.');
     const body = text(req.body?.body, { field: 'Publication', max: 2000 });
     const files = [...(req.files?.image || []), ...(req.files?.images || [])].slice(0, 6);
-    if (!body && !files.length) fail(400, 'Votre publication est vide.');
+    const video = await attachVideo(ctx, req.user, req.body?.video);
+    if (video && files.length) fail(400, 'Une publication contient soit des photos, soit une vidéo.');
+    if (!body && !files.length && !video) fail(400, 'Votre publication est vide.');
     const flagged = moderate(body);
     const urls = [];
     for (const f of files) urls.push(await saveImage(ctx, f));
     const { lastInsertRowid } = await db.run(
-      'INSERT INTO posts (user_id, body, image, groupe_id, flagged, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      req.user.id, body, urls[0] || null, g.id, flagged, Date.now(),
+      'INSERT INTO posts (user_id, body, image, video_id, groupe_id, flagged, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      req.user.id, body, video ? video.poster : urls[0] || null, video ? video.id : null, g.id, flagged, Date.now(),
     );
     await autoReport(ctx, 'post', lastInsertRowid, flagged);
     for (const [i, url] of urls.slice(1).entries()) {

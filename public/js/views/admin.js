@@ -366,6 +366,7 @@ export async function adminView(ctx) {
       kpi('Publications', num(t.posts)),
       kpi('Commentaires', num(t.comments)),
       kpi('Messages privés', num(t.messages)),
+      kpi('Vidéos', num(t.videos || 0), false, `${num(Math.round((t.videoBytes || 0) / 1048576))} Mo sur ${num(Math.round(c.videoStorageBytes / 1048576))} Mo`),
     ),
     h('div', { class: 'section-title' }, 'Entrée dans le cercle'),
     entry,

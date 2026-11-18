@@ -164,6 +164,28 @@ CREATE TABLE IF NOT EXISTS blocks (
 );
 
 -- Version 3 : notifications push, amis, groupes privés
+-- Version 12 : vidéos, stockées en morceaux de 1 Mo
+CREATE TABLE IF NOT EXISTS videos (
+  id          TEXT PRIMARY KEY,
+  owner_id    INTEGER NOT NULL,
+  mime        TEXT NOT NULL,
+  size        INTEGER NOT NULL,
+  duration    REAL,
+  width       INTEGER,
+  height      INTEGER,
+  poster      TEXT,
+  chunks      INTEGER NOT NULL,
+  complete    INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_videos_owner ON videos(owner_id, created_at);
+CREATE TABLE IF NOT EXISTS video_chunks (
+  video_id  TEXT NOT NULL,
+  idx       INTEGER NOT NULL,
+  data      BLOB NOT NULL,
+  PRIMARY KEY (video_id, idx)
+);
+
 -- Version 11 : avant-premières de la Direction pour les Fondateurs
 CREATE TABLE IF NOT EXISTS previews (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -372,6 +394,7 @@ const COLUMNS = [
   ['posts', 'preview_at', 'INTEGER'],
   ['events', 'early_until', 'INTEGER'],
   ['events', 'announce_pending', 'INTEGER NOT NULL DEFAULT 0'],
+  ['posts', 'video_id', 'TEXT'],
 ];
 
 async function migrate(client) {

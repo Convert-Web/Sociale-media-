@@ -11,6 +11,7 @@ const { createMailer } = require('./mailer');
 const { loadUser, csrfGuard } = require('./auth');
 const { webhookHandler } = require('./routes/billing');
 const { mediaHandler } = require('./uploads');
+const { videoHandler } = require('./videos');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -85,11 +86,12 @@ async function createApp(config, overrides = {}) {
     );
   }
 
-  const routes = ['auth', 'billing', 'public', 'invitations', 'posts', 'stories', 'moderation', 'push', 'friends', 'groups', 'events', 'previews', 'places', 'journal', 'bots', 'emails', 'translate', 'users', 'messages', 'notifications', 'me', 'admin'];
+  const routes = ['auth', 'billing', 'public', 'invitations', 'posts', 'stories', 'moderation', 'push', 'friends', 'groups', 'events', 'previews', 'videos', 'places', 'journal', 'bots', 'emails', 'translate', 'users', 'messages', 'notifications', 'me', 'admin'];
   for (const name of routes) app.use('/api', require(`./routes/${name}`)(ctx));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ressource introuvable.' }));
 
   // Photos envoyées par les membres (stockées dans la base)
+  app.use('/media/v', videoHandler(ctx));
   app.use('/media', mediaHandler(ctx));
   app.use(express.static(PUBLIC_DIR, { maxAge: config.isProd ? '1h' : 0, index: false }));
 

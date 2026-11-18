@@ -37,6 +37,8 @@ const config = {
   // Modifiable ensuite depuis la page Direction.
   admissionDefault: env.ADMISSION === 'open' ? 'open' : 'invitation',
   invitesPerMember: Number(env.INVITES_PER_MEMBER) || 3,
+  // Espace réservé aux vidéos dans la base (Turso gratuit : 5 Go au total)
+  videoStorageBytes: (Number(env.VIDEO_STORAGE_MB) || 3000) * 1024 * 1024,
   // Comptes automatiques (AURUM, Le Concierge) : actifs sauf BOTS=off ; désactivés pendant les tests
   bots: env.BOTS !== 'off' && env.NODE_ENV !== 'test',
   // Droit d'entrée payant : désactivé par défaut (inscription gratuite).
