@@ -1925,3 +1925,8 @@ html.reels-mode, html.reels-mode body { background: #000; }
 .vp-bar { height: 2px; background: rgba(255, 255, 255, 0.16); }
 .post-ephemeral { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: 12.5px; }
 .post-ephemeral .icon { width: 12px; height: 12px; }
+/* Format exact des vidéos : affichées entières, jamais recadrées */
+.vp { max-height: 88vh; }
+.vp-video { object-fit: contain; }
+.reel-poster, .reel .reel-video { object-fit: contain; }
+.vp { margin-left: auto; margin-right: auto; }

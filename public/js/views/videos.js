@@ -8,7 +8,6 @@ import { sound, noSave, reelsPlayer, cachedReels, rememberReels } from '../compo
 
 function slide(post) {
   const v = post.video;
-  const landscape = Boolean(v.width && v.height && v.width > v.height);
   const likeCount = h('small', null, post.likeCount ? num(post.likeCount) : '');
   const likeBtn = h('button', { class: `reel-act${post.liked ? ' liked' : ''}`, type: 'button', 'aria-label': 'J’aime' }, icon(post.liked ? 'heart-fill' : 'heart'), likeCount);
   const paintLike = () => {
@@ -34,7 +33,7 @@ function slide(post) {
   const box = h(
     'section',
     { class: 'reel', dataset: { id: post.id } },
-    h('img', { class: `reel-poster${landscape ? ' contain' : ''}`, src: v.poster || '', alt: '', decoding: 'async' }),
+    h('img', { class: 'reel-poster', src: v.poster || '', alt: '', decoding: 'async' }),
     h('div', { class: 'reel-holder' }),
     h('div', { class: 'reel-shade' }),
     h('span', { class: 'reel-play', hidden: true }, icon('play')),
@@ -54,7 +53,6 @@ function slide(post) {
     h('span', { class: 'reel-bar' }, h('i')),
   );
   box.__post = post;
-  box.__landscape = landscape;
   box.__like = () => toggleLike(true);
   return box;
 }
@@ -116,7 +114,6 @@ export async function videosView(ctx) {
     box.classList.add('is-active');
     userPaused = false;
     const { url } = box.__post.video;
-    player.classList.toggle('contain', box.__landscape);
     box.querySelector('.reel-holder').append(player);
     if (player.getAttribute('src') !== url) {
       box.classList.remove('is-ready');

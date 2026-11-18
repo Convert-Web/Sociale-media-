@@ -228,8 +228,10 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
   const soundBtn = h('button', { class: 'vp-sound', type: 'button', 'aria-label': 'Son' }, icon(soundOn ? 'sound' : 'mute'));
   const playMark = h('span', { class: 'vp-play', hidden: true }, icon('play'));
   const bar = h('span', { class: 'vp-bar' }, h('i'));
-  const ratio = v.width && v.height ? Math.max(v.width / v.height, 4 / 5) : 4 / 5;
-  const wrap = h('div', { class: 'vp', style: { aspectRatio: String(ratio) } }, el, playMark, bar, soundBtn,
+  // Format exact de la vidéo (verticale, carrée ou horizontale) : jamais recadrée
+  const ratio = v.width && v.height ? v.width / v.height : null;
+  const fit = (r) => ({ aspectRatio: String(r), width: `min(100%, calc(88vh * ${r.toFixed(4)}))` });
+  const wrap = h('div', { class: 'vp', style: fit(ratio || 9 / 16) }, el, playMark, bar, soundBtn,
     onOpen ? h('button', { class: 'vp-open', type: 'button', 'aria-label': 'Plein écran', onclick: (e) => { e.stopPropagation(); onOpen(); } }, icon('expand')) : null,
   );
   let userPaused = false;
@@ -250,6 +252,7 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
     },
   };
   wrap.__player = player;
+  if (!ratio) el.addEventListener('loadedmetadata', () => el.videoWidth && Object.assign(wrap.style, fit(el.videoWidth / el.videoHeight)), { once: true });
   players.add(player);
   soundBtn.addEventListener('click', (e) => {
     e.stopPropagation();
