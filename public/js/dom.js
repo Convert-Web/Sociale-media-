@@ -91,13 +91,23 @@ export function plural(n, one, many) {
 // ---------------------------------------------------------------------------
 // Texte enrichi : liens, @mentions et #hashtags, sans HTML injecté
 // ---------------------------------------------------------------------------
-const TOKEN_RE = /(https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]])|(?<![\w@.])@([a-z0-9_][a-z0-9_.]{1,18}[a-z0-9_])|(?<![\w&#])#([\p{L}\p{N}_]{2,40})/giu;
+// Sans « lookbehind » (non reconnu par Safari avant iOS 16.4) : le caractère qui précède une
+// @mention ou un #sujet est vérifié à la main.
+const TOKEN_RE = /(https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]])|@([a-z0-9_][a-z0-9_.]{1,18}[a-z0-9_])|#([\p{L}\p{N}_]{2,40})/giu;
+const WORD = /[\p{L}\p{N}_]/u;
+
+// Typographie française : espace insécable fine avant ? ! ; : » et après «
+const frenchSpaces = (s) => s.replace(/ ([?!;:»])/g, '\u202f$1').replace(/« /g, '«\u202f');
 
 export function richText(str) {
   const frag = document.createDocumentFragment();
   let last = 0;
+  const text = (s) => frag.append(frenchSpaces(s));
   for (const m of str.matchAll(TOKEN_RE)) {
-    if (m.index > last) frag.append(str.slice(last, m.index));
+    const before = m.index > 0 ? str[m.index - 1] : '';
+    // Une @ ou un # collé à un mot (adresse e-mail, « C# », « &#… ») reste du texte
+    if ((m[2] && (WORD.test(before) || before === '@' || before === '.')) || (m[3] && (WORD.test(before) || before === '&' || before === '#'))) continue;
+    if (m.index > last) text(str.slice(last, m.index));
     if (m[1]) {
       const internal = m[1].startsWith(`${location.origin}/`);
       frag.append(
@@ -112,7 +122,7 @@ export function richText(str) {
     }
     last = m.index + m[0].length;
   }
-  if (last < str.length) frag.append(str.slice(last));
+  if (last < str.length) text(str.slice(last));
   return frag;
 }
 

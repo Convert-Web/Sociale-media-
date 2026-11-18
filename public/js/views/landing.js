@@ -173,7 +173,7 @@ export async function landingView(ctx) {
           : `Pour les ${num(cfg.founderLimit)} premiers membres, les Fondateurs : plus que ${places}. Ensuite, droit d’entrée unique de ${price}.${onInvite ? ' Une invitation d’un membre vous ouvre la porte aussitôt ; sans invitation, la Direction étudie chaque demande.' : ''}`,
       ),
       h('ul', { class: 'checklist' }, included.map((t) => h('li', null, icon('check', 'icon-sm'), t))),
-      cta(onInvite ? 'Demander mon admission' : paid ? 'Franchir la porte' : 'Créer mon compte', 'btn btn-primary btn-lg'),
+      cta(onInvite ? 'Demander mon admission' : paid ? `Obtenir ma carte — ${price}` : 'Obtenir ma carte', 'btn btn-primary btn-lg'),
       paid ? h('p', { class: 'secure-note' }, icon('lock', 'icon-sm'), 'Paiement sécurisé par Stripe') : null,
     ),
   );

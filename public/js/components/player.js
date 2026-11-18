@@ -108,6 +108,10 @@ function ensure() {
   });
   audio.addEventListener('error', () => {
     sub.textContent = 'Lecture impossible : épisode indisponible.';
+    timeEl.textContent = '';
+    playBtn.replaceChildren(icon('play'));
+    playBtn.setAttribute('aria-label', 'Lecture');
+    notify(); // le bouton du Journal repasse sur « lecture »
   });
 
   // Commandes de l'écran verrouillé

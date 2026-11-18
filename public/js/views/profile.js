@@ -301,10 +301,21 @@ export function pickMember(title, onPick) {
   let t;
   const search = async () => {
     const q = input.value.trim();
-    const { users } = q ? await api.get(`/api/search?q=${enc(q)}`) : await api.get('/api/suggestions?limit=8');
+    let users;
+    if (q) ({ users } = await api.get(`/api/search?q=${enc(q)}`));
+    else {
+      // Recherche vide : les membres que l'on suit, puis quelques suggestions
+      const [mine, sugg] = await Promise.all([
+        api.get(`/api/users/${enc(store.user.username)}/following`).catch(() => ({ users: [] })),
+        api.get('/api/suggestions?limit=8').catch(() => ({ users: [] })),
+      ]);
+      const ids = new Set();
+      users = [...mine.users, ...sugg.users].filter((u) => !ids.has(u.id) && ids.add(u.id));
+    }
+    if (q !== input.value.trim()) return; // une frappe plus récente a pris le relais
     clear(results);
     const list = users.filter((u) => !u.isMe);
-    if (!list.length) results.append(h('p', { class: 'muted small', style: { padding: '12px' } }, 'Aucun membre trouvé.'));
+    if (!list.length) results.append(h('p', { class: 'muted small', style: { padding: '12px' } }, q ? 'Aucun membre ne correspond à cette recherche.' : 'Suivez des membres pour leur écrire en un toucher.'));
     for (const u of list) {
       const row = userRow(u, { follow: false });
       row.addEventListener(

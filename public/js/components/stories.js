@@ -35,14 +35,27 @@ export function storiesBar() {
   };
 
   function paint() {
-    const mine = groups.find((g) => g.mine);
-    const add = h(
-      'button',
-      { type: 'button', role: 'listitem', class: 'story-item add', onclick: () => picker.click(), 'aria-label': 'Ajouter une story' },
-      h('span', { class: 'story-ring none' }, avatar(store.user, 'lg'), h('span', { class: 'story-plus' }, icon('plus'))),
-      h('span', { class: 'story-name' }, mine ? 'Ajouter' : 'Votre story'),
-    );
-    bar.replaceChildren(add, ...groups.map((g, i) => item(g, i)), picker);
+    const mi = groups.findIndex((g) => g.mine);
+    let first;
+    if (mi >= 0) {
+      // Sa propre story en tête, une seule fois : toucher l'avatar la montre, le « + » en ajoute une
+      first = item(groups[mi], mi);
+      first.classList.add('own');
+      first.querySelector('.story-ring').append(
+        h('span', {
+          class: 'story-plus', role: 'button', tabindex: '0', 'aria-label': 'Ajouter une story',
+          onclick: (e) => { e.stopPropagation(); picker.click(); },
+        }, icon('plus')),
+      );
+    } else {
+      first = h(
+        'button',
+        { type: 'button', role: 'listitem', class: 'story-item add', onclick: () => picker.click(), 'aria-label': 'Ajouter une story' },
+        h('span', { class: 'story-ring none' }, avatar(store.user, 'lg'), h('span', { class: 'story-plus' }, icon('plus'))),
+        h('span', { class: 'story-name' }, 'Votre story'),
+      );
+    }
+    bar.replaceChildren(first, ...groups.map((g, i) => (i === mi ? null : item(g, i))).filter(Boolean), picker);
   }
 
   async function load() {

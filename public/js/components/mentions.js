@@ -2,12 +2,14 @@ import { api, enc } from '../api.js';
 import { h, avatar } from '../dom.js';
 
 // Suggestions de membres quand on tape « @… » dans un champ de texte.
-// placement : « below » (sous le champ) ou « above » (au-dessus, pour les champs en bas d'écran).
+// placement : « below » (sous le champ), « above » (au-dessus, pour les champs en bas d'écran)
+// ou « inline » (dans le flux, juste sous le texte : jamais coupée par une feuille ou une carte).
 export function attachMentions(textarea, { placement = 'below' } = {}) {
   const host = textarea.parentElement;
   host.classList.add('mention-host');
   const box = h('div', { class: `mention-box ${placement}`, role: 'listbox', hidden: true });
-  host.append(box);
+  if (placement === 'inline') textarea.after(box);
+  else host.append(box);
   let users = [];
   let active = 0;
   let timer = null;

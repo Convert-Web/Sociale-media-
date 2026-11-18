@@ -18,6 +18,7 @@ function detect(text) {
 const LANGS = ['fr', 'en', 'es', 'de', 'it', 'pt', 'nl', 'ru', 'ar', 'zh', 'ja', 'ko', 'tr', 'pl', 'he', 'hi', 'sv', 'da', 'no', 'fi', 'el', 'cs', 'ro', 'hu', 'uk', 'th', 'vi', 'id'];
 
 // --- Détection ------------------------------------------------------------------
+const FR_WORDS = new Set('le les des une est et pour avec dans sur pas qui nous vous je tu il elle ils elles on ce cette ces mais très où ça du au aux mon ma mes ton ta tes son sa ses notre votre leur trop bien merci aussi encore déjà toujours être avoir fait suis sont était chez'.split(' '));
 const cache = new Map();
 function detectLang(text) {
   if (typeof text !== 'string') return null;
@@ -27,13 +28,17 @@ function detectLang(text) {
     .replace(/[@#][\p{L}\p{N}_.]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  // Les phrases très courtes (« Merci ! ») sont trop ambiguës
-  if (clean.replace(/[^\p{L}]/gu, '').length < 18) return null;
+  // Les phrases courtes (« Trop beau ce soir ! ») sont trop ambiguës : pas de traduction proposée
+  if (clean.replace(/[^\p{L}]/gu, '').length < 30) return null;
   const key = clean.slice(0, 400);
   if (cache.has(key)) return cache.get(key);
   let lang = null;
   try {
-    lang = detect(key) || null;
+    // Mots-outils propres au français : les détecteurs prennent souvent un message familier
+    // (« trop bien la soirée avec vous ») pour une autre langue
+    const words = key.toLowerCase().split(/[^\p{L}’']+/u).filter(Boolean);
+    const fr = words.filter((w) => FR_WORDS.has(w) || /^(?:c|j|l|d|qu|n|m|s|t)['’]/.test(w)).length;
+    lang = fr >= 2 && fr / words.length >= 0.15 ? 'fr' : detect(key) || null;
   } catch {
     lang = null;
   }

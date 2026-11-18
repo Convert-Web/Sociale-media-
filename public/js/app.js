@@ -313,6 +313,28 @@ let shell = null;
 let renderToken = 0;
 let cleanups = [];
 let lastLocation = '';
+// Position de défilement de chaque page, rétablie au retour arrière
+const scrollPos = new Map();
+try {
+  history.scrollRestoration = 'manual';
+} catch {
+  /* navigateur ancien */
+}
+function restoreScroll(y) {
+  // Le contenu (images, vidéos) arrive par vagues : on réessaie pendant 1,5 s, sauf si l'on touche l'écran
+  const until = Date.now() + 1500;
+  let stop = false;
+  const cancel = () => (stop = true);
+  const evs = ['wheel', 'touchstart', 'keydown'];
+  evs.forEach((ev) => addEventListener(ev, cancel, { once: true, passive: true }));
+  const step = () => {
+    if (stop) return;
+    window.scrollTo(0, y);
+    if (Math.abs(window.scrollY - y) > 2 && Date.now() < until) requestAnimationFrame(step);
+    else evs.forEach((ev) => removeEventListener(ev, cancel));
+  };
+  step();
+}
 
 function errorView(err) {
   return h(
@@ -344,6 +366,18 @@ function match(pathname) {
   return { route: null, params: {} };
 }
 
+// Pages secondaires (Activité, Messages, Amis, Agenda…) : une flèche retour sur téléphone,
+// indispensable dans l'application installée qui n'a pas de bouton « précédent »
+function addBackButton(el, path, u) {
+  const roots = ['/salon', '/journal', `/@${u.username}`.toLowerCase()];
+  if (roots.includes(decodeURIComponent(path).toLowerCase().replace(/\/$/, ''))) return;
+  const head = el?.querySelector?.('.page-head');
+  if (!head || head.querySelector('[aria-label="Retour"]')) return;
+  head.prepend(
+    h('button', { class: 'icon-btn mobile-only page-back', type: 'button', 'aria-label': 'Retour', onclick: () => (history.length > 1 ? history.back() : navigate('/salon')) }, icon('back')),
+  );
+}
+
 async function render(opts = {}) {
   const token = ++renderToken;
   closeModal();
@@ -357,6 +391,8 @@ async function render(opts = {}) {
   }
 
   const url = new URL(location.href);
+  if (lastLocation && !opts.same) scrollPos.set(lastLocation, window.scrollY);
+  if (scrollPos.size > 60) scrollPos.delete(scrollPos.keys().next().value);
   lastLocation = url.pathname + url.search;
   const { route, params } = match(url.pathname);
   const u = store.user;
@@ -413,13 +449,18 @@ async function render(opts = {}) {
     return;
   }
   cleanups = mine;
-  const swap = () => container.replaceChildren(el);
-  const smooth = !opts.same && layout === 'app' && document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (layout === 'app' && route) addBackButton(el, url.pathname, u);
+  const back = opts.pop ? scrollPos.get(lastLocation) : undefined;
+  const swap = () => {
+    container.replaceChildren(el);
+    if (back) restoreScroll(back);
+    else if (!location.hash && !opts.same) window.scrollTo(0, 0);
+  };
+  const smooth = !opts.same && !opts.pop && layout === 'app' && document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (smooth) document.startViewTransition(swap);
   else swap();
   baseTitle = ctx.title || 'AURUM';
   paintTitle();
-  if (!location.hash) window.scrollTo(0, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -439,7 +480,7 @@ document.addEventListener('click', (e) => {
 
 window.addEventListener('popstate', () => {
   if (location.pathname + location.search === lastLocation) return; // simple changement d'ancre
-  render();
+  render({ pop: true });
 });
 
 window.addEventListener('aurum:auth', async (e) => {

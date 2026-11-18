@@ -192,6 +192,7 @@ export async function uploadVideo(file, info, onStep) {
 // son au toucher du haut-parleur, pause au toucher de l'image.
 // ---------------------------------------------------------------------------
 let soundOn = true; // son activé par défaut ; le choix vaut pour toutes les vidéos de la session
+let soundBlocked = false; // son refusé par le navigateur faute de toucher
 export const sound = { get: () => soundOn, set: (v) => (soundOn = Boolean(v)) };
 const players = new Set();
 const io = typeof IntersectionObserver !== 'undefined'
@@ -238,7 +239,9 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
   const bar = h('span', { class: 'vp-bar' }, h('i'));
   // Format exact de la vidéo (verticale, carrée ou horizontale) : jamais recadrée
   const ratio = v.width && v.height ? v.width / v.height : null;
-  const fit = (r) => ({ aspectRatio: String(r), width: `min(100%, calc(88vh * ${r.toFixed(4)}))` });
+  // Cadre pleine largeur sur fond noir : une vidéo verticale s'y affiche entière (bandes noires
+  // sur les côtés) sans transformer le fil en colonne étroite ni dépasser l'écran
+  const fit = (r) => ({ aspectRatio: String(Math.max(r, 4 / 5)) });
   const wrap = h('div', { class: 'vp', style: fit(ratio || 9 / 16) }, el, playMark, bar, soundBtn,
     onOpen ? h('button', { class: 'vp-open', type: 'button', 'aria-label': 'Plein écran', onclick: (e) => { e.stopPropagation(); onOpen(); } }, icon('expand')) : null,
   );
@@ -256,10 +259,14 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
     auto() {
       if (userPaused) return;
       if (!el.getAttribute('src')) el.src = localVideo(v) || v.url; // pas encore téléchargée : lecture en ligne
-      el.muted = !soundOn;
+      // Son seulement si le navigateur l'autorise (après un premier toucher) ; sinon lecture muette
+      // directe, sans tentative ratée qui ferait hoqueter la vidéo
+      el.muted = !(soundOn && !soundBlocked && navigator.userActivation?.hasBeenActive);
       paintSound();
       el.play().catch(() => {
-        el.muted = true; // son refusé sans geste : on relance en muet
+        if (el.muted) return;
+        soundBlocked = true; // refusé une fois : on ne réessaie plus pendant cette visite
+        el.muted = true;
         paintSound();
         el.play().catch(() => {});
       });
@@ -275,6 +282,7 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
     e.stopPropagation();
     soundOn = el.muted;
     el.muted = !soundOn;
+    if (soundOn) soundBlocked = false; // le toucher autorise le son
     paintSound();
     if (el.paused) el.play().catch(() => {});
   });

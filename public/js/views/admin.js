@@ -12,8 +12,9 @@ function svg(tag, attrs, ...kids) {
 }
 
 function signupChart(days) {
-  const W = 600;
-  const H = 180;
+  // Largeur proche de celle d'un téléphone : les chiffres restent lisibles une fois réduits
+  const W = 400;
+  const H = 170;
   const pad = { t: 16, b: 26, l: 4, r: 4 };
   const max = Math.max(1, ...days.map((d) => d.count));
   const bw = (W - pad.l - pad.r) / days.length;
@@ -28,12 +29,12 @@ function signupChart(days) {
     g.append(svg('title', {}, `${new Date(d.date).toLocaleDateString('fr-FR')} : ${d.count}`));
     g.append(svg('rect', { x, y: d.count ? y : H - pad.b - 2, width: w, height: d.count ? hgt : 2, rx: 4, class: d.count ? 'chart-bar' : 'chart-bar-empty' }));
     if (d.count) {
-      const t = svg('text', { x: x + w / 2, y: y - 5, 'text-anchor': 'middle', class: 'chart-value', 'font-size': '11' });
+      const t = svg('text', { x: x + w / 2, y: y - 5, 'text-anchor': 'middle', class: 'chart-value', 'font-size': '13' });
       t.textContent = d.count;
       g.append(t);
     }
-    if (i % 2 === 0 || i === days.length - 1) {
-      const lbl = svg('text', { x: x + w / 2, y: H - 8, 'text-anchor': 'middle', class: 'chart-label', 'font-size': '10.5' });
+    if ((days.length - 1 - i) % 3 === 0) {
+      const lbl = svg('text', { x: x + w / 2, y: H - 8, 'text-anchor': 'middle', class: 'chart-label', 'font-size': '12' });
       lbl.textContent = new Date(d.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
       g.append(lbl);
     }
@@ -124,7 +125,6 @@ async function emailsSection() {
     return b;
   };
   host.append(
-    h('h2', null, 'Courriels'),
     status,
     d.enabled
       ? null

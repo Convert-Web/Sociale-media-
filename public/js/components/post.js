@@ -337,7 +337,7 @@ export function postCard(post, { expanded = false } = {}) {
       ),
     );
     autosize(ta);
-    attachMentions(ta);
+    attachMentions(ta, { placement: 'inline' });
   };
 
   const menuBtn = h('button', { class: 'icon-btn menu-btn', 'aria-label': 'Options' }, icon('more'));
@@ -403,7 +403,7 @@ export function postCard(post, { expanded = false } = {}) {
           h('a', { href: link, title: fullDate(post.createdAt) }, timeAgo(post.createdAt)),
           edited,
           // Vidéo éphémère : temps restant, discret, à côté de l'heure
-          post.video?.expiresAt ? h('span', { class: 'post-ephemeral', title: 'Vidéo éphémère : effacée après ce délai' }, icon('clock', 'icon-xs'), remaining(post.video.expiresAt)) : null,
+          post.video?.expiresAt ? h('span', { class: 'post-ephemeral', title: 'Vidéo éphémère : effacée après ce délai' }, icon('clock', 'icon-xs'), `encore ${remaining(post.video.expiresAt)}`) : null,
         ),
       ),
       menuBtn,
@@ -739,12 +739,13 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
       h(
         'div',
         { class: 'composer-bar' },
-        h('div', { class: 'composer-tools' }, addBtn, fileInput, videoBtn, videoInput, earlyBtn, canEarly ? hoursSel : null),
+        h('div', { class: 'composer-tools' }, addBtn, fileInput, videoBtn, videoInput),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '14px' } }, counter, submit),
       ),
+      canEarly ? h('div', { class: 'composer-early' }, earlyBtn, hoursSel) : null,
     ),
   );
-  attachMentions(ta);
+  attachMentions(ta, { placement: 'inline' });
   ta.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) form.requestSubmit();
   });
