@@ -402,7 +402,12 @@ async function migrate(client) {
   for (const [table, column, ddl] of COLUMNS) {
     const { rows } = await client.execute({ sql: 'SELECT name FROM pragma_table_info(?)', args: [table] });
     if (!rows.some((r) => r.name === column)) {
-      await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+      try {
+        await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+      } catch (err) {
+        // Deux démarrages simultanés (mise en ligne sur Vercel) : la colonne vient d'être ajoutée par l'autre
+        if (!/duplicate column/i.test(err.message)) throw err;
+      }
     }
   }
 }
