@@ -201,7 +201,7 @@ export async function profileView(ctx) {
     stopList();
     const list = postList((before) => api.get(`/api/users/${enc(user.username)}/posts${before ? `?before=${before}` : ''}`), {
       empty: () =>
-        emptyState('pen', user.isMe ? 'Votre première publication' : 'Aucune publication', user.isMe ? 'Présentez-vous au cercle : le Salon vous écoute.' : `${user.displayName} n'a encore rien publié.`),
+        emptyState('pen', user.isMe ? 'Votre première publication' : 'Aucune publication', user.isMe ? 'Présentez-vous au cercle : le Salon vous écoute.' : `${user.displayName} n'a encore rien publié.`, user.isMe ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => document.dispatchEvent(new CustomEvent('aurum:create')) }, 'Publier') : null),
     });
     content.replaceChildren(list.el);
     stopList = list.start();

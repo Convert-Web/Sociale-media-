@@ -165,14 +165,16 @@ module.exports = function userRoutes(ctx) {
     const me = req.user.id;
     const row = await db.get(
       `SELECT (SELECT COUNT(*) FROM follows WHERE follower_id = ?) AS following,
-              (SELECT COUNT(*) FROM posts WHERE user_id = ? AND groupe_id IS NULL) AS posts`,
-      me, me,
+              (SELECT COUNT(*) FROM posts WHERE user_id = ? AND groupe_id IS NULL) AS posts,
+              (SELECT COUNT(*) FROM invitations WHERE inviter_id = ?) AS invites`,
+      me, me, me,
     );
     res.json({
       avatar: Boolean(req.user.avatar),
       bio: Boolean(req.user.bio),
       following: row.following,
       posts: row.posts,
+      invites: row.invites,
     });
   });
 

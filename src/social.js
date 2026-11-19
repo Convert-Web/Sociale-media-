@@ -75,6 +75,7 @@ const POST_SELECT = `
          (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
          (SELECT l.reaction FROM likes l WHERE l.post_id = p.id AND l.user_id = v.id) AS my_reaction,
          EXISTS(SELECT 1 FROM bookmarks b WHERE b.post_id = p.id AND b.user_id = v.id) AS saved,
+         EXISTS(SELECT 1 FROM follows fw WHERE fw.follower_id = v.id AND fw.followee_id = p.user_id) AS follows_author,
          (SELECT GROUP_CONCAT(pm.url, '|') FROM post_media pm WHERE pm.post_id = p.id) AS media
   FROM (SELECT ? AS id) v
   CROSS JOIN posts p
@@ -149,6 +150,8 @@ function serializePost(ctx, row, viewer) {
     liked: Boolean(row.my_reaction),
     saved: Boolean(row.saved),
     commentCount: row.comment_count,
+    // Le lecteur suit-il déjà l'auteur ? (bouton « Suivre » sur les vidéos et les publications)
+    followsAuthor: Boolean(row.follows_author),
     mine,
     canDelete: mine || Boolean(viewer.is_admin),
     // Filtre automatique : texte masqué derrière un avertissement (catégories détectées)

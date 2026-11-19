@@ -319,5 +319,5 @@ export function settingsView(ctx) {
   if (location.hash === '#notifications') setTimeout(() => notifCard.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
 
   ctx.title = 'Réglages — AURUM';
-  return h('div', null, backHead('Réglages', `@${u.username}`), h('div', { class: 'settings' }, profileForm, notifCard, langCard, mailCard, membership, security, blockedCard, data));
+  return h('div', null, backHead('Réglages', `@${u.username}`), h('div', { class: 'settings' }, profileForm, notifCard, langCard, mailCard, membership, security, blockedCard, data, h('a', { href: '/aide', class: 'card settings-help' }, h('span', { class: 'create-icon' }, icon('help')), h('span', { class: 'grow' }, h('b', null, 'Aide'), h('small', null, 'Questions fréquentes, nous écrire')), icon('chevron', 'icon-sm'))));
 }

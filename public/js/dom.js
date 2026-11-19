@@ -304,10 +304,15 @@ export function tilt(card) {
 
 // Toucher simple (action habituelle) et double-toucher (aimer), comme sur les grands réseaux.
 // Le toucher simple attend un court instant pour ne pas se confondre avec le double.
-export function onTaps(el, { single, double }) {
+// Touchers sur une zone (vidéo, photo) : simple ou double. Les touchers sur un bouton ou un lien
+// de la zone sont ignorés dès le toucher (le bouton peut être redessiné entre-temps : J'aime).
+const CONTROLS = 'a, button, input, textarea, select, label, [role="button"], .no-taps';
+export function onTaps(el, { single, double, ignore = CONTROLS }) {
   let timer = null;
   let last = 0;
   el.addEventListener('click', (e) => {
+    const ctl = ignore && e.target instanceof Element ? e.target.closest(ignore) : null;
+    if (ctl && ctl !== el && el.contains(ctl)) return;
     const now = Date.now();
     if (double && now - last < 300) {
       clearTimeout(timer);

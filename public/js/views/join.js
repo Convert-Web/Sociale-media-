@@ -4,6 +4,7 @@ import { detachPush } from '../push.js';
 import { navigate } from '../router.js';
 import { h, icon, memberCard, money, cardSince, modal, toast, memberNo } from '../dom.js';
 import { redeemCode, rememberedInvitation } from './invite.js';
+import { firstSteps, skipSteps } from './welcome.js';
 
 export async function logout() {
   document.dispatchEvent(new CustomEvent('aurum:logout'));
@@ -319,7 +320,7 @@ export function welcomeView(ctx) {
   requestAnimationFrame(step);
 
   ctx.title = 'Bienvenue — AURUM';
-  return h(
+  const view = h(
     'div',
     { class: 'welcome' },
     h(
@@ -337,10 +338,17 @@ export function welcomeView(ctx) {
       ),
       h(
         'div',
-        { class: 'hero-cta fade-up', style: { animationDelay: '1.6s', justifyContent: 'center', margin: '8px 0 0' } },
-        h('a', { href: '/reglages', class: 'btn btn-ghost btn-lg' }, 'Compléter mon profil'),
-        h('a', { href: '/salon', class: 'btn btn-primary btn-lg' }, 'Entrer dans le Salon', icon('arrow')),
+        { class: 'welcome-cta fade-up', style: { animationDelay: '1.6s' } },
+        h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', onclick: startSteps }, 'Bien démarrer', h('small', { class: 'btn-note' }, '30 secondes'), icon('arrow')),
+        h('button', { type: 'button', class: 'btn btn-ghost btn-block', onclick: skipSteps }, 'Passer, aller au Salon'),
       ),
     ),
   );
+  // Trois étapes guidées : photo, membres à suivre, notifications
+  function startSteps() {
+    const inner = view.querySelector('.welcome-inner');
+    inner.replaceChildren(h('span', { class: 'eyebrow' }, 'Premiers pas'), firstSteps());
+    window.scrollTo(0, 0);
+  }
+  return view;
 }

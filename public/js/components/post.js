@@ -1,4 +1,4 @@
-import { api } from '../api.js';
+import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
 import {
@@ -49,6 +49,31 @@ function journalLink(j) {
     h('span', { class: `post-journal-img${j.kind === 'article' ? '' : ' media'}` }, img, j.kind !== 'article' ? h('span', { class: 'journal-video-badge' }, icon(j.kind === 'video' ? 'play' : 'headphones')) : null),
     h('span', { class: 'post-journal-text' }, h('small', null, j.siteName || 'Le Journal'), h('b', null, j.title), j.summary ? h('span', null, j.summary) : null),
   );
+}
+
+// « Suivre » dans l'en-tête d'une publication d'un membre que l'on ne suit pas encore
+function followPill(post) {
+  if (post.mine || post.followsAuthor !== false || post.author.bot) return null;
+  const btn = h('button', { type: 'button', class: 'follow-pill' }, 'Suivre');
+  const off = store.on('follow:changed', ({ username, following }) => {
+    if (!btn.isConnected) return off();
+    if (username === post.author.username) btn.hidden = following;
+  });
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    btn.disabled = true;
+    try {
+      await api.post(`/api/users/${enc(post.author.username)}/follow`);
+      btn.textContent = 'Suivi';
+      btn.classList.add('done');
+      store.emit('follow:changed', { username: post.author.username, following: true });
+      toast(`Vous suivez ${post.author.displayName}.`);
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.message, 'error');
+    }
+  });
+  return btn;
 }
 
 function gallery(images, onDouble, author = '') {
@@ -407,6 +432,7 @@ export function postCard(post, { expanded = false } = {}) {
           post.video?.expiresAt ? h('span', { class: 'post-ephemeral', title: 'Vidéo éphémère : effacée après ce délai' }, icon('clock', 'icon-xs'), `encore ${remaining(post.video.expiresAt)}`) : null,
         ),
       ),
+      followPill(post),
       menuBtn,
     ),
     previewTag,
@@ -474,15 +500,24 @@ function commentEl(c, onDelete) {
   );
 }
 
-function commentsSection(post, onCount) {
+// Commentaires d'une publication : liste + saisie. Utilisée sous la publication et dans la
+// feuille de commentaires des Vidéos (la saisie y reste en bas, au-dessus du clavier).
+export function commentsSection(post, onCount, { placement = 'above' } = {}) {
   const list = h('div', { class: 'comments' }, spinner());
   let count = post.commentCount;
-  const ta = h('textarea', { placeholder: 'Écrire un commentaire…', rows: 1, maxlength: 1000, 'aria-label': 'Commentaire' });
+  const ta = h('textarea', { placeholder: post.mine ? 'Répondre à vos commentaires…' : `Écrire à ${post.author.displayName.split(/\s+/)[0]}…`, rows: 1, maxlength: 1000, 'aria-label': 'Commentaire' });
   autosize(ta);
-  const send = h('button', { class: 'btn btn-primary btn-sm', type: 'submit' }, 'Répondre');
+  const send = h('button', { class: 'btn btn-primary btn-sm', type: 'submit', disabled: true }, 'Envoyer');
+  ta.addEventListener('input', () => (send.disabled = !ta.value.trim()));
+  const empty = h('div', { class: 'comments-empty' }, icon('comment'), h('b', null, 'Aucun commentaire pour l’instant'), h('span', null, 'Soyez le premier à réagir.'));
+  const paintEmpty = () => {
+    if (!list.querySelector('.comment')) list.append(empty);
+    else empty.remove();
+  };
   const removeComment = (c) => {
     list.querySelector(`[data-id="${c.id}"]`)?.remove();
     onCount(--count);
+    paintEmpty();
   };
   const form = h(
     'form',
@@ -495,7 +530,11 @@ function commentsSection(post, onCount) {
         send.disabled = true;
         try {
           const { comment } = await api.post(`/api/posts/${post.id}/comments`, { body });
-          list.append(commentEl(comment, removeComment));
+          empty.remove();
+          const el = commentEl(comment, removeComment);
+          el.classList.add('comment-new');
+          list.append(el);
+          el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
           flaggedNotice(comment);
           onCount(++count);
           ta.value = '';
@@ -503,7 +542,7 @@ function commentsSection(post, onCount) {
         } catch (err) {
           toast(err.message, 'error');
         } finally {
-          send.disabled = false;
+          send.disabled = !ta.value.trim();
         }
       },
     },
@@ -511,7 +550,7 @@ function commentsSection(post, onCount) {
     ta,
     send,
   );
-  attachMentions(ta, { placement: 'above' });
+  attachMentions(ta, { placement });
   ta.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
@@ -524,6 +563,7 @@ function commentsSection(post, onCount) {
     .then(({ comments }) => {
       clear(list);
       for (const c of comments) list.append(commentEl(c, removeComment));
+      paintEmpty();
       if (comments.length !== count) onCount((count = comments.length));
     })
     .catch((err) => {
@@ -531,7 +571,7 @@ function commentsSection(post, onCount) {
       list.append(h('p', { class: 'muted small' }, err.message));
     });
 
-  return { el: h('div', null, list, form), focus: () => ta.focus() };
+  return { el: h('div', null, list, form), list, form, focus: () => ta.focus() };
 }
 
 // ---------------------------------------------------------------------------
@@ -756,5 +796,8 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
     if (imgs.length) addFiles(imgs);
   });
   form.focusInput = () => ta.focus();
+  // Bouton « + » : ouvrir directement le choix des photos ou de la vidéo (dans le même geste)
+  form.pickPhotos = () => fileInput.click();
+  form.pickVideo = () => videoInput.click();
   return form;
 }

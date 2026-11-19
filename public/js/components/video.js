@@ -219,11 +219,20 @@ export function noSave(el) {
 // Badge « éphémère » : temps restant avant l'effacement
 export const ephemeralBadge = (v, cls = 'vp-ephemeral') => (v.expiresAt ? h('span', { class: cls, title: 'Vidéo éphémère : effacée après ce délai' }, icon('clock', 'icon-xs'), remaining(v.expiresAt)) : null);
 
-// Préchargement : les vidéos du fil commencent à se télécharger un écran et demi avant d'apparaître
+// Préchargement : une vidéo du fil se télécharge quand elle approche de l'écran (un écran avant)
+// et que l'on ralentit dessus — pas quand on la survole en défilant vite (bande passante économisée)
+const nearTimers = new WeakMap();
 const nearIo = typeof IntersectionObserver !== 'undefined'
   ? new IntersectionObserver((entries) => {
-      for (const e of entries) if (e.isIntersecting) { e.target.__player?.near(); nearIo.unobserve(e.target); }
-    }, { rootMargin: '150% 0px' })
+      for (const e of entries) {
+        clearTimeout(nearTimers.get(e.target));
+        if (!e.isIntersecting) continue;
+        nearTimers.set(e.target, setTimeout(() => {
+          e.target.__player?.near();
+          nearIo.unobserve(e.target);
+        }, 350));
+      }
+    }, { rootMargin: '100% 0px' })
   : null;
 
 export function videoPlayer(v, { onOpen, onDouble } = {}) {
@@ -322,8 +331,15 @@ export function prefetchReels() {
     .get('/api/videos/feed')
     .then((d) => {
       reelsCache = { posts: d.posts, hasMore: d.hasMore, at: Date.now() };
+      // La première vidéo n'est préparée que pour ceux qui utilisent déjà le coin Vidéos
+      let habit = false;
+      try {
+        habit = localStorage.getItem('aurum:reels-used') === '1';
+      } catch {
+        /* stockage indisponible */
+      }
       const first = d.posts.find((p) => p.video);
-      if (first) preloadVideo(first.video);
+      if (first && habit) preloadVideo(first.video);
       return reelsCache;
     })
     .catch(() => null)

@@ -17,6 +17,7 @@ export function siteFooter() {
         h('a', { href: '/cgv' }, 'CGV'),
         h('a', { href: '/confidentialite' }, 'Confidentialité'),
         h('a', { href: '/confidentialite#cookies' }, 'Cookies'),
+        h('a', { href: '/aide' }, 'Aide'),
       ),
       h('p', null, `© ${new Date().getFullYear()} AURUM. Tous droits réservés.`),
     ),

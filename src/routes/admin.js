@@ -117,6 +117,17 @@ module.exports = function adminRoutes(ctx) {
   });
 
   // Mode d'entrée : libre ou sur invitation
+  // Erreurs survenues chez les visiteurs (24 dernières heures)
+  r.get('/admin/errors', async (_req, res) => {
+    const since = Date.now() - 86400e3;
+    const { n } = await db.get('SELECT COUNT(*) AS n FROM client_errors WHERE at > ?', since);
+    const top = await db.all(
+      'SELECT message, path, device, COUNT(*) AS n, MAX(at) AS last FROM client_errors WHERE at > ? GROUP BY message, path ORDER BY n DESC, last DESC LIMIT 12',
+      since,
+    );
+    res.json({ count: n, top });
+  });
+
   // Mesure d'audience (30 derniers jours)
   r.get('/admin/analytics', async (_req, res) => {
     res.json(await analytics.summary(ctx, 30));

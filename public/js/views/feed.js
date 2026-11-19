@@ -6,6 +6,8 @@ import { postCard } from '../components/post.js';
 import { storiesBar } from '../components/stories.js';
 import { nextEventCard } from './events.js';
 import { journalStrip } from './journal.js';
+import { stepSheet } from './welcome.js';
+import { coach } from '../components/tips.js';
 
 // Avant-premières : annonces de la Direction réservées aux Fondateurs, en tête du Salon
 function previewsSection(ctx) {
@@ -55,7 +57,7 @@ function previewsSection(ctx) {
   return host;
 }
 
-// Carte d'accueil des nouveaux membres : 4 étapes, masquable.
+// Carte « Bien démarrer » : cinq étapes, chacune faisable d'un toucher, sans quitter le Salon.
 function onboardingCard() {
   const host = h('div');
   let hidden = false;
@@ -65,52 +67,64 @@ function onboardingCard() {
     /* stockage indisponible */
   }
   if (hidden) return host;
-  api
-    .get('/api/me/progress')
-    .then((p) => {
-      const steps = [
-        { done: p.avatar, label: 'Ajoutez une photo de profil', href: '/reglages' },
-        { done: p.bio, label: 'Présentez-vous en une phrase', href: '/reglages' },
-        { done: p.following > 0, label: 'Suivez au moins un membre', href: '/explorer' },
-        { done: p.posts > 0, label: 'Publiez votre premier message', href: null },
-      ];
-      const count = steps.filter((x) => x.done).length;
-      if (count === steps.length) return;
-      const dismiss = () => {
-        try {
-          localStorage.setItem('aurum:onboarding-done', '1');
-        } catch {
-          /* stockage indisponible */
+  const dismiss = () => {
+    try {
+      localStorage.setItem('aurum:onboarding-done', '1');
+    } catch {
+      /* stockage indisponible */
+    }
+    host.replaceChildren();
+  };
+  const load = () =>
+    api
+      .get('/api/me/progress')
+      .then((p) => {
+        const steps = [
+          { done: p.avatar, label: 'Ajouter une photo de profil', action: 'Ajouter', run: () => stepSheet('photo', load) },
+          { done: p.following >= 3, label: `Suivre 3 membres${p.following ? ` (${Math.min(p.following, 3)}/3)` : ''}`, action: 'Choisir', run: () => stepSheet('follow', load) },
+          { done: p.posts > 0, label: 'Publier pour la première fois', action: 'Publier', run: () => document.dispatchEvent(new CustomEvent('aurum:create')) },
+          { done: p.bio, label: 'Vous présenter en une phrase', action: 'Écrire', run: () => navigate('/reglages') },
+          { done: p.invites > 0, label: 'Inviter un proche', action: 'Inviter', run: () => navigate('/invitations') },
+        ];
+        const count = steps.filter((x) => x.done).length;
+        if (count === steps.length) {
+          // Bravo, puis la carte disparaît
+          host.replaceChildren(h('section', { class: 'onboarding onboarding-done' }, h('span', { class: 'check-dot' }, icon('check')), h('div', null, h('b', null, 'Bravo, vous êtes prêt.'), h('p', { class: 'muted small' }, 'Votre profil est complet.'))));
+          setTimeout(dismiss, 4000);
+          return;
         }
-        host.replaceChildren();
-      };
-      host.replaceChildren(
-        h(
-          'section',
-          { class: 'onboarding' },
+        host.replaceChildren(
           h(
-            'div',
-            { class: 'onboarding-head' },
-            h('div', null, h('h2', null, 'Bienvenue au cercle'), h('p', { class: 'muted small' }, `${count} sur ${steps.length} étapes`)),
-            h('button', { class: 'icon-btn', 'aria-label': 'Masquer', onclick: dismiss }, icon('x')),
-          ),
-          h('div', { class: 'onboarding-bar' }, h('i', { style: { width: `${(count / steps.length) * 100}%` } })),
-          h(
-            'ul',
-            null,
-            steps.map((step) =>
-              h(
-                'li',
-                { class: step.done ? 'done' : '' },
-                h('span', { class: 'check-dot' }, step.done ? icon('check') : null),
-                step.href && !step.done ? h('a', { href: step.href }, step.label) : h('span', null, step.label),
+            'section',
+            { class: 'onboarding' },
+            h(
+              'div',
+              { class: 'onboarding-head' },
+              h('div', null, h('h2', null, 'Bien démarrer'), h('p', { class: 'muted small' }, `${count} sur ${steps.length} · environ 2 minutes`)),
+              h('button', { class: 'icon-btn', 'aria-label': 'Masquer', onclick: dismiss }, icon('x')),
+            ),
+            h('div', { class: 'onboarding-bar' }, h('i', { style: { width: `${(count / steps.length) * 100}%` } })),
+            h(
+              'ul',
+              null,
+              steps.map((step) =>
+                h(
+                  'li',
+                  { class: step.done ? 'done' : '' },
+                  h('span', { class: 'check-dot' }, step.done ? icon('check') : null),
+                  h('span', { class: 'grow' }, step.label),
+                  step.done ? null : h('button', { type: 'button', class: 'btn btn-secondary btn-sm', onclick: step.run }, step.action),
+                ),
               ),
             ),
           ),
-        ),
-      );
-    })
-    .catch(() => {});
+        );
+      })
+      .catch(() => {});
+  load();
+  // Une publication vient d'être faite : la carte se met à jour
+  const onPosted = () => (host.isConnected ? load() : document.removeEventListener('aurum:posted', onPosted));
+  document.addEventListener('aurum:posted', onPosted);
   return host;
 }
 
@@ -202,8 +216,8 @@ export function feedView(ctx) {
       insertAfter: { index: 2, el: journalStrip() },
       empty: () =>
         scope === 'following'
-          ? emptyState('users', 'Votre fil est encore calme', 'Suivez quelques membres pour voir leurs publications ici.', h('a', { href: '/explorer', class: 'btn btn-primary' }, 'Découvrir des membres'))
-          : emptyState('sparkles', 'Le Salon vous attend', 'Soyez le premier à prendre la parole. Les premiers mots donnent le ton.'),
+          ? emptyState('users', 'Votre fil est encore calme', 'Suivez quelques membres : leurs publications apparaîtront ici, dans l’ordre.', h('button', { type: 'button', class: 'btn btn-primary', onclick: () => stepSheet('follow', () => load()) }, 'Choisir des membres à suivre'))
+          : emptyState('sparkles', 'Le Salon vous attend', 'Soyez le premier à prendre la parole. Les premiers mots donnent le ton.', h('button', { type: 'button', class: 'btn btn-primary', onclick: () => document.dispatchEvent(new CustomEvent('aurum:create')) }, 'Publier')),
     });
     host.append(current.el);
     stopList = current.start();
@@ -307,6 +321,12 @@ export function feedView(ctx) {
     })
     .catch(() => {});
   const stories = storiesBar();
+  // Astuces au premier passage (une à la fois, une seule fois par appareil)
+  setTimeout(() => {
+    if (!host.isConnected) return;
+    coach('reagir', host.querySelector('.post .react-btn'), 'Réagir', 'Touchez pour aimer. Gardez le doigt appuyé pour choisir une autre réaction.');
+    coach('story', stories.el.querySelector('.story-item'), 'Votre story', 'Une photo ou une vidéo, visible 24 h par le cercle. Touchez le +.', { delay: 1400 });
+  }, 2200);
   ctx.title = 'Le Salon — AURUM';
   return h(
     'div',

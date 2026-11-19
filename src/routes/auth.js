@@ -36,6 +36,7 @@ module.exports = function authRoutes(ctx) {
         admission: await admissionMode(ctx),
         realtime: config.realtime,
         videoTtlHours: config.videoTtlHours,
+        version: config.version,
       },
     });
   });

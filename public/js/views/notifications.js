@@ -72,7 +72,7 @@ export function notificationsView(ctx) {
       }
       if (first) {
         first = false;
-        if (!notifications.length) list.replaceWith(emptyState('bell', 'Tout est calme', 'Les mentions, réponses et nouveaux abonnés apparaîtront ici.'));
+        if (!notifications.length) list.replaceWith(emptyState('bell', 'Tout est calme', 'Les mentions, réponses et nouveaux abonnés apparaîtront ici.', h('a', { href: '/explorer', class: 'btn btn-secondary' }, 'Découvrir des membres')));
         if (notifications.some((n) => !n.read)) {
           await api.post('/api/notifications/read');
           store.setCounters({ notifications: 0 });

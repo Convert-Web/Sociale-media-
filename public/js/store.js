@@ -72,11 +72,24 @@ function onVisible() {
   if (!document.hidden) poll();
 }
 
+// Rythme adaptatif : toutes les 20 s quand on utilise l'application, toutes les 60 s au repos
+// (moins d'appels au serveur : l'hébergement gratuit le supporte même avec beaucoup de membres)
+let lastActive = Date.now();
+for (const ev of ['pointerdown', 'keydown', 'scroll']) addEventListener(ev, () => (lastActive = Date.now()), { passive: true });
+function schedule() {
+  clearTimeout(pollTimer);
+  const idle = Date.now() - lastActive > 120000;
+  pollTimer = setTimeout(async () => {
+    await poll();
+    if (pollTimer) schedule();
+  }, idle ? 60000 : 20000);
+}
+
 export function connectRealtime() {
   if (!store.isMember) return;
   if (isPolling()) {
     if (pollTimer) return;
-    pollTimer = setInterval(poll, 20000);
+    schedule();
     document.addEventListener('visibilitychange', onVisible);
     return;
   }
@@ -99,7 +112,7 @@ export function connectRealtime() {
 }
 
 export function disconnectRealtime() {
-  clearInterval(pollTimer);
+  clearTimeout(pollTimer);
   pollTimer = null;
   document.removeEventListener('visibilitychange', onVisible);
   clearTimeout(retryTimer);

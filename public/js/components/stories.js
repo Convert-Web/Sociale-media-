@@ -5,6 +5,18 @@ import { isVideoFile, readVideoInfo, uploadVideo, noSave, sound, clockLabel, MAX
 
 const DURATION = 5000; // durée d'affichage d'une story
 
+// Nouvelle story depuis n'importe où (bouton « + ») : choix de la photo ou de la vidéo
+export function newStory() {
+  const input = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,video/*', hidden: true });
+  document.body.append(input);
+  input.addEventListener('change', () => {
+    const f = input.files[0];
+    input.remove();
+    if (f) (isVideoFile(f) ? createVideoStory : createStory)(f, () => document.dispatchEvent(new CustomEvent('aurum:stories')));
+  });
+  input.click();
+}
+
 // ---------------------------------------------------------------------------
 // Barre des stories (haut du Salon)
 // ---------------------------------------------------------------------------
@@ -74,6 +86,9 @@ export function storiesBar() {
 
   paint();
   load();
+  // Story publiée depuis le bouton « + » : la barre se met à jour
+  const onNew = () => (bar.isConnected ? load() : document.removeEventListener('aurum:stories', onNew));
+  document.addEventListener('aurum:stories', onNew);
   return { el: bar, reload: load };
 }
 

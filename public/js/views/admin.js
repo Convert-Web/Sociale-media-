@@ -206,6 +206,30 @@ async function audienceSection() {
   );
 }
 
+// Erreurs survenues chez les visiteurs : rien à faire tant que tout va bien
+async function errorsSection() {
+  let d;
+  try {
+    d = await api.get('/api/admin/errors');
+  } catch {
+    return null;
+  }
+  const host = h('div', { class: 'card emails-card' });
+  host.append(
+    h('div', { class: `push-status${d.count ? '' : ' on'}` }, h('span', { class: 'push-dot' }), d.count ? `${num(d.count)} erreur${d.count > 1 ? 's' : ''} sur 24 h` : 'Aucune erreur sur 24 h'),
+  );
+  if (d.top.length) {
+    host.append(
+      h(
+        'ol',
+        { class: 'error-list' },
+        d.top.map((e) => h('li', null, h('b', null, e.message), h('small', null, `${num(e.n)} fois · ${e.path} · ${e.device} · ${timeAgo(e.last)}`))),
+      ),
+    );
+  }
+  return host;
+}
+
 // Courriels : état de l'envoi, essais et Lettre du cercle
 async function emailsSection() {
   const host = h('div', { class: 'card emails-card' });
@@ -370,7 +394,7 @@ export async function adminView(ctx) {
   const data = await api.get('/api/admin/overview');
   botsState = { enabled: Boolean(data.config.bots), available: Boolean(data.config.botsAvailable) };
   const admissions = await admissionsSection(data.config.admission);
-  const [emails, legal, audience] = await Promise.all([emailsSection(), legalSection(), audienceSection()]);
+  const [emails, legal, audience, errors] = await Promise.all([emailsSection(), legalSection(), audienceSection(), errorsSection()]);
   const reports = await reportsSection();
   const t = data.totals;
   const c = data.config;
@@ -479,6 +503,8 @@ export async function adminView(ctx) {
     audience,
     h('div', { class: 'section-title' }, 'Entrée dans le cercle'),
     entry,
+    errors ? h('div', { class: 'section-title' }, 'Santé de l’application') : null,
+    errors ? h('div', { class: 'admissions' }, errors) : null,
     h('div', { class: 'section-title' }, 'Courriels'),
     h('div', { class: 'admissions' }, emails),
     h('div', { class: 'section-title' }, 'Informations légales'),

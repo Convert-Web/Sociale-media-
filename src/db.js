@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS comments (
   created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id, id);
+CREATE INDEX IF NOT EXISTS idx_comments_user ON comments(user_id, created_at);
 
 CREATE TABLE IF NOT EXISTS follows (
   follower_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -202,6 +203,18 @@ CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,
   value  TEXT NOT NULL
 );
+
+-- Erreurs survenues dans les navigateurs (anonymes) : suivi du lancement par la Direction
+CREATE TABLE IF NOT EXISTS client_errors (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  at       INTEGER NOT NULL,
+  message  TEXT NOT NULL,
+  stack    TEXT NOT NULL DEFAULT '',
+  path     TEXT NOT NULL DEFAULT '',
+  device   TEXT NOT NULL DEFAULT '',
+  version  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_client_errors_at ON client_errors(at);
 
 -- Mesure d'audience : totaux anonymes par jour (aucun identifiant)
 CREATE TABLE IF NOT EXISTS analytics_daily (
@@ -439,6 +452,8 @@ async function openDatabase({ url, authToken }) {
   }
   await client.executeMultiple(SCHEMA);
   await migrate(client);
+  // Index qui portent sur des colonnes ajoutées par migration : créés après elle
+  await client.execute('CREATE INDEX IF NOT EXISTS idx_posts_video ON posts(id) WHERE video_id IS NOT NULL');
 
   const db = wrap(client);
   // Transaction : fn reçoit un objet { get, all, run } lié à la transaction.

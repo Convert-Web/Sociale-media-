@@ -5,7 +5,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?:connexion|inscription|mot-de-passe-oublie|reinitialiser|rejoindre|bienvenue|salon|explorer|notifications|videos|reglages|enregistres|amis|invitations|admin|cgu|cgv|rgpd|confidentialite|mentions-legales|messages(?:/[^/]+)?|p/[^/]+|@[^/]+|groupes(?:/[^/]+)?|journal(?:/[^/]+)?|agenda(?:/[^/]+)?|carnet(?:/[^/]+)?|invitation/[^/]+)/?)?",
+      "source": "/((?:connexion|inscription|mot-de-passe-oublie|reinitialiser|rejoindre|bienvenue|salon|explorer|notifications|videos|reglages|enregistres|amis|invitations|admin|aide|cgu|cgv|rgpd|confidentialite|mentions-legales|messages(?:/[^/]+)?|p/[^/]+|@[^/]+|groupes(?:/[^/]+)?|journal(?:/[^/]+)?|agenda(?:/[^/]+)?|carnet(?:/[^/]+)?|invitation/[^/]+)/?)?",
       "destination": "/index.html"
     }
   ],
@@ -40,7 +40,7 @@
       ]
     },
     {
-      "source": "/((?:connexion|inscription|mot-de-passe-oublie|reinitialiser|rejoindre|bienvenue|salon|explorer|notifications|videos|reglages|enregistres|amis|invitations|admin|cgu|cgv|rgpd|confidentialite|mentions-legales|messages(?:/[^/]+)?|p/[^/]+|@[^/]+|groupes(?:/[^/]+)?|journal(?:/[^/]+)?|agenda(?:/[^/]+)?|carnet(?:/[^/]+)?|invitation/[^/]+)/?)?",
+      "source": "/((?:connexion|inscription|mot-de-passe-oublie|reinitialiser|rejoindre|bienvenue|salon|explorer|notifications|videos|reglages|enregistres|amis|invitations|admin|aide|cgu|cgv|rgpd|confidentialite|mentions-legales|messages(?:/[^/]+)?|p/[^/]+|@[^/]+|groupes(?:/[^/]+)?|journal(?:/[^/]+)?|agenda(?:/[^/]+)?|carnet(?:/[^/]+)?|invitation/[^/]+)/?)?",
       "headers": [
         {
           "key": "Cache-Control",

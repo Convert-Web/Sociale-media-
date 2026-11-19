@@ -216,7 +216,7 @@ test('bloquer : contenus masqués, messages et abonnement impossibles', async ()
 test('accueil guidé : progression du nouveau membre', async () => {
   const fresh = await member('Nouvelle Venue', 'nouvelle');
   let p = (await fresh.get('/api/me/progress')).data;
-  assert.deepEqual(p, { avatar: false, bio: false, following: 0, posts: 0 });
+  assert.deepEqual(p, { avatar: false, bio: false, following: 0, posts: 0, invites: 0 });
   await fresh.patch('/api/me', { bio: 'Galeriste à Paris' });
   await fresh.post('/api/users/ana/follow');
   p = (await fresh.get('/api/me/progress')).data;

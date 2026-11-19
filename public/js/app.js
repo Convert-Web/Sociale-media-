@@ -2,8 +2,10 @@
 import { api, enc } from './api.js';
 import { store, connectRealtime, disconnectRealtime } from './store.js';
 import { navigate, setRenderer, compile } from './router.js';
-import { h, icon, avatar, memberCard, cardSince, spinner, emptyState, closeModal, closeMenu, modal, num, clear } from './dom.js';
+import { h, icon, avatar, memberCard, cardSince, spinner, emptyState, closeModal, closeMenu, modal, num, clear, toast } from './dom.js';
 import { composer } from './components/post.js';
+import { openSheet, closeSheet } from './components/sheet.js';
+import { newStory } from './components/stories.js';
 import { installFormValidation } from './forms.js';
 import { trackPage, cookieBanner } from './components/cookies.js';
 import { landingView } from './views/landing.js';
@@ -17,6 +19,7 @@ import { notificationsView } from './views/notifications.js';
 import { settingsView } from './views/settings.js';
 import { adminView } from './views/admin.js';
 import { legalView } from './views/legal.js';
+import { helpView } from './views/help.js';
 import { friendsView } from './views/friends.js';
 import { groupsView, groupView } from './views/groups.js';
 import { invitationLanding, invitationsView } from './views/invite.js';
@@ -32,6 +35,7 @@ document.addEventListener('aurum:logout', () => stopPlayer());
 // Menu (≡) du profil et bouton « Publier » des pages
 document.addEventListener('aurum:menu', () => openMeMenu());
 document.addEventListener('aurum:compose', () => openComposer());
+document.addEventListener('aurum:create', () => openCreate());
 
 // Pas de zoom (comme une application) : pincement et double toucher désactivés
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
@@ -73,6 +77,7 @@ const ROUTES = [
   { path: '/invitations', view: invitationsView, access: 'member', layout: 'app', nav: 'invitations' },
   { path: '/invitation/:code', view: invitationLanding, access: 'public' },
   { path: '/admin', view: adminView, access: 'admin', layout: 'app', nav: 'admin' },
+  { path: '/aide', view: helpView, access: 'public', layout: 'auto', nav: 'aide' },
   { path: '/cgu', view: legalView, access: 'public', layout: 'auto', page: 'cgu' },
   { path: '/cgv', view: legalView, access: 'public', layout: 'auto', page: 'cgv' },
   { path: '/rgpd', view: legalView, access: 'public', layout: 'auto', page: 'confidentialite' },
@@ -96,8 +101,27 @@ store.on('counters', paintTitle);
 // ---------------------------------------------------------------------------
 // Coquille (navigation latérale, colonne de droite, barre d'onglets mobile)
 // ---------------------------------------------------------------------------
-function openComposer() {
-  modal('Nouvelle publication', composer({ onPosted: () => closeModal() }));
+// Bouton « + » : trois choix clairs, en grand
+function openComposer(kind) {
+  const c = composer({ onPosted: () => (closeModal(), document.dispatchEvent(new CustomEvent('aurum:posted'))) });
+  modal(kind === 'video' ? 'Nouvelle vidéo' : 'Nouvelle publication', c);
+  if (kind === 'video') c.pickVideo();
+  else if (kind === 'photos') c.pickPhotos();
+  return c;
+}
+function openCreate() {
+  const choice = (ic, title, sub, run) =>
+    h('button', { type: 'button', class: 'create-choice', onclick: () => { closeSheet(); run(); } }, h('span', { class: 'create-icon' }, icon(ic)), h('span', { class: 'grow' }, h('b', null, title), h('small', null, sub)), icon('chevron', 'icon-sm'));
+  openSheet({
+    title: 'Créer',
+    body: h(
+      'div',
+      { class: 'create-list' },
+      choice('pen', 'Publication', 'Un texte, jusqu’à 6 photos', () => openComposer()),
+      choice('video', 'Vidéo', 'Une minute au plus · visible 24 h', () => openComposer('video')),
+      choice('sparkles', 'Story', 'Photo ou vidéo · disparaît après 24 h', () => newStory()),
+    ),
+  });
 }
 
 // Menu « moi » sur téléphone : profil, amis, groupes, réglages… (la barre d'onglets n'a que cinq places)
@@ -116,6 +140,7 @@ function openMeMenu() {
     item('/invitations', 'ticket', 'Inviter un proche'),
     item('/enregistres', 'bookmark', 'Enregistrés'),
     item('/reglages', 'settings', 'Réglages'),
+    item('/aide', 'help', 'Aide'),
   ];
   if (me.isAdmin) items.push(item('/admin', 'chart', 'Direction'));
   modal(
@@ -200,7 +225,7 @@ function buildShell() {
         h('a', { href: l.href, class: 'nav-link' }, h('span', { class: 'icon-wrap' }, icon(l.icon), l.badge ? badge(l.badge) : null), h('span', { class: 'label' }, l.label)),
       ),
     ),
-    h('button', { class: 'btn btn-primary', onclick: openComposer, title: 'Publier' }, icon('pen'), h('span', { class: 'label' }, 'Publier')),
+    h('button', { class: 'btn btn-primary', onclick: () => openCreate(), title: 'Créer' }, icon('pen'), h('span', { class: 'label' }, 'Créer')),
     meCard,
   );
 
@@ -276,7 +301,7 @@ function buildShell() {
     // Les vidéos à un toucher (l'Explorer passe sur la loupe du Salon)
     // Le toucher lance la première vidéo tout de suite, avec le son
     h('a', { href: '/videos', class: 'tab-videos', onclick: (e) => { e.preventDefault(); openReels(); } }, icon('video'), 'Vidéos'),
-    h('a', { href: '#', 'aria-label': 'Publier', onclick: (e) => (e.preventDefault(), openComposer()) }, h('span', { class: 'plus' }, icon('plus'))),
+    h('a', { href: '#', 'aria-label': 'Créer : publication, vidéo ou story', onclick: (e) => (e.preventDefault(), openCreate()) }, h('span', { class: 'plus' }, icon('plus'))),
     register('journal', h('a', { href: '/journal' }, icon('newspaper'), 'Journal')),
     register('profil', h('a', { href: `/@${u.username}`, class: 'tab-me' }, tabAvatar, 'Profil')),
   );
@@ -512,6 +537,36 @@ function paintMeta(ctx, url) {
 // Liens internes, historique, session, validation des formulaires
 // ---------------------------------------------------------------------------
 installFormValidation();
+
+// Hors connexion : un bandeau discret, et un mot quand le réseau revient
+const offlineBar = h('div', { class: 'offline-bar', role: 'status', hidden: navigator.onLine !== false }, icon('wifiOff', 'icon-sm'), 'Hors connexion · tout reprendra au retour du réseau');
+document.body.append(offlineBar);
+addEventListener('offline', () => (offlineBar.hidden = false));
+addEventListener('online', () => {
+  if (offlineBar.hidden) return;
+  offlineBar.hidden = true;
+  toast('Connexion rétablie.');
+});
+
+// Erreurs JavaScript : signalées à la Direction (anonymes : message, modèle de page, appareil)
+{
+  let sent = 0;
+  const seen = new Set();
+  const report = (message, stack) => {
+    const msg = String(message || '').slice(0, 300);
+    if (!msg || sent >= 5 || seen.has(msg)) return;
+    seen.add(msg);
+    sent++;
+    const path = match(location.pathname).route?.path || '404';
+    fetch('/api/client-errors', { method: 'POST', headers: { 'x-aurum': '1', 'content-type': 'application/json' }, body: JSON.stringify({ message: msg, stack: String(stack || '').slice(0, 900), path, version: store.config?.version || '' }), keepalive: true }).catch(() => {});
+  };
+  addEventListener('error', (e) => report(e.message, e.error?.stack));
+  addEventListener('unhandledrejection', (e) => {
+    const r = e.reason;
+    if (r && typeof r === 'object' && 'status' in r) return; // erreur réseau ou refus du serveur : déjà affichée
+    report(r?.message || String(r), r?.stack);
+  });
+}
 
 document.addEventListener('click', (e) => {
   if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
