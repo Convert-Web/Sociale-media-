@@ -100,7 +100,7 @@ function slide(post) {
     h('img', { class: 'reel-poster', src: v.poster || '', alt: `Vidéo de ${post.author.displayName}`, decoding: 'async' }),
     h('div', { class: 'reel-holder' }),
     h('div', { class: 'reel-shade' }),
-    h('span', { class: 'reel-play', hidden: true }, icon('play')),
+    h('span', { class: 'reel-play', hidden: true }, icon('playBadge')),
     h('div', { class: 'reel-side' }, likeBtn, commentBtn, shareBtn),
     h(
       'div',

@@ -43,6 +43,7 @@ const P = {
   expand: '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/>',
   sound: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>',
   mute: '<path d="M11 5 6 9H3v6h3l5 4z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>',
+  playBadge: '<circle cx="12" cy="12" r="12" fill="rgba(0,0,0,0.42)" stroke="none"/><path fill="#fff" stroke="none" d="M9.6 7.68v8.64a.66.66 0 0 0 .99.57l6.9-4.32a.66.66 0 0 0 0-1.14l-6.9-4.32a.66.66 0 0 0-.99.57Z"/>',
   play: '<path fill="currentColor" d="M7 4.6v14.8a1 1 0 0 0 1.52.85l12.2-7.4a1 1 0 0 0 0-1.7L8.52 3.75A1 1 0 0 0 7 4.6Z"/>',
   pause: '<rect fill="currentColor" stroke="none" x="5.5" y="4" width="4.5" height="16" rx="1.3"/><rect fill="currentColor" stroke="none" x="14" y="4" width="4.5" height="16" rx="1.3"/>',
   rewind: '<path d="M3 12a9 9 0 1 0 2.64-6.36L3 8.3"/><path d="M3 3.3v5h5"/><text x="12.4" y="15.6" font-size="7.6" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none" font-family="system-ui, sans-serif">15</text>',

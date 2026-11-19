@@ -244,7 +244,7 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
   el.muted = !soundOn;
   el.playsInline = true;
   const soundBtn = h('button', { class: 'vp-sound', type: 'button', 'aria-label': 'Son' }, icon(soundOn ? 'sound' : 'mute'));
-  const playMark = h('span', { class: 'vp-play', hidden: true }, icon('play'));
+  const playMark = h('span', { class: 'vp-play', hidden: true }, icon('playBadge'));
   const bar = h('span', { class: 'vp-bar' }, h('i'));
   // Format exact de la vidéo (verticale, carrée ou horizontale) : jamais recadrée
   const ratio = v.width && v.height ? v.width / v.height : null;

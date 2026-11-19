@@ -2206,3 +2206,20 @@ html.reels-mode, html.reels-mode body { background: #000; }
 .step-empty b { font-size: 17px; }
 .step-empty span { color: var(--muted); font-size: 14.5px; line-height: 1.45; max-width: 34ch; margin-bottom: 6px; }
 .step-list-head[hidden] { display: none; }
+
+/* ===================================================================== v18
+   Icône de pause et photos de profil : rendu identique sur iPhone (Safari)
+   ===================================================================== */
+/* Une seule image vectorielle (disque + triangle centré), sans flou CSS : Safari affichait parfois
+   le flou en carré et le triangle décalé */
+.vp-play, .reel-play, .reel .reel-play { width: 76px; height: 76px; margin: -38px 0 0 -38px; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; border-radius: 0;
+  display: block; filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.35)); animation: playIn 0.24s var(--ease); }
+.vp-play .icon, .reel-play .icon, .reel .reel-play .icon { display: block; width: 100%; height: 100%; margin: 0; }
+@keyframes playIn { from { opacity: 0; transform: scale(0.82); } }
+/* Photos de profil : position fixée au coin du cadre (Safari) */
+.avatar > img { top: 0; left: 0; right: auto; bottom: auto; display: block; margin: 0; }
+/* Vidéos : photo toujours découpée en rond (même pendant le défilement), un seul anneau blanc net */
+.reel .reel-author .avatar > img, .reel .reel-author .avatar > .avatar-initials { -webkit-clip-path: circle(50% at 50% 50%); clip-path: circle(50% at 50% 50%); }
+.reel .reel-author .avatar.founder::before { display: none; }
+.reel .reel-author .avatar > img, .reel .reel-author .avatar > .avatar-initials { box-shadow: none; }
+.reel .reel-author .avatar { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95); border-radius: 50%; }
