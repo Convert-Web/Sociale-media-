@@ -21,6 +21,37 @@ const once = (el, ev) => new Promise((resolve, reject) => {
 const fileMime = (f) => (VIDEO_TYPES.includes(f.type) ? f.type : /\.webm$/i.test(f.name) ? 'video/webm' : /\.mov$/i.test(f.name) ? 'video/quicktime' : 'video/mp4');
 
 // Durée, dimensions et image d'aperçu (prise à 0,5 s)
+// Bande-son décodée dès le choix de la vidéo (pendant que l'on écrit son texte) : si c'est prêt
+// au moment de publier, la préparation se fait en silence ; sinon on capte le son de la vidéo
+// elle-même (méthode éprouvée). Dans les deux cas, le son est conservé.
+const decodeWith = (ac, buf) =>
+  new Promise((resolve, reject) => {
+    const p = ac.decodeAudioData(buf, resolve, reject);
+    if (p && typeof p.then === 'function') p.then(resolve, reject);
+  });
+function predecode(file) {
+  const state = { state: 'pending', buffer: null };
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC || file.size > 80 * 1024 * 1024) {
+    state.state = 'failed';
+    return state;
+  }
+  let ac = null;
+  file
+    .arrayBuffer()
+    .then((buf) => {
+      ac = new AC();
+      return decodeWith(ac, buf);
+    })
+    .then((buffer) => {
+      state.buffer = buffer;
+      state.state = buffer && buffer.duration > 0 ? 'ok' : 'failed';
+    })
+    .catch(() => (state.state = 'failed'))
+    .finally(() => ac?.close?.().catch(() => {}));
+  return state;
+}
+
 export async function readVideoInfo(file) {
   const url = URL.createObjectURL(file);
   const v = document.createElement('video');
@@ -31,7 +62,7 @@ export async function readVideoInfo(file) {
   v.src = url;
   try {
     await once(v, 'loadedmetadata');
-    const info = { duration: v.duration, width: v.videoWidth, height: v.videoHeight, poster: null, url };
+    const info = { duration: v.duration, width: v.videoWidth, height: v.videoHeight, poster: null, url, audio: predecode(file) };
     try {
       // iOS ne décode une image qu'après un début de lecture (muette : autorisée)
       await v.play().catch(() => {});
@@ -61,40 +92,54 @@ function recorderType() {
 }
 
 // Compression (720p, ~1,4 Mbit/s) : la vidéo est rejouée en temps réel dans une toile et
-// réenregistrée. Elle est rejouée en MUET : sa bande-son est décodée à part (Web Audio) et
-// mêlée à l'enregistrement. Ainsi la préparation continue en arrière-plan pendant que l'on
-// regarde d'autres vidéos avec le son (sur iPhone, une seule vidéo sonore peut jouer à la fois).
+// réenregistrée, avec son son. Deux façons de garder le son :
+// - bande-son déjà décodée (cas habituel) : la vidéo est rejouée en MUET et le son est mêlé à
+//   part — on peut regarder d'autres vidéos avec le son pendant la préparation ;
+// - sinon : le son de la vidéo est capté directement (Web Audio), sans sortir des haut-parleurs.
+// À lancer depuis un geste (toucher « Publier ») : nécessaire sur iPhone.
 function compress(file, info, onProgress) {
   const type = recorderType();
   if (!type) return null;
   // Seul un MP4 est lu partout : on ne convertit en WebM que si le fichier est trop lourd
   if (!type.startsWith('video/mp4') && file.size <= MAX_BYTES && fileMime(file) === 'video/mp4') return null;
+  const pre = info.audio?.state === 'ok' ? info.audio.buffer : null;
+  window.__aurumSoundMethod = pre ? 'decodee' : 'captee';
   const url = URL.createObjectURL(file);
   const v = document.createElement('video');
   v.playsInline = true;
   v.setAttribute('playsinline', '');
   v.preload = 'auto';
-  v.muted = true;
+  v.muted = Boolean(pre);
   v.src = url;
   Object.assign(v.style, { position: 'fixed', left: '0', top: '0', width: '2px', height: '2px', opacity: '0', pointerEvents: 'none' });
   document.body.append(v);
-  // Contexte audio créé dans le geste (sinon il reste suspendu sur iPhone)
+  // Contexte audio créé et relancé dans le geste (sinon il reste suspendu sur iPhone)
   let ac = null;
+  let dest = null;
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
     ac = new AC();
+    dest = ac.createMediaStreamDestination();
+    if (!pre) ac.createMediaElementSource(v).connect(dest); // son capté depuis la vidéo
     ac.resume?.().catch(() => {});
   } catch {
     ac = null;
+    dest = null;
+    v.muted = true;
   }
-  const started = v.play();
+  const started = v.play(); // dans le geste de l'utilisateur
   return new Promise((resolve, reject) => {
     let rec = null;
     let raf = 0;
     let source = null;
+    let retry = 0;
+    let finished = false;
     const done = (err, blob) => {
+      if (finished) return;
+      finished = true;
       cancelAnimationFrame(raf);
       clearTimeout(timer);
+      clearTimeout(retry);
       v.pause();
       v.remove();
       URL.revokeObjectURL(url);
@@ -108,22 +153,22 @@ function compress(file, info, onProgress) {
       else resolve(blob);
     };
     const timer = setTimeout(() => done(new Error('Préparation de la vidéo trop longue.')), (info.duration * 4 + 60) * 1000);
+    // Une autre vidéo joue avec le son (méthode « son capté ») : on attend qu'elle s'arrête
+    const otherAudible = () => [...document.querySelectorAll('video, audio')].some((m) => m !== v && !m.paused && !m.muted);
+    const resume = () => {
+      clearTimeout(retry);
+      if (finished || v.ended || document.visibilityState !== 'visible') return;
+      if (!pre && otherAudible()) {
+        retry = setTimeout(resume, 1000);
+        return;
+      }
+      v.play().catch(() => (retry = setTimeout(resume, 1000)));
+    };
     (async () => {
       await started.catch(() => {});
       v.pause();
       v.currentTime = 0;
       await once(v, 'seeked').catch(() => {});
-      // Bande-son décodée à part (une vidéo sans son, ou un format non décodable : vidéo seule)
-      let dest = null;
-      let audioBuf = null;
-      if (ac) {
-        try {
-          audioBuf = await ac.decodeAudioData(await file.arrayBuffer());
-          dest = ac.createMediaStreamDestination();
-        } catch {
-          audioBuf = null;
-        }
-      }
       const scale = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
       const c = document.createElement('canvas');
       c.width = Math.round((v.videoWidth * scale) / 2) * 2;
@@ -132,7 +177,7 @@ function compress(file, info, onProgress) {
       g.drawImage(v, 0, 0, c.width, c.height);
       const stream = c.captureStream(30);
       if (dest) for (const t of dest.stream.getAudioTracks()) stream.addTrack(t);
-      rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 1_400_000, ...(dest ? { audioBitsPerSecond: 96_000 } : {}) });
+      rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 1_400_000, ...(dest ? { audioBitsPerSecond: 128_000 } : {}) });
       const parts = [];
       rec.ondataavailable = (e) => e.data.size && parts.push(e.data);
       rec.onstop = () => done(null, new Blob(parts, { type: type.split(';')[0] }));
@@ -146,27 +191,28 @@ function compress(file, info, onProgress) {
         g.drawImage(v, 0, 0, c.width, c.height);
         setTimeout(() => rec.state !== 'inactive' && rec.stop(), 150);
       }, { once: true });
-      // Application mise en arrière-plan : tout se met en pause (son compris), puis reprend
+      // Interruption (application en arrière-plan, autre vidéo sonore) : tout se met en pause,
+      // son compris, puis reprend au même endroit
       v.addEventListener('pause', () => {
-        if (v.ended) return;
-        ac?.suspend().catch(() => {});
+        if (finished || v.ended) return;
+        if (pre) ac?.suspend().catch(() => {});
         if (rec?.state === 'recording') rec.pause();
-        if (document.visibilityState === 'visible') v.play().catch(() => {});
+        retry = setTimeout(resume, 400);
       });
       v.addEventListener('playing', () => {
         ac?.resume().catch(() => {});
         if (rec?.state === 'paused') rec.resume();
       });
-      const onVisible = () => document.visibilityState === 'visible' && v.paused && !v.ended && v.play().catch(() => {});
+      const onVisible = () => document.visibilityState === 'visible' && v.paused && !v.ended && resume();
       document.addEventListener('visibilitychange', onVisible);
       v.addEventListener('ended', () => document.removeEventListener('visibilitychange', onVisible), { once: true });
       rec.start(1000);
       await v.play();
-      if (audioBuf && dest) {
+      if (pre && ac && dest) {
         source = ac.createBufferSource();
-        source.buffer = audioBuf;
+        source.buffer = pre;
         source.connect(dest);
-        source.start(0, Math.min(v.currentTime, audioBuf.duration));
+        source.start(0, Math.min(v.currentTime, pre.duration));
       }
       draw();
     })().catch((err) => done(err));
@@ -332,6 +378,15 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
   });
   onTaps(el, {
     single: () => {
+      // Vidéo muette qui joue : le premier toucher active le son (comme sur Instagram)
+      if (el.muted && !el.paused) {
+        soundOn = true;
+        soundBlocked = false;
+        el.muted = false;
+        paintSound();
+        el.play().catch(() => {});
+        return;
+      }
       if (el.paused) {
         userPaused = false;
         el.play().catch(() => {});
