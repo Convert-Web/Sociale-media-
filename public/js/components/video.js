@@ -1,5 +1,6 @@
 // Vidéos : préparation sur le téléphone, envoi en morceaux, lecteur du fil.
 import { api, ApiError } from '../api.js';
+import { warmPosts } from '../warm.js';
 import { h, icon, remaining, onTaps } from '../dom.js';
 import { navigate } from '../router.js';
 
@@ -60,7 +61,9 @@ function recorderType() {
 }
 
 // Compression (720p, ~1,4 Mbit/s) : la vidéo est rejouée en temps réel dans une toile et
-// réenregistrée. À lancer depuis un geste (toucher « Publier ») pour que le son soit capté.
+// réenregistrée. Elle est rejouée en MUET : sa bande-son est décodée à part (Web Audio) et
+// mêlée à l'enregistrement. Ainsi la préparation continue en arrière-plan pendant que l'on
+// regarde d'autres vidéos avec le son (sur iPhone, une seule vidéo sonore peut jouer à la fois).
 function compress(file, info, onProgress) {
   const type = recorderType();
   if (!type) return null;
@@ -71,42 +74,56 @@ function compress(file, info, onProgress) {
   v.playsInline = true;
   v.setAttribute('playsinline', '');
   v.preload = 'auto';
+  v.muted = true;
   v.src = url;
   Object.assign(v.style, { position: 'fixed', left: '0', top: '0', width: '2px', height: '2px', opacity: '0', pointerEvents: 'none' });
   document.body.append(v);
-  // Son : capté par Web Audio, sans sortir des haut-parleurs
-  let audio = null;
+  // Contexte audio créé dans le geste (sinon il reste suspendu sur iPhone)
+  let ac = null;
   try {
     const AC = window.AudioContext || window.webkitAudioContext;
-    const ac = new AC();
-    const node = ac.createMediaElementSource(v);
-    const dest = ac.createMediaStreamDestination();
-    node.connect(dest);
-    ac.resume?.();
-    audio = { ac, dest };
+    ac = new AC();
+    ac.resume?.().catch(() => {});
   } catch {
-    v.muted = true;
+    ac = null;
   }
-  const started = v.play(); // dans le geste de l'utilisateur
+  const started = v.play();
   return new Promise((resolve, reject) => {
     let rec = null;
     let raf = 0;
+    let source = null;
     const done = (err, blob) => {
       cancelAnimationFrame(raf);
       clearTimeout(timer);
       v.pause();
       v.remove();
       URL.revokeObjectURL(url);
-      audio?.ac.close().catch(() => {});
+      try {
+        source?.stop();
+      } catch {
+        /* déjà arrêtée */
+      }
+      ac?.close().catch(() => {});
       if (err) reject(err);
       else resolve(blob);
     };
-    const timer = setTimeout(() => done(new Error('Préparation de la vidéo trop longue.')), (info.duration * 3 + 30) * 1000);
+    const timer = setTimeout(() => done(new Error('Préparation de la vidéo trop longue.')), (info.duration * 4 + 60) * 1000);
     (async () => {
       await started.catch(() => {});
       v.pause();
       v.currentTime = 0;
       await once(v, 'seeked').catch(() => {});
+      // Bande-son décodée à part (une vidéo sans son, ou un format non décodable : vidéo seule)
+      let dest = null;
+      let audioBuf = null;
+      if (ac) {
+        try {
+          audioBuf = await ac.decodeAudioData(await file.arrayBuffer());
+          dest = ac.createMediaStreamDestination();
+        } catch {
+          audioBuf = null;
+        }
+      }
       const scale = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
       const c = document.createElement('canvas');
       c.width = Math.round((v.videoWidth * scale) / 2) * 2;
@@ -114,8 +131,8 @@ function compress(file, info, onProgress) {
       const g = c.getContext('2d');
       g.drawImage(v, 0, 0, c.width, c.height);
       const stream = c.captureStream(30);
-      if (audio) for (const t of audio.dest.stream.getAudioTracks()) stream.addTrack(t);
-      rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 1_400_000, audioBitsPerSecond: 96_000 });
+      if (dest) for (const t of dest.stream.getAudioTracks()) stream.addTrack(t);
+      rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 1_400_000, ...(dest ? { audioBitsPerSecond: 96_000 } : {}) });
       const parts = [];
       rec.ondataavailable = (e) => e.data.size && parts.push(e.data);
       rec.onstop = () => done(null, new Blob(parts, { type: type.split(';')[0] }));
@@ -129,10 +146,28 @@ function compress(file, info, onProgress) {
         g.drawImage(v, 0, 0, c.width, c.height);
         setTimeout(() => rec.state !== 'inactive' && rec.stop(), 150);
       }, { once: true });
-      // Application mise en arrière-plan : la lecture reprend au retour
-      v.addEventListener('pause', () => !v.ended && document.visibilityState === 'visible' && v.play().catch(() => {}));
+      // Application mise en arrière-plan : tout se met en pause (son compris), puis reprend
+      v.addEventListener('pause', () => {
+        if (v.ended) return;
+        ac?.suspend().catch(() => {});
+        if (rec?.state === 'recording') rec.pause();
+        if (document.visibilityState === 'visible') v.play().catch(() => {});
+      });
+      v.addEventListener('playing', () => {
+        ac?.resume().catch(() => {});
+        if (rec?.state === 'paused') rec.resume();
+      });
+      const onVisible = () => document.visibilityState === 'visible' && v.paused && !v.ended && v.play().catch(() => {});
+      document.addEventListener('visibilitychange', onVisible);
+      v.addEventListener('ended', () => document.removeEventListener('visibilitychange', onVisible), { once: true });
       rec.start(1000);
       await v.play();
+      if (audioBuf && dest) {
+        source = ac.createBufferSource();
+        source.buffer = audioBuf;
+        source.connect(dest);
+        source.start(0, Math.min(v.currentTime, audioBuf.duration));
+      }
       draw();
     })().catch((err) => done(err));
   });
@@ -331,15 +366,8 @@ export function prefetchReels() {
     .get('/api/videos/feed')
     .then((d) => {
       reelsCache = { posts: d.posts, hasMore: d.hasMore, at: Date.now() };
-      // La première vidéo n'est préparée que pour ceux qui utilisent déjà le coin Vidéos
-      let habit = false;
-      try {
-        habit = localStorage.getItem('aurum:reels-used') === '1';
-      } catch {
-        /* stockage indisponible */
-      }
-      const first = d.posts.find((p) => p.video);
-      if (first && habit) preloadVideo(first.video);
+      // Dès l'entrée dans l'application : les premières vidéos en entier, une à une
+      warmPosts(d.posts, { videos: 6 });
       return reelsCache;
     })
     .catch(() => null)
@@ -386,7 +414,7 @@ export function openReels({ postId = null, url = null, video = null } = {}) {
 // en mémoire. Rien n'est téléchargé d'avance si le téléphone économise ses données.
 // ---------------------------------------------------------------------------
 const CHUNK = 1024 * 1024;
-const MAX_KEPT = 5;
+const MAX_KEPT = 8; // vidéos gardées prêtes en mémoire (préchargement au démarrage compris)
 const blobs = new Map(); // adresse de la vidéo → { promise, url, at }
 const saveData = () => Boolean(navigator.connection?.saveData);
 

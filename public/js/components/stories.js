@@ -1,7 +1,9 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { h, icon, avatar, timeAgo, toast, modal, spinner, clear, nameLine, shrinkImage, confirmDialog } from '../dom.js';
-import { isVideoFile, readVideoInfo, uploadVideo, noSave, sound, clockLabel, MAX_SECONDS, preloadVideo, localVideo } from './video.js';
+import { isVideoFile, readVideoInfo, noSave, sound, clockLabel, MAX_SECONDS, preloadVideo, localVideo } from './video.js';
+import { sendInBackground } from './uploads.js';
+import { warmImages, warmVideos } from '../warm.js';
 
 const DURATION = 5000; // durée d'affichage d'une story
 
@@ -76,11 +78,9 @@ export function storiesBar() {
     } catch {
       groups = [];
     }
-    // Première story vidéo des membres non encore vus : prête avant le toucher
-    for (const g of groups.filter((x) => !x.allViewed).slice(0, 2)) {
-      const first = g.stories.find((x) => !x.viewed) || g.stories[0];
-      if (first?.video) preloadVideo(first.video);
-    }
+    // Toutes les photos des stories d'avance ; les vidéos des membres non encore vus aussi
+    warmImages(groups.flatMap((g) => [g.user.avatar, ...g.stories.map((x) => (x.video ? x.video.poster : x.media))]));
+    warmVideos(groups.filter((x) => !x.allViewed).flatMap((g) => g.stories.filter((x) => x.video && !x.viewed).map((x) => x.video)), 4);
     paint();
   }
 
@@ -147,39 +147,31 @@ async function createVideoStory(file, onDone) {
   const posterUrl = info.poster ? URL.createObjectURL(info.poster) : null;
   const caption = h('input', { class: 'input', maxlength: 200, placeholder: 'Ajouter une légende (facultatif)' });
   const publish = h('button', { class: 'btn btn-primary btn-block', type: 'submit' }, 'Publier la story');
-  const progress = h('div', { class: 'upload-progress', hidden: true }, h('i'), h('span'));
-  const step = (label, ratio) => {
-    progress.hidden = false;
-    progress.lastChild.textContent = label;
-    progress.firstChild.style.transform = `scaleX(${Math.max(0.02, ratio)})`;
-  };
   const m = modal(
     'Nouvelle story',
     h(
       'form',
       {
         class: 'modal-body story-create',
-        onsubmit: async (e) => {
+        onsubmit: (e) => {
           e.preventDefault();
-          publish.disabled = true;
-          publish.textContent = 'Publication…';
-          // Lancée dans le geste : le son de la vidéo est conservé
-          const job = uploadVideo(file, info, (kind, p) => step(kind === 'prepare' ? `Préparation ${Math.round(p * 100)} % · gardez l’app ouverte` : `Envoi ${Math.round(p * 100)} %`, p));
-          try {
-            const video = await job;
-            const fd = new FormData();
-            fd.append('video', video.id);
-            fd.append('caption', caption.value);
-            await api.post('/api/stories', fd);
-            m.close();
-            toast('Story publiée pour 24 heures.');
-            onDone?.();
-          } catch (err) {
-            publish.disabled = false;
-            publish.textContent = 'Publier la story';
-            progress.hidden = true;
-            toast(err.message, 'error');
-          }
+          // Préparation et envoi en arrière-plan (lancés dans le geste) : on continue de naviguer
+          const text = caption.value;
+          sendInBackground({
+            file,
+            info,
+            title: 'Votre story',
+            finish: async (video) => {
+              const fd = new FormData();
+              fd.append('video', video.id);
+              fd.append('caption', text);
+              await api.post('/api/stories', fd);
+              onDone?.();
+              return { href: '/salon', message: 'Votre story est en ligne pour 24 heures.' };
+            },
+          });
+          m.close();
+          toast('Story en préparation : continuez à naviguer.');
         },
       },
       h(
@@ -189,7 +181,6 @@ async function createVideoStory(file, onDone) {
         h('span', { class: 'preview-duration' }, icon('play', 'icon-xs'), clockLabel(info.duration)),
       ),
       caption,
-      progress,
       publish,
       h('p', { class: 'muted small', style: { textAlign: 'center' } }, 'Visible par les membres pendant 24 heures, puis effacée.'),
     ),

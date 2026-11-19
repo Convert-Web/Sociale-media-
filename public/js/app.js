@@ -103,7 +103,15 @@ store.on('counters', paintTitle);
 // ---------------------------------------------------------------------------
 // Bouton « + » : trois choix clairs, en grand
 function openComposer(kind) {
-  const c = composer({ onPosted: () => (closeModal(), document.dispatchEvent(new CustomEvent('aurum:posted'))) });
+  // La fenêtre ne se ferme que si elle est encore ouverte (une vidéo publiée plus tard,
+  // en arrière-plan, ne doit pas fermer une autre fenêtre ouverte entre-temps)
+  const c = composer({
+    onPosted: () => {
+      if (c.isConnected) closeModal();
+      document.dispatchEvent(new CustomEvent('aurum:posted'));
+    },
+    onQueued: () => c.isConnected && closeModal(),
+  });
   modal(kind === 'video' ? 'Nouvelle vidéo' : 'Nouvelle publication', c);
   if (kind === 'video') c.pickVideo();
   else if (kind === 'photos') c.pickPhotos();

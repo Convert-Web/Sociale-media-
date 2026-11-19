@@ -146,11 +146,6 @@ export async function videosView(ctx) {
   document.documentElement.classList.add('reels-mode');
 
   const player = reelsPlayer();
-  try {
-    localStorage.setItem('aurum:reels-used', '1'); // la prochaine fois, la première vidéo sera prête d'avance
-  } catch {
-    /* stockage indisponible */
-  }
   const track = h('div', { class: 'reels-track' });
   const soundBtn = h('button', { type: 'button', 'aria-label': 'Son' });
   const hint = h('button', { class: 'reels-hint', type: 'button', hidden: true }, icon('sound', 'icon-sm'), 'Activer le son');

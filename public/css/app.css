@@ -2223,3 +2223,25 @@ html.reels-mode, html.reels-mode body { background: #000; }
 .reel .reel-author .avatar.founder::before { display: none; }
 .reel .reel-author .avatar > img, .reel .reel-author .avatar > .avatar-initials { box-shadow: none; }
 .reel .reel-author .avatar { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95); border-radius: 50%; }
+/* Vidéo envoyée en arrière-plan : pastille en haut de l'écran (comme sur iPhone) */
+.upload-dock { position: fixed; z-index: 97; top: calc(env(safe-area-inset-top, 0px) + 8px); left: 50%; transform: translateX(-50%); display: grid; gap: 6px; width: min(300px, calc(100% - 24px)); pointer-events: none; }
+.upload-dock[hidden] { display: none; }
+.upload-pill { pointer-events: auto; position: relative; overflow: hidden; display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 12px 6px 6px; border-radius: 999px; text-align: left;
+  background: var(--glass-strong); -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px); box-shadow: var(--shadow-pop), 0 0 0 1px var(--line); color: var(--text); animation: dropIn 0.35s var(--ease); }
+.upload-pill img, .upload-ph { flex: none; width: 34px; height: 34px; border-radius: 50%; object-fit: cover; display: grid; place-items: center; background: var(--fill); color: var(--text-2); }
+.upload-text { flex: 1; min-width: 0; display: grid; line-height: 1.2; }
+.upload-text b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upload-text small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.upload-pill.done small { color: var(--ok); font-weight: 600; }
+.upload-pill.error small { color: var(--danger); font-weight: 600; }
+.upload-ring { flex: none; width: 22px; height: 22px; border-radius: 50%; background: conic-gradient(var(--accent) calc(var(--p, 0) * 360deg), var(--fill-strong) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px)); mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px)); }
+.upload-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--accent); transform-origin: left center; transition: transform 0.3s linear; }
+.upload-pill.done .upload-bar { background: var(--ok); }
+.upload-pill .icon { color: var(--muted); }
+/* La pastille d'envoi ne passe jamais sous les messages (affichés en haut) : en bas, au-dessus de
+   la barre d'onglets ; dans le coin Vidéos, sous les boutons du haut ; sur ordinateur, en haut */
+.upload-dock { top: auto; bottom: calc(var(--tabbar-h, 50px) + env(safe-area-inset-bottom, 0px) + 12px); }
+html.reels-mode .upload-dock { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 74px); }
+@media (min-width: 768px) { .upload-dock { bottom: auto; top: 16px; } }
+.upload-end { flex: none; display: grid; place-items: center; width: 24px; height: 24px; }

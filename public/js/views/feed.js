@@ -8,6 +8,7 @@ import { nextEventCard } from './events.js';
 import { journalStrip } from './journal.js';
 import { stepSheet } from './welcome.js';
 import { coach } from '../components/tips.js';
+import { warmPosts } from '../warm.js';
 
 // Avant-premières : annonces de la Direction réservées aux Fondateurs, en tête du Salon
 function previewsSection(ctx) {
@@ -150,6 +151,8 @@ export function postList(fetchPage, { empty, insertAfter = null } = {}) {
     loading = true;
     try {
       const { posts, hasMore } = await fetchPage(before);
+      // Photos de la page (et de la suivante, au fil du défilement) téléchargées d'avance
+      warmPosts(posts);
       for (const p of posts) {
         list.append(postCard(p));
         // Un bloc glissé dans le fil (le Journal), comme les suggestions d'Instagram

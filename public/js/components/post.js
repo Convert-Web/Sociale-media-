@@ -9,7 +9,8 @@ import { reportDialog } from './report.js';
 import { attachMentions } from './mentions.js';
 import { translateLink } from './translate.js';
 import { sensitive, flaggedNotice } from './sensitive.js';
-import { readVideoInfo, uploadVideo, videoPlayer, isVideoFile, clockLabel, MAX_SECONDS, openReels } from './video.js';
+import { readVideoInfo, videoPlayer, isVideoFile, clockLabel, MAX_SECONDS, openReels } from './video.js';
+import { sendInBackground } from './uploads.js';
 
 const MAX_POST = 2000;
 const MAX_PHOTOS = 6;
@@ -577,7 +578,7 @@ export function commentsSection(post, onCount, { placement = 'above' } = {}) {
 // ---------------------------------------------------------------------------
 // Éditeur de publication (texte + jusqu'à 6 photos)
 // ---------------------------------------------------------------------------
-export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}) {
+export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/posts' } = {}) {
   let files = [];
   const ta = h('textarea', {
     placeholder: placeholder || 'Que souhaitez-vous partager ?',
@@ -716,15 +717,37 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
         e.preventDefault();
         if (submit.disabled) return;
         if (early && video) return toast('Les avant-premières acceptent du texte et des photos, pas encore de vidéo.', 'error');
+        // Vidéo : préparation et envoi en arrière-plan (lancés dans le geste, pour garder le son).
+        // La fenêtre se ferme tout de suite : on continue de naviguer, une pastille suit l'envoi.
+        if (video && !early) {
+          const body = ta.value;
+          const v = video;
+          sendInBackground({
+            file: v.file,
+            info: v.info,
+            title: body.trim() ? body.trim().slice(0, 40) : 'Votre vidéo',
+            finish: async ({ id }) => {
+              const fd = new FormData();
+              fd.append('body', body);
+              fd.append('video', id);
+              const { post } = await api.post(endpoint, fd);
+              if (post.flagged) flaggedNotice(post);
+              store.emit('post:created', post);
+              onPosted?.(post);
+              return { href: `/p/${post.id}`, message: post.groupId ? 'Votre vidéo est en ligne dans le groupe.' : 'Votre vidéo est en ligne.' };
+            },
+          });
+          ta.value = '';
+          if (v.posterUrl) URL.revokeObjectURL(v.posterUrl);
+          video = null; // l'envoi garde ses propres références (fichier, aperçu)
+          paintPreviews();
+          fit();
+          toast('Vidéo en préparation : continuez à naviguer.');
+          onQueued?.();
+          return;
+        }
         submit.disabled = true;
         submit.textContent = 'Publication…';
-        // Vidéo : préparation lancée tout de suite, dans le geste (nécessaire pour garder le son)
-        const videoJob = video
-          ? uploadVideo(video.file, video.info, (step, p) =>
-              showProgress(step === 'prepare' ? `Préparation ${Math.round(p * 100)} % · gardez l’app ouverte` : `Envoi ${Math.round(p * 100)} %`, p),
-            )
-          : null;
-        videoJob?.catch(() => {});
         try {
           const fd = new FormData();
           fd.append('body', ta.value);
@@ -749,7 +772,6 @@ export function composer({ onPosted, placeholder, endpoint = '/api/posts' } = {}
             onPosted?.(null);
             return;
           }
-          if (videoJob) fd.append('video', (await videoJob).id);
           const { post } = await api.post(endpoint, fd);
           ta.value = '';
           files.forEach((f) => URL.revokeObjectURL(f.url));
