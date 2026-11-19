@@ -106,6 +106,7 @@ function followStep(next) {
   const all = h('button', { class: 'btn btn-secondary btn-sm', type: 'button', hidden: true }, 'Tout suivre');
   const cont = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'button', onclick: next }, 'Continuer');
   let users = [];
+  const head = h('div', { class: 'step-list-head' }, h('b', null, 'Suggestions'), all);
   const paintCount = () => {
     const n = users.filter((u) => u.isFollowing).length;
     cont.textContent = n ? `Continuer · ${n} suivi${n > 1 ? 's' : ''}` : 'Continuer';
@@ -129,18 +130,32 @@ function followStep(next) {
     .get('/api/suggestions?limit=8')
     .then((d) => {
       users = d.users.filter((u) => !u.isMe);
-      if (!users.length) return next(); // personne à proposer : étape suivante
+      if (!users.length) return nobody();
       list.replaceChildren(...users.map((u) => userRow(u)));
       paintCount();
     })
-    .catch(() => next());
+    .catch(() => nobody());
+  // Personne à proposer (cercle encore petit, ou tout le monde déjà suivi) : on l'explique,
+  // et on propose d'inviter un proche — rien ne se ferme tout seul
+  function nobody() {
+    head.hidden = true;
+    list.replaceChildren(
+      h(
+        'div',
+        { class: 'step-empty' },
+        h('b', null, 'Personne à suivre pour l’instant'),
+        h('span', null, 'Vous êtes parmi les premiers, ou vous suivez déjà tout le monde. Le cercle s’agrandit : faites entrer un proche.'),
+        h('a', { href: '/invitations', class: 'btn btn-secondary', onclick: () => next() }, icon('ticket', 'icon-sm'), 'Inviter un proche'),
+      ),
+    );
+  }
   const el = h(
     'div',
     { class: 'step' },
     h('span', { class: 'step-badge' }, icon('users')),
     h('h2', null, 'Suivez quelques membres'),
     h('p', null, 'Leurs publications apparaîtront dans votre Salon, dans l’ordre où ils publient.'),
-    h('div', { class: 'step-list-head' }, h('b', null, 'Suggestions'), all),
+    head,
     list,
     cont,
   );

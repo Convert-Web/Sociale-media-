@@ -99,6 +99,17 @@ test('Bien démarrer : la progression compte aussi les invitations', async () =>
   assert.equal(p.invites, 0);
 });
 
+test('Bien démarrer : « Suivre » s’adapte au nombre de membres (cercle encore petit)', async () => {
+  // Trois membres : chacun peut en suivre deux autres, pas trois
+  assert.equal((await hugo.get('/api/me/progress')).data.members, 2);
+  // Un membre bloqué ne compte plus parmi ceux que l'on peut suivre
+  assert.equal((await hugo.post('/api/users/victoire/block')).status, 200);
+  assert.equal((await hugo.get('/api/me/progress')).data.members, 1);
+  assert.equal((await admin.get('/api/me/progress')).data.members, 1);
+  await hugo.del('/api/users/victoire/block');
+  assert.equal((await hugo.get('/api/me/progress')).data.members, 2);
+});
+
 test('erreurs des visiteurs : enregistrées sans identité, lues par la Direction seule', async () => {
   const visiteur = client();
   assert.equal((await visiteur.post('/api/client-errors', { message: 'TypeError: x is undefined', stack: 'at render (app.js:1:2)', path: '/salon', version: 'abc' })).status, 204);

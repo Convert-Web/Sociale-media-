@@ -166,8 +166,10 @@ module.exports = function userRoutes(ctx) {
     const row = await db.get(
       `SELECT (SELECT COUNT(*) FROM follows WHERE follower_id = ?) AS following,
               (SELECT COUNT(*) FROM posts WHERE user_id = ? AND groupe_id IS NULL) AS posts,
-              (SELECT COUNT(*) FROM invitations WHERE inviter_id = ?) AS invites`,
-      me, me, me,
+              (SELECT COUNT(*) FROM invitations WHERE inviter_id = ?) AS invites,
+              (SELECT COUNT(*) FROM users u WHERE u.paid_at IS NOT NULL AND u.is_bot = 0 AND u.id != ?
+                 AND u.id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)) AS members`,
+      me, me, me, me, me, me,
     );
     res.json({
       avatar: Boolean(req.user.avatar),
@@ -175,6 +177,8 @@ module.exports = function userRoutes(ctx) {
       following: row.following,
       posts: row.posts,
       invites: row.invites,
+      // Autres membres que l'on peut suivre (l'étape « Suivre » s'adapte quand le cercle est petit)
+      members: row.members,
     });
   });
 

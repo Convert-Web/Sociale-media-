@@ -2201,3 +2201,8 @@ html.reels-mode, html.reels-mode body { background: #000; }
 .error-list li { display: grid; gap: 3px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); }
 .error-list b { font-size: 14px; font-family: ui-monospace, Menlo, monospace; font-weight: 500; overflow-wrap: anywhere; }
 .error-list small { color: var(--muted); font-size: 12.5px; }
+/* Étape « Suivre » sans personne à proposer */
+.step-empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 18px 12px 6px; }
+.step-empty b { font-size: 17px; }
+.step-empty span { color: var(--muted); font-size: 14.5px; line-height: 1.45; max-width: 34ch; margin-bottom: 6px; }
+.step-list-head[hidden] { display: none; }

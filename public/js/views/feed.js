@@ -79,13 +79,17 @@ function onboardingCard() {
     api
       .get('/api/me/progress')
       .then((p) => {
+        // Suivre : 3 membres, ou moins si le cercle est encore petit ; étape masquée s'il n'y a personne
+        const target = Math.min(3, p.members ?? 3);
         const steps = [
           { done: p.avatar, label: 'Ajouter une photo de profil', action: 'Ajouter', run: () => stepSheet('photo', load) },
-          { done: p.following >= 3, label: `Suivre 3 membres${p.following ? ` (${Math.min(p.following, 3)}/3)` : ''}`, action: 'Choisir', run: () => stepSheet('follow', load) },
+          target > 0
+            ? { done: p.following >= target, label: `Suivre ${target} membre${target > 1 ? 's' : ''}${p.following ? ` (${Math.min(p.following, target)}/${target})` : ''}`, action: 'Choisir', run: () => stepSheet('follow', load) }
+            : null,
           { done: p.posts > 0, label: 'Publier pour la première fois', action: 'Publier', run: () => document.dispatchEvent(new CustomEvent('aurum:create')) },
           { done: p.bio, label: 'Vous présenter en une phrase', action: 'Écrire', run: () => navigate('/reglages') },
           { done: p.invites > 0, label: 'Inviter un proche', action: 'Inviter', run: () => navigate('/invitations') },
-        ];
+        ].filter(Boolean);
         const count = steps.filter((x) => x.done).length;
         if (count === steps.length) {
           // Bravo, puis la carte disparaît
