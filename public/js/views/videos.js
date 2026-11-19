@@ -7,6 +7,7 @@ import { h, icon, avatar, richText, num, toast, emptyState, spinner, onTaps, hea
 import { sound, reelsPlayer, cachedReels, rememberReels, preloadVideo, localVideo, sameVideo } from '../components/video.js';
 import { commentsSection } from '../components/post.js';
 import { openSheet, closeSheet } from '../components/sheet.js';
+import { toggleSaved } from '../saved.js';
 
 // Une vidéo plein écran : J'aime, commentaires (feuille par-dessus la vidéo), partage,
 // auteur avec « Suivre », description dépliable.
@@ -63,6 +64,19 @@ function slide(post) {
 
   const shareBtn = h('button', { class: 'reel-act', type: 'button', 'aria-label': 'Partager', onclick: (e) => (e.stopPropagation(), shareLink(`${post.author.displayName} sur AURUM`, `/p/${post.id}`)) }, icon('send'), h('small', null, 'Partager'));
 
+  // Enregistrer : la vidéo est gardée en entier sur le téléphone, dans « Enregistrés », même après 24 h
+  const saveLabel = h('small', null, post.saved ? 'Gardée' : 'Garder');
+  const saveBtn = h('button', { class: `reel-act${post.saved ? ' saved' : ''}`, type: 'button', 'aria-label': 'Enregistrer sur le téléphone', 'aria-pressed': String(post.saved) }, icon('bookmark'), saveLabel);
+  const paintSave = (on) => {
+    saveBtn.classList.toggle('saved', on);
+    saveBtn.setAttribute('aria-pressed', String(on));
+    saveLabel.textContent = on ? 'Gardée' : 'Garder';
+  };
+  saveBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleSaved(post, { onChange: paintSave });
+  });
+
   // Auteur : « Suivre » d'un toucher, sans quitter la vidéo
   let followBtn = null;
   if (!post.mine && !post.followsAuthor && !post.author.bot) {
@@ -101,7 +115,7 @@ function slide(post) {
     h('div', { class: 'reel-holder' }),
     h('div', { class: 'reel-shade' }),
     h('span', { class: 'reel-play', hidden: true }, icon('playBadge')),
-    h('div', { class: 'reel-side' }, likeBtn, commentBtn, shareBtn),
+    h('div', { class: 'reel-side' }, likeBtn, commentBtn, saveBtn, shareBtn),
     h(
       'div',
       { class: 'reel-info' },

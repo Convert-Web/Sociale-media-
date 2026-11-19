@@ -2245,3 +2245,25 @@ html.reels-mode, html.reels-mode body { background: #000; }
 html.reels-mode .upload-dock { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 74px); }
 @media (min-width: 768px) { .upload-dock { bottom: auto; top: 16px; } }
 .upload-end { flex: none; display: grid; place-items: center; width: 24px; height: 24px; }
+/* Vidéos : « Garder » (enregistrée sur le téléphone) */
+.reel-act.saved .icon { color: #ffd60a; }
+.reel-act.saved .icon svg { fill: currentColor; }
+.reel .reel-side { gap: 20px; }
+/* Enregistrés : vidéos gardées sur le téléphone */
+.saved-videos { margin: 4px 0 6px; }
+.saved-videos .section-title { margin-bottom: 2px; }
+.saved-note { margin: 0 var(--gutter-r) 10px var(--gutter); color: var(--muted); font-size: 13.5px; }
+.saved-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; margin: 0 var(--gutter-r) 0 var(--gutter); border-radius: 14px; overflow: hidden; }
+.saved-tile { position: relative; aspect-ratio: 9 / 16; background: #111; overflow: hidden; }
+.saved-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.saved-tile-who { position: absolute; left: 8px; bottom: 8px; color: #fff; font-size: 12.5px; font-weight: 600; text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6); }
+.saved-tile-dur { position: absolute; right: 6px; top: 6px; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px; background: rgba(0, 0, 0, 0.5); color: #fff; font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.saved-player { position: fixed; inset: 0; z-index: 94; background: #000; color: #fff; animation: fadeIn 0.2s ease; }
+.saved-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.saved-close { position: absolute; z-index: 2; right: 10px; top: calc(env(safe-area-inset-top, 0px) + 8px); width: 44px; height: 44px; display: grid; place-items: center; color: #fff; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
+.saved-info { position: absolute; z-index: 2; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); display: grid; gap: 6px; justify-items: start; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+.saved-info b { font-size: 16px; }
+.saved-info p { margin: 0; font-size: 14.5px; color: rgba(255, 255, 255, 0.92); }
+.saved-info small { color: rgba(255, 255, 255, 0.7); font-size: 12.5px; }
+.saved-remove { margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); color: #fff; font-size: 13.5px; font-weight: 600; text-shadow: none; }
+.video-note { margin: 6px 2px 0; color: var(--muted); font-size: 12.5px; line-height: 1.4; }

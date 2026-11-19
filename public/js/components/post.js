@@ -11,6 +11,7 @@ import { translateLink } from './translate.js';
 import { sensitive, flaggedNotice } from './sensitive.js';
 import { readVideoInfo, videoPlayer, isVideoFile, clockLabel, MAX_SECONDS, openReels } from './video.js';
 import { sendInBackground } from './uploads.js';
+import { toggleSaved } from '../saved.js';
 
 const MAX_POST = 2000;
 const MAX_PHOTOS = 6;
@@ -304,22 +305,15 @@ export function postCard(post, { expanded = false } = {}) {
   });
 
   const saveBtn = h('button', { class: `act save-btn${post.saved ? ' saved' : ''}`, 'aria-label': 'Enregistrer', 'aria-pressed': String(post.saved) }, icon('bookmark'));
-  saveBtn.addEventListener('click', async () => {
-    const was = post.saved;
-    post.saved = !was;
-    saveBtn.classList.toggle('saved', post.saved);
-    saveBtn.setAttribute('aria-pressed', String(post.saved));
-    try {
-      if (was) await api.del(`/api/posts/${post.id}/save`);
-      else await api.post(`/api/posts/${post.id}/save`);
-      toast(was ? 'Retiré de vos enregistrements.' : 'Enregistré.');
-      store.emit('saved:changed', { id: post.id, saved: post.saved });
-    } catch (err) {
-      post.saved = was;
-      saveBtn.classList.toggle('saved', was);
-      toast(err.message, 'error');
-    }
-  });
+  // Enregistrer : une vidéo est aussi gardée en entier sur le téléphone (au-delà de 24 h)
+  saveBtn.addEventListener('click', () =>
+    toggleSaved(post, {
+      onChange: (on) => {
+        saveBtn.classList.toggle('saved', on);
+        saveBtn.setAttribute('aria-pressed', String(on));
+      },
+    }),
+  );
 
   // Avec photos : légende sous les boutons, précédée du nom (façon Instagram) ; sans photo : texte en grand
   const hasMedia = post.images.length > 0 || Boolean(post.video);
@@ -641,6 +635,7 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
           h('span', { class: 'preview-ephemeral' }, icon('clock', 'icon-xs'), `Éphémère · effacée après ${store.config?.videoTtlHours || 24} h`),
           h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Retirer la vidéo', onclick: () => clearVideo() }, icon('x')),
         ),
+        h('p', { class: 'video-note' }, `Visible ${store.config?.videoTtlHours || 24} h dans le cercle. Les membres peuvent la garder sur leur téléphone.`),
       );
       previewHost.dataset.count = '1';
       update();

@@ -11,9 +11,10 @@ const SECTIONS = [
     icon: 'sparkles',
     items: [
       ['Comment publier ?', 'Touchez le bouton + en bas de l’écran, puis « Publication ». Écrivez quelques mots, ajoutez jusqu’à 6 photos si vous le souhaitez, et touchez « Publier ».'],
-      ['Comment publier une vidéo ?', 'Bouton + puis « Vidéo ». Choisissez une vidéo d’une minute au plus : AURUM la prépare et l’envoie. Elle reste visible 24 heures, puis disparaît définitivement.'],
+      ['Comment publier une vidéo ?', 'Bouton + puis « Vidéo ». Choisissez une vidéo d’une minute au plus et touchez « Publier » : elle se prépare et s’envoie en arrière-plan, vous pouvez continuer à naviguer. Elle reste visible 24 heures dans le cercle.'],
       ['Qu’est-ce qu’une story ?', 'Une photo ou une vidéo visible 24 heures en haut du Salon. Bouton + puis « Story », ou touchez votre photo avec le + en haut du Salon.'],
-      ['Pourquoi mes vidéos disparaissent-elles ?', 'Les vidéos et les stories sont éphémères : effacées pour de bon après 24 heures. Ce qui se partage au cercle reste au cercle.'],
+      ['Pourquoi mes vidéos disparaissent-elles ?', 'Les vidéos et les stories sont éphémères : elles sont effacées du cercle et de nos serveurs après 24 heures. Un membre qui a enregistré une vidéo en garde une copie dans l’application, sur son téléphone.'],
+      ['Comment garder une vidéo ?', 'Touchez « Garder » (le signet) sur la vidéo : elle est copiée sur votre téléphone et reste dans Enregistrés, même après 24 heures. Elle ne quitte pas l’application et vous seul la voyez.'],
       ['Comment fonctionne le Salon ?', 'Le Salon montre les publications du cercle dans l’ordre où elles sont publiées. Aucun algorithme, aucune publicité. « Mes abonnements » n’affiche que les membres que vous suivez.'],
     ],
   },

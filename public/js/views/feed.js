@@ -9,6 +9,8 @@ import { journalStrip } from './journal.js';
 import { stepSheet } from './welcome.js';
 import { coach } from '../components/tips.js';
 import { warmPosts } from '../warm.js';
+import { savedVideos, removeSavedVideo } from '../saved.js';
+import { clockLabel } from '../components/video.js';
 
 // Avant-premières : annonces de la Direction réservées aux Fondateurs, en tête du Salon
 function previewsSection(ctx) {
@@ -397,10 +399,99 @@ export function backHead(title, sub, extra) {
 
 // Publications enregistrées
 export function savedView(ctx) {
-  const list = postList((before) => api.get(`/api/saved${before ? `?before=${before}` : ''}`), {
-    empty: () => emptyState('bookmark', 'Rien d’enregistré', 'Touchez le signet sous une publication pour la retrouver ici.'),
-  });
-  ctx.onCleanup(list.start());
+  // Vidéos gardées sur ce téléphone (copies complètes, toujours visibles après 24 h)
+  const urls = [];
+  ctx.onCleanup(() => urls.forEach((u) => URL.revokeObjectURL(u)));
+  const videosHost = h('div');
+  let localIds = new Set();
+  const paintVideos = async () => {
+    const items = await savedVideos();
+    localIds = new Set(items.map((x) => x.postId));
+    if (!items.length) return videosHost.replaceChildren();
+    videosHost.replaceChildren(
+      h(
+        'section',
+        { class: 'saved-videos' },
+        h('div', { class: 'section-title' }, `Vidéos gardées sur ce téléphone · ${items.length}`),
+        h('p', { class: 'saved-note' }, 'Visibles par vous seul, même après leur effacement du cercle.'),
+        h(
+          'div',
+          { class: 'saved-grid' },
+          items.map((it) => {
+            const poster = it.poster ? URL.createObjectURL(it.poster) : null;
+            if (poster) urls.push(poster);
+            return h(
+              'button',
+              { type: 'button', class: 'saved-tile', 'aria-label': `Vidéo de ${it.meta.author.displayName}`, onclick: () => playSaved(it, paintVideos) },
+              poster ? h('img', { src: poster, alt: '' }) : h('span', { class: 'preview-video-ph' }, icon('video')),
+              h('span', { class: 'saved-tile-who' }, it.meta.author.displayName.split(/\s+/)[0]),
+              it.meta.duration ? h('span', { class: 'saved-tile-dur' }, icon('play', 'icon-xs'), clockLabel(it.meta.duration)) : null,
+            );
+          }),
+        ),
+      ),
+    );
+  };
+  const list = postList(
+    async (before) => {
+      const d = await api.get(`/api/saved${before ? `?before=${before}` : ''}`);
+      // Les vidéos déjà gardées sur le téléphone sont affichées plus haut
+      return { ...d, posts: d.posts.filter((p) => !(p.video && localIds.has(p.id))) };
+    },
+    {
+      empty: () =>
+        localIds.size
+          ? h('div')
+          : emptyState('bookmark', 'Rien d’enregistré', 'Touchez le signet sous une publication pour la retrouver ici. Une vidéo enregistrée est gardée sur votre téléphone, même après 24 h.'),
+    },
+  );
+  paintVideos().then(() => ctx.onCleanup(list.start()));
+  const off = store.on('saved:changed', () => paintVideos());
+  ctx.onCleanup(off);
   ctx.title = 'Enregistrés — AURUM';
-  return h('div', null, backHead('Enregistrés', 'Visibles par vous seul'), list.el);
+  return h('div', null, backHead('Enregistrés', 'Visibles par vous seul'), videosHost, list.el);
+}
+
+// Lecture plein écran d'une vidéo gardée sur le téléphone
+function playSaved(it, onRemoved) {
+  const url = URL.createObjectURL(it.video);
+  const video = h('video', { class: 'saved-video', src: url, playsinline: true, 'webkit-playsinline': '', loop: true, autoplay: true });
+  video.playsInline = true;
+  const close = () => {
+    video.pause();
+    box.remove();
+    URL.revokeObjectURL(url);
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e) => e.key === 'Escape' && close();
+  document.addEventListener('keydown', onKey);
+  const remove = h('button', { type: 'button', class: 'saved-remove' }, icon('trash', 'icon-sm'), 'Retirer de mon téléphone');
+  remove.addEventListener('click', async () => {
+    if (!(await confirmDialog('Retirer cette vidéo ?', 'La copie gardée sur votre téléphone sera supprimée.', 'Retirer'))) return;
+    await removeSavedVideo(it.postId);
+    api.del(`/api/posts/${it.postId}/save`).catch(() => {});
+    close();
+    toast('Vidéo retirée de votre téléphone.');
+    onRemoved?.();
+  });
+  video.addEventListener('click', () => (video.paused ? video.play() : video.pause()));
+  const box = h(
+    'div',
+    { class: 'saved-player', role: 'dialog', 'aria-label': 'Vidéo gardée' },
+    video,
+    h('button', { type: 'button', class: 'saved-close', 'aria-label': 'Fermer', onclick: close }, icon('x')),
+    h(
+      'div',
+      { class: 'saved-info' },
+      h('b', null, it.meta.author.displayName),
+      it.meta.body ? h('p', null, richText(it.meta.body)) : null,
+      h('small', null, `Gardée le ${new Date(it.savedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`),
+      remove,
+    ),
+  );
+  document.body.append(box);
+  video.play().catch(() => {
+    video.muted = true;
+    video.play().catch(() => {});
+  });
 }

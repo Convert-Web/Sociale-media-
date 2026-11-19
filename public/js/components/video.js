@@ -445,8 +445,9 @@ function trimBlobs(keep) {
 }
 
 // Lance (ou retrouve) le téléchargement complet d'une vidéo
-export function preloadVideo(v) {
-  if (!v?.url || !v.size || saveData()) return null;
+export function preloadVideo(v, { force = false } = {}) {
+  // force : demande explicite (« Garder »), même en mode économie de données
+  if (!v?.url || !v.size || (!force && saveData())) return null;
   let e = blobs.get(v.url);
   if (!e) {
     const base = v.url.replace(/\.(mp4|webm)$/, '');
@@ -455,7 +456,8 @@ export function preloadVideo(v) {
     e = { url: null, at: Date.now() };
     e.promise = fetchAll(Array.from({ length: n }, (_, i) => `${base}/${i}.bin`))
       .then((parts) => {
-        e.url = URL.createObjectURL(new Blob(parts, { type }));
+        e.blob = new Blob(parts, { type });
+        e.url = URL.createObjectURL(e.blob);
         return e.url;
       })
       .catch(() => {
@@ -468,6 +470,9 @@ export function preloadVideo(v) {
   e.at = Date.now();
   return e.promise;
 }
+
+// La vidéo téléchargée elle-même (pour la garder sur le téléphone), sinon null
+export const videoBlob = (v) => (v?.url && blobs.get(v.url)?.blob) || null;
 
 // Adresse locale si la vidéo est déjà téléchargée, sinon null
 export const localVideo = (v) => (v?.url && blobs.get(v.url)?.url) || null;
