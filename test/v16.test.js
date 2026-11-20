@@ -27,6 +27,7 @@ before(async () => {
     bots: false,
     rateLimit: false,
     adminEmails: [],
+    videoStorageBytes: 14 * 1024 * 1024, // 14 Mo pour vérifier le plafond
     stripe: { secretKey: '', webhookSecret: '' },
   };
   const created = await createApp(cfg, { stripe: null, mailer: { send: async () => {}, sendBatch: async (l) => l.length } });
@@ -268,4 +269,62 @@ test('publication supprimée : vues et J’aime des commentaires effacés aussi'
   assert.equal((await alice.del(`/api/posts/${post.id}`)).status, 200);
   assert.equal((await ctx.db.get('SELECT COUNT(*) AS n FROM video_views WHERE post_id = ?', post.id)).n, 0);
   assert.equal((await ctx.db.get('SELECT COUNT(*) AS n FROM comment_likes WHERE comment_id = ?', c.id)).n, 0);
+});
+
+test('blocages : ni J’aime ni réponse entre membres bloqués, réponses à un membre bloqué cachées', async () => {
+  const post = (await alice.post('/api/posts', { body: 'Votre avis ?' })).data.post;
+  const fromBob = (await bob.post(`/api/posts/${post.id}/comments`, { body: 'Très bien' })).data.comment;
+  const fromCarol = (await carol.post(`/api/posts/${post.id}/comments`, { body: 'Pas mal' })).data.comment;
+  const reply = await alice.post(`/api/posts/${post.id}/comments`, { body: '@carol merci', parentId: fromCarol.id });
+  assert.equal(reply.status, 201);
+  assert.equal((await bob.post('/api/users/carol/block')).status, 200);
+  // Carol ne peut ni aimer ni répondre au commentaire de Bob
+  assert.equal((await carol.post(`/api/comments/${fromBob.id}/like`)).status, 404);
+  assert.equal((await carol.post(`/api/posts/${post.id}/comments`, { body: 'Hé', parentId: fromBob.id })).status, 404);
+  assert.equal((await ctx.db.get('SELECT COUNT(*) AS n FROM comment_likes WHERE comment_id = ?', fromBob.id)).n, 0);
+  // Bob ne voit ni le commentaire de Carol, ni la réponse d'Alice à ce commentaire
+  const seen = (await bob.get(`/api/posts/${post.id}/comments`)).data.comments.map((c) => c.id);
+  assert.deepEqual(seen, [fromBob.id]);
+  // Alice voit tout
+  assert.equal((await alice.get(`/api/posts/${post.id}/comments`)).data.comments.length, 3);
+  assert.equal((await bob.del('/api/users/carol/block')).status, 200);
+});
+
+test('groupe supprimé : J’aime des commentaires et vues effacés aussi', async () => {
+  const fd = new FormData();
+  fd.append('name', 'Club photo');
+  const g = await alice.post('/api/groups', fd);
+  assert.equal(g.status, 201, JSON.stringify(g.data));
+  const gid = g.data.group?.id ?? g.data.id;
+  const pf = new FormData();
+  pf.append('body', 'Première sortie');
+  const gp = await alice.post(`/api/groups/${gid}/posts`, pf);
+  assert.equal(gp.status, 201, JSON.stringify(gp.data));
+  const postId = gp.data.post.id;
+  const c = (await alice.post(`/api/posts/${postId}/comments`, { body: 'Rendez-vous samedi' })).data.comment;
+  assert.equal((await alice.post(`/api/comments/${c.id}/like`)).status, 200);
+  await ctx.db.run('INSERT INTO video_views (post_id, user_id, created_at) VALUES (?, ?, ?)', postId, bob.user.id, Date.now());
+  assert.equal((await alice.del(`/api/groups/${gid}`)).status, 200);
+  assert.equal((await ctx.db.get('SELECT COUNT(*) AS n FROM comment_likes WHERE comment_id = ?', c.id)).n, 0);
+  assert.equal((await ctx.db.get('SELECT COUNT(*) AS n FROM video_views WHERE post_id = ?', postId)).n, 0);
+});
+
+test('envoi pendant la préparation : la place est réservée, et la taille réelle vérifiée à la fin', async () => {
+  // Estimation minuscule, puis 12 Mo envoyés : refusé à la finalisation (plafond de 14 Mo)
+  const sneaky = await alice.post('/api/videos', openForm({ streaming: 1, estimate: 1000 }));
+  assert.equal(sneaky.status, 201, JSON.stringify(sneaky.data));
+  const big = fakeMp4(12 * MB);
+  for (let i = 0; i < 12; i++) assert.equal((await alice.put(`/api/videos/${sneaky.data.id}/chunks/${i}`, big.subarray(i * MB, (i + 1) * MB))).status, 200);
+  const done = await alice.post(`/api/videos/${sneaky.data.id}/complete`, { size: big.length });
+  assert.equal(done.status, 409);
+  assert.equal(done.data.code, 'VIDEO_STORAGE_FULL');
+  assert.equal((await ctx.db.get('SELECT COUNT(*) AS n FROM video_chunks WHERE video_id = ?', sneaky.data.id)).n, 0);
+  // Un envoi en cours réserve sa place : un second envoi qui dépasserait le plafond est refusé
+  const first = await alice.post('/api/videos', openForm({ streaming: 1, estimate: 10 * MB }));
+  assert.equal(first.status, 201);
+  const second = await bob.post('/api/videos', openForm({ size: 3 * MB }));
+  assert.equal(second.status, 409);
+  // Envoi abandonné : la place est rendue
+  assert.equal((await alice.del(`/api/videos/${first.data.id}`)).status, 200);
+  assert.equal((await bob.post('/api/videos', openForm({ size: 3 * MB }))).status, 201);
 });

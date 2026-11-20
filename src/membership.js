@@ -97,6 +97,9 @@ async function deleteGroup(ctx, groupId) {
     await t.run(`DELETE FROM bookmarks WHERE post_id IN (${posts})`, groupId);
     await t.run(`DELETE FROM reports WHERE target_type = 'post' AND target_id IN (${posts})`, groupId);
     await t.run(`DELETE FROM likes WHERE post_id IN (${posts})`, groupId);
+    await t.run(`DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id IN (${posts}))`, groupId);
+    await t.run(`DELETE FROM reports WHERE target_type = 'comment' AND target_id IN (SELECT id FROM comments WHERE post_id IN (${posts}))`, groupId);
+    await t.run(`DELETE FROM video_views WHERE post_id IN (${posts})`, groupId);
     await t.run(`DELETE FROM comments WHERE post_id IN (${posts})`, groupId);
     await t.run(`DELETE FROM notifications WHERE groupe_id = ? OR post_id IN (${posts})`, groupId, groupId);
     await t.run('DELETE FROM posts WHERE groupe_id = ?', groupId);

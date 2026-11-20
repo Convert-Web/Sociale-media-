@@ -532,7 +532,8 @@ function commentEl(c, onDelete, onReply) {
   );
 }
 
-// Réponses rangées sous leur commentaire ; au-delà de deux, « Afficher N réponses »
+// Réponses rangées sous leur commentaire : les deux premières visibles, les autres derrière
+// « Afficher N réponses de plus »
 function repliesHost(parentEl) {
   let host = parentEl.querySelector(':scope > .comment-main > .comment-replies');
   if (!host) {
@@ -545,8 +546,9 @@ function foldReplies(host) {
   const replies = [...host.querySelectorAll(':scope > .comment')];
   host.querySelector(':scope > .comment-more')?.remove();
   if (replies.length <= 2) return replies.forEach((r) => (r.hidden = false));
-  replies.forEach((r, i) => (r.hidden = i >= 1));
-  const more = h('button', { type: 'button', class: 'comment-more' }, `Afficher ${replies.length - 1} réponses de plus`);
+  replies.forEach((r, i) => (r.hidden = i >= 2));
+  const extra = replies.length - 2;
+  const more = h('button', { type: 'button', class: 'comment-more' }, `Afficher ${extra} réponse${extra > 1 ? 's' : ''} de plus`);
   more.addEventListener('click', () => {
     replies.forEach((r) => (r.hidden = false));
     more.remove();
@@ -596,10 +598,12 @@ export function commentsSection(post, onCount, { placement = 'above' } = {}) {
     }
     ta.focus();
   };
+  // Une réponse va sous son commentaire ; si celui-ci n'est pas affiché (supprimé, membre bloqué),
+  // la réponse n'est pas montrée seule, sans contexte
   const place = (c, el) => {
     const parent = c.parentId && list.querySelector(`.comment[data-id="${c.parentId}"]:not(.is-reply)`);
     if (parent) repliesHost(parent).append(el);
-    else list.append(el);
+    else if (!c.parentId) list.append(el);
     return parent;
   };
   const form = h(
@@ -654,7 +658,8 @@ export function commentsSection(post, onCount, { placement = 'above' } = {}) {
       }
       hosts.forEach(foldReplies);
       paintEmpty();
-      if (comments.length !== count) onCount((count = comments.length));
+      const shown = list.querySelectorAll('.comment').length;
+      if (shown !== count) onCount((count = shown));
     })
     .catch((err) => {
       clear(list);

@@ -213,8 +213,11 @@ module.exports = function postRoutes(ctx) {
       `${COMMENT_SELECT}
        WHERE c.post_id = ?
          AND c.user_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)
+         AND (c.parent_id IS NULL OR c.parent_id NOT IN (
+           SELECT pc.id FROM comments pc WHERE pc.post_id = c.post_id
+             AND pc.user_id IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)))
        ORDER BY c.id ASC LIMIT 500`,
-      req.user.id, post.id, req.user.id, req.user.id,
+      req.user.id, post.id, req.user.id, req.user.id, req.user.id, req.user.id,
     );
     res.json({ comments: rows.map((row) => serializeComment(ctx, row, req.user)) });
   });
@@ -230,6 +233,7 @@ module.exports = function postRoutes(ctx) {
     if (parentId) {
       parent = await db.get('SELECT id, user_id, parent_id, post_id FROM comments WHERE id = ?', parentId);
       if (!parent || parent.post_id !== post.id) fail(404, 'Ce commentaire n’existe plus.');
+      if (parent.user_id !== req.user.id && (await isBlocked(ctx, req.user.id, parent.user_id))) fail(404, 'Ce commentaire n’existe plus.');
     }
     const top = parent ? parent.parent_id || parent.id : null;
     const { lastInsertRowid } = await db.run(
@@ -259,6 +263,8 @@ module.exports = function postRoutes(ctx) {
     const comment = id && (await db.get('SELECT c.id, c.user_id, c.post_id FROM comments c WHERE c.id = ?', id));
     if (!comment) fail(404, 'Commentaire introuvable.');
     await loadPost(comment.post_id, req.user); // publication visible par ce membre
+    // Pas de J'aime entre membres qui se sont bloqués (le commentaire est caché à l'un d'eux)
+    if (comment.user_id !== req.user.id && (await isBlocked(ctx, req.user.id, comment.user_id))) fail(404, 'Commentaire introuvable.');
     await db.run('INSERT OR IGNORE INTO comment_likes (comment_id, user_id, created_at) VALUES (?, ?, ?)', comment.id, req.user.id, Date.now());
     await notify(ctx, { userId: comment.user_id, actorId: req.user.id, type: 'comment_like', postId: comment.post_id });
     const { n } = await db.get('SELECT COUNT(*) AS n FROM comment_likes WHERE comment_id = ?', comment.id);
@@ -268,6 +274,7 @@ module.exports = function postRoutes(ctx) {
     const id = intParam(req.params.id);
     const comment = id && (await db.get('SELECT id, user_id, post_id FROM comments WHERE id = ?', id));
     if (!comment) fail(404, 'Commentaire introuvable.');
+    await loadPost(comment.post_id, req.user);
     await db.run('DELETE FROM comment_likes WHERE comment_id = ? AND user_id = ?', comment.id, req.user.id);
     await retractNotification(ctx, { userId: comment.user_id, actorId: req.user.id, type: 'comment_like', postId: comment.post_id });
     const { n } = await db.get('SELECT COUNT(*) AS n FROM comment_likes WHERE comment_id = ?', comment.id);

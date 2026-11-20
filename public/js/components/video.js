@@ -53,7 +53,26 @@ function predecode(file) {
   return state;
 }
 
+// Vidéo en HEVC (H.265, réglage « haute efficacité » de certains téléphones) : lue par peu
+// d'appareils, elle est toujours préparée (H.264) avant l'envoi. Repérée à son code de format
+// dans le début ou la fin du fichier (où se trouve sa description).
+async function isHevc(file) {
+  try {
+    const span = 1536 * 1024;
+    const parts = [file.slice(0, span)];
+    if (file.size > span) parts.push(file.slice(Math.max(span, file.size - span)));
+    for (const part of parts) {
+      const text = new TextDecoder('latin1').decode(new Uint8Array(await part.arrayBuffer()));
+      if (text.includes('hvc1') || text.includes('hev1')) return true;
+    }
+  } catch {
+    /* illisible : traité comme une vidéo ordinaire */
+  }
+  return false;
+}
+
 export async function readVideoInfo(file) {
+  const hevc = isHevc(file);
   const url = URL.createObjectURL(file);
   const v = document.createElement('video');
   v.muted = true;
@@ -63,7 +82,7 @@ export async function readVideoInfo(file) {
   v.src = url;
   try {
     await once(v, 'loadedmetadata');
-    const info = { duration: v.duration, width: v.videoWidth, height: v.videoHeight, poster: null, url, audio: predecode(file) };
+    const info = { duration: v.duration, width: v.videoWidth, height: v.videoHeight, poster: null, url, audio: predecode(file), hevc: await hevc };
     try {
       // iOS ne décode une image qu'après un début de lecture (muette : autorisée)
       await v.play().catch(() => {});
@@ -275,20 +294,26 @@ function compress(file, info, plan, onProgress, onData) {
   return job;
 }
 
-// Envoi d'un morceau de 1 Mo, avec reprise : jusqu'à 6 essais, et attente du retour du réseau
+// Envoi d'un morceau de 1 Mo, avec reprise : jusqu'à 8 essais (~25 s), et attente du retour du
+// réseau. Échec réseau : erreur « connexion » (la pastille propose de reprendre l'envoi)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const backOnline = () => (navigator.onLine === false ? new Promise((r) => addEventListener('online', r, { once: true })) : null);
 async function putChunk(id, i, part) {
   for (let tries = 1; ; tries++) {
     try {
       await backOnline();
-      const res = await fetch(`/api/videos/${id}/chunks/${i}`, { method: 'PUT', headers: { 'x-aurum': '1', 'content-type': 'application/octet-stream' }, credentials: 'same-origin', body: part });
+      let res;
+      try {
+        res = await fetch(`/api/videos/${id}/chunks/${i}`, { method: 'PUT', headers: { 'x-aurum': '1', 'content-type': 'application/octet-stream' }, credentials: 'same-origin', body: part });
+      } catch {
+        throw new ApiError(0, 'Connexion perdue pendant l’envoi.');
+      }
       if (res.ok) return;
       const data = await res.json().catch(() => null);
       throw new ApiError(res.status, data?.error || 'Envoi de la vidéo interrompu.');
     } catch (err) {
-      if (tries >= 6 || (err instanceof ApiError && err.status < 500 && err.status !== 0 && err.status !== 429)) throw err;
-      await sleep(700 * tries);
+      if (tries >= 8 || (err.status < 500 && err.status !== 0 && err.status !== 429)) throw err;
+      await sleep(Math.min(4000, 700 * tries));
     }
   }
 }
@@ -352,11 +377,16 @@ async function sendBlob(blob, mime, info, onStep) {
   if (blob.size > MAX_BYTES) throw new Error('Vidéo trop lourde : 40 Mo maximum. Raccourcissez-la un peu.');
   const opened = openUpload({ mime, size: blob.size, info });
   const { id, chunkSize, chunks } = await opened;
-  const sender = chunkSender(opened, (n) => onStep?.('upload', n / blob.size));
-  for (let i = 0; i < chunks; i++) sender.add(i, blob.slice(i * chunkSize, Math.min(blob.size, (i + 1) * chunkSize)));
-  await sender.drain();
-  const { video } = await api.post(`/api/videos/${id}/complete`);
-  return video;
+  try {
+    const sender = chunkSender(opened, (n) => onStep?.('upload', n / blob.size));
+    for (let i = 0; i < chunks; i++) sender.add(i, blob.slice(i * chunkSize, Math.min(blob.size, (i + 1) * chunkSize)));
+    await sender.drain();
+    const { video } = await api.post(`/api/videos/${id}/complete`);
+    return video;
+  } catch (err) {
+    api.del(`/api/videos/${id}`).catch(() => {}); // place libérée ; « Réessayer » repart proprement
+    throw err;
+  }
 }
 
 // Prépare la vidéo (1080p) et l'envoie EN MÊME TEMPS : chaque mégaoctet enregistré part aussitôt.
@@ -365,13 +395,19 @@ async function sendBlob(blob, mime, info, onStep) {
 export async function uploadVideo(file, info, onStep, memo = {}) {
   if (memo.blob) return sendBlob(memo.blob, memo.mime, info, onStep);
   const mime = fileMime(file);
-  const heavy = file.size > KEEP_AS_IS || mime !== 'video/mp4';
+  const target = encodeSize(info.width, info.height);
+  const guess = ((target.bps + 128_000) * (info.duration || 30)) / 8; // poids probable une fois préparée
+  // Un MP4 déjà léger (pas plus lourd que sa version préparée) et pas plus grand que 1080p part tel
+  // quel : aucune perte de qualité, aucune attente
+  const light = mime === 'video/mp4' && !info.hevc && file.size <= MAX_BYTES && file.size <= guess * 1.1 && Math.max(info.width || 0, info.height || 0) <= MAX_SIDE;
+  const heavy = !light && (file.size > KEEP_AS_IS || mime !== 'video/mp4' || info.hevc);
   const plan = heavy ? encodePlan(file) : null;
   if (!plan) return sendBlob(file, mime, info, onStep);
 
-  const target = encodeSize(info.width, info.height);
-  const estimate = Math.min(MAX_BYTES, ((target.bps + 128_000) * (info.duration || 30)) / 8 * 1.25);
+  const estimate = Math.min(MAX_BYTES, guess * 1.25);
   const opened = openUpload({ mime: plan.mime, info, streaming: true, estimate });
+  // Envoi abandonné : la place réservée sur le serveur est libérée
+  const drop = () => opened.then(({ id }) => api.del(`/api/videos/${id}`)).catch(() => {});
   let recorded = 0; // octets enregistrés
   let recDone = false;
   // Avancement : l'enregistrement (0 à 90 %), puis les derniers morceaux (90 à 100 %)
@@ -401,22 +437,33 @@ export async function uploadVideo(file, info, onStep, memo = {}) {
   let out;
   try {
     out = await job;
-    if (sender.failed) throw sender.failed;
   } catch (err) {
-    opened.then(({ id }) => api.del(`/api/videos/${id}`)).catch(() => {});
-    if (err instanceof ApiError) throw err; // refus du serveur ou réseau coupé : message clair
+    drop();
+    if (err instanceof ApiError) throw err; // refus du serveur : message clair
     // Préparation impossible sur ce téléphone : la vidéo d'origine part telle quelle
     return sendBlob(file, mime, info, onStep);
   }
+  // Résultat vide, ou plus lourd qu'un MP4 d'origine (lisible partout) : l'original part à la place
+  if (out.size < 1000 || (mime === 'video/mp4' && !info.hevc && out.size >= file.size && file.size <= MAX_BYTES)) {
+    drop();
+    return sendBlob(file, mime, info, onStep);
+  }
+  // La vidéo préparée est gardée : si le réseau coupe, « Réessayer » ne refait que l'envoi
   memo.blob = out;
   memo.mime = out.type || plan.mime;
-  recDone = true;
-  cut(true);
-  onStep?.('upload', 0.9);
-  await sender.drain();
-  const { id } = await opened;
-  const { video } = await api.post(`/api/videos/${id}/complete`, { size: out.size });
-  return video;
+  try {
+    if (sender.failed) throw sender.failed;
+    recDone = true;
+    cut(true);
+    onStep?.('upload', 0.9);
+    await sender.drain();
+    const { id } = await opened;
+    const { video } = await api.post(`/api/videos/${id}/complete`, { size: out.size });
+    return video;
+  } catch (err) {
+    drop();
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -499,34 +546,75 @@ export function videoPlayer(v, { onOpen, onDouble, postId = null } = {}) {
   );
   let userPaused = false;
   let wanted = false; // à l'écran : doit jouer dès que possible
+  let checking = false;
+  // Lecture progressive ; au moindre souci (erreur, aucune image), retour à la lecture en ligne
+  const startProgressive = () => {
+    let shown = false;
+    const fallback = () => {
+      if (el.dataset.mode !== 'progressive') return;
+      disableProgressive();
+      setSource(el, v, v.url);
+      if (wanted && !userPaused) el.play().catch(() => {});
+    };
+    playProgressive(el, v, { onFail: fallback });
+    el.addEventListener('loadeddata', () => (shown = true), { once: true });
+    el.addEventListener('error', fallback, { once: true });
+    setTimeout(() => !shown && el.readyState < 2 && fallback(), 4500);
+  };
   const paintSound = () => soundBtn.replaceChildren(icon(el.muted ? 'mute' : 'sound'));
   const player = {
     // À l'approche de l'écran : téléchargement complet, puis source locale (lecture immédiate)
     near() {
+      // Lecture progressive possible : le début suffit (démarrage immédiat, moins de données)
+      if (canProgressive()) return preloadStart(v, PRIO.later);
       const job = preloadVideo(v);
       if (!job) return;
       job.then((local) => {
-        if (local && (!el.getAttribute('src') || (el.paused && el.currentTime === 0 && el.getAttribute('src') !== local))) el.src = local;
+        if (local && (!el.getAttribute('src') || (el.paused && el.currentTime === 0 && el.getAttribute('src') !== local))) setSource(el, v, local);
         if (local && wanted && el.paused) player.auto();
       });
     },
     auto() {
       if (userPaused) return;
       wanted = true;
-      if (!el.getAttribute('src')) {
-        const local = localVideo(v);
-        // Téléchargement en cours : l'aperçu reste affiché, la vidéo part dès qu'elle est là
-        // (sans la télécharger une seconde fois en ligne) ; sinon lecture en ligne
-        const job = local ? null : preloadVideo(v, { prio: PRIO.next });
-        if (job) {
-          job.then((url) => {
-            if (!wanted || userPaused) return;
-            if (!el.getAttribute('src')) el.src = url || v.url;
-            if (el.paused) player.auto();
+      if (el.dataset.mode === 'progressive') resumePreload(v); // la suite de la vidéo reprend
+      if (!el.getAttribute('src') && !localVideo(v) && canProgressive()) {
+        // Lecture progressive (comme le plein écran) ; premier morceau absent : on l'attend un peu
+        const ready = progressiveReady(v);
+        if (ready === null) {
+          if (checking) return;
+          checking = true;
+          progressiveCheck(v).then((ok) => {
+            checking = false;
+            if (!wanted || userPaused || el.getAttribute('src')) return;
+            if (ok) startProgressive();
+            else setSource(el, v, v.url);
+            player.auto();
           });
           return;
         }
-        el.src = local || v.url;
+        if (ready) startProgressive();
+      }
+      if (!el.getAttribute('src')) {
+        const local = localVideo(v);
+        // Téléchargement presque fini : l'aperçu reste affiché, la vidéo part dès qu'elle est là
+        // (sans la télécharger une seconde fois) ; sinon lecture en ligne tout de suite
+        if (!local && preloadEta(v) < 2.5) {
+          const job = preloadVideo(v, { prio: PRIO.next });
+          if (job) {
+            const go = (url) => {
+              if (!wanted || userPaused || el.getAttribute('src')) return;
+              if (!url) cancelPreload(v);
+              setSource(el, v, url || v.url);
+              player.auto();
+            };
+            job.then(go);
+            setTimeout(() => go(null), 3000); // au pire, en ligne au bout de 3 s
+            return;
+          }
+        }
+        if (!local) cancelPreload(v); // lue en ligne : pas un second téléchargement en parallèle
+        setSource(el, v, local || v.url);
       }
       // Son seulement si le navigateur l'autorise (après un premier toucher) ; sinon lecture muette
       // directe, sans tentative ratée qui ferait hoqueter la vidéo
@@ -543,6 +631,7 @@ export function videoPlayer(v, { onOpen, onDouble, postId = null } = {}) {
     stop() {
       wanted = false;
       el.pause();
+      if (el.dataset.mode === 'progressive') relaxPreload(v); // hors de l'écran : la suite attend
     },
   };
   wrap.__player = player;
@@ -846,7 +935,7 @@ function trim(keep) {
   if (entries.size <= MAX_KEPT) return;
   const inUse = new Set([...document.querySelectorAll('video')].map((el) => el.dataset.v || el.getAttribute('src')));
   const old = [...entries.values()]
-    .filter((e) => e.key !== keep && e.prio !== PRIO.now && !e.flying.size && !inUse.has(e.key) && !inUse.has(e.url))
+    .filter((e) => e.key !== keep && !e.keep && e.prio !== PRIO.now && !e.flying.size && !inUse.has(e.key) && !inUse.has(e.url))
     .sort((a, b) => a.at - b.at);
   while (entries.size > MAX_KEPT && old.length) {
     const e = old.shift();
@@ -876,10 +965,13 @@ function want(v, prio, all) {
 }
 
 // Téléchargement complet d'une vidéo (lecture depuis le téléphone, « Garder ») ; prio : PRIO.now … PRIO.warm
-export function preloadVideo(v, { force = false, prio = PRIO.later } = {}) {
-  // force : demande explicite (« Garder »), même en mode économie de données
+export function preloadVideo(v, { force = false, prio = PRIO.later, keep = false } = {}) {
+  // force : demande explicite, même en mode économie de données ; keep : « Garder » (téléchargée
+  // jusqu'au bout, même si l'on passe à une autre vidéo)
   if (!v?.url || !v.size || (!force && saveData())) return null;
-  return want(v, force ? PRIO.now : prio, true).promise;
+  const e = want(v, force ? PRIO.now : prio, true);
+  if (keep) e.keep = true;
+  return e.promise;
 }
 
 // Début seulement (2 Mo) : de quoi démarrer aussitôt en lecture progressive
@@ -897,6 +989,24 @@ export function preloadEta(v) {
   // Débit mesuré ; au tout début, celui annoncé par le téléphone (sinon ~10 Mbit/s)
   const rate = elapsed > 0.4 && e.got > 0 ? e.got / elapsed : (navigator.connection?.downlink || 10) * 125000;
   return (e.size - e.got) / rate;
+}
+
+// Vidéo quittée avant la fin de son téléchargement : seul son début reste voulu (données
+// économisées) ; reprise complète si on y revient
+export function relaxPreload(v) {
+  const e = v?.url && entries.get(v.url);
+  if (!e || e.keep || e.state === 'ready' || e.state === 'failed') return;
+  e.all = false;
+  if (e.prio === PRIO.now) e.prio = PRIO.later;
+}
+export function resumePreload(v) {
+  if (v?.url && v.size) want(v, PRIO.now, true);
+}
+
+// Octets déjà reçus pour une vidéo (pour savoir si son téléchargement avance encore)
+export function downloadedBytes(v) {
+  const e = v?.url && entries.get(v.url);
+  return !e ? 0 : e.state === 'ready' ? e.size : e.got;
 }
 
 // Abandon d'un téléchargement (la vidéo se lit en ligne : pas deux fois les mêmes octets)
@@ -1040,8 +1150,10 @@ export function progressiveReady(v) {
   }
 }
 
-// Attend le premier morceau (au plus ms) pour savoir si la lecture progressive est possible
-export async function progressiveCheck(v, ms = 1500) {
+// Attend le premier morceau pour savoir si la lecture progressive est possible. Il est demandé en
+// priorité absolue : l'attendre est bien plus rapide que de tout reprendre en ligne (au plus 8 s,
+// par sécurité ; téléchargement impossible : lecture en ligne)
+export async function progressiveCheck(v, ms = 8000) {
   if (!MS || mseOff || !v?.url || !v.size) return false;
   const e = want(v, PRIO.now, true);
   if (!e.info) await Promise.race([part(e, 0), sleep(ms)]);

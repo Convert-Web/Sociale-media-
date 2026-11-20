@@ -78,7 +78,7 @@ export async function saveVideoLocally(post) {
   // Le téléphone l'a peut-être déjà (préchargement) ; sinon on la télécharge en entier
   let video = videoBlob(v);
   if (!video) {
-    await preloadVideo(v, { force: true });
+    await preloadVideo(v, { force: true, keep: true });
     video = videoBlob(v);
   }
   if (!video) throw new Error('Téléchargement de la vidéo impossible. Vérifiez votre connexion.');

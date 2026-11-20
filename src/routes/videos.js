@@ -12,6 +12,15 @@ module.exports = function videoRoutes(ctx) {
   const { db, config } = ctx;
   r.use('/videos', requireMember);
 
+  // Espace vidéo du cercle plein : la Direction est prévenue, l'envoi est refusé
+  async function storageFull() {
+    const { sendPush } = require('../push');
+    for (const a of await db.all('SELECT id FROM users WHERE is_admin = 1 AND paid_at IS NOT NULL')) {
+      sendPush(ctx, a.id, { title: 'Espace vidéo plein', body: 'Supprimez d’anciennes vidéos ou augmentez VIDEO_STORAGE_MB.', url: '/admin', tag: 'video-storage' }).catch(() => {});
+    }
+    fail(409, 'L’espace vidéo du cercle est plein pour le moment. La Direction a été prévenue.', 'VIDEO_STORAGE_FULL');
+  }
+
   // Fil des vidéos (lecture plein écran, glisser pour la suivante)
   // « Pour toi » : d'abord les vidéos pas encore vues (les plus récentes en tête), puis celles déjà
   // vues et les siennes — on ne retombe pas sur la même vidéo tant qu'il en reste de nouvelles.
@@ -62,9 +71,10 @@ module.exports = function videoRoutes(ctx) {
   r.post('/videos', single('poster'), async (req, res) => {
     const b = req.body || {};
     const mime = String(b.mime || '').split(';')[0].trim().toLowerCase();
-    // Envoi pendant la préparation : la taille finale n'est connue qu'à la fin (estimation pour l'espace)
+    // Envoi pendant la préparation : la taille finale n'est connue qu'à la fin. L'espace est réservé
+    // d'après l'estimation (au moins 1 Mo), puis vérifié à nouveau avec la taille réelle.
     const streaming = ['1', 'true'].includes(String(b.streaming));
-    const size = streaming ? Math.min(Number(b.estimate) || V.MAX_BYTES / 2, V.MAX_BYTES) : Number(b.size);
+    const size = streaming ? Math.round(Math.min(Math.max(Number(b.estimate) || V.MAX_BYTES / 2, V.CHUNK), V.MAX_BYTES)) : Number(b.size);
     const duration = Number(b.duration);
     const width = Math.round(Number(b.width)) || null;
     const height = Math.round(Number(b.height)) || null;
@@ -76,21 +86,16 @@ module.exports = function videoRoutes(ctx) {
     await V.cleanup(ctx);
     const { n } = await db.get('SELECT COUNT(*) AS n FROM videos WHERE owner_id = ? AND created_at > ?', req.user.id, Date.now() - 24 * 3600 * 1000);
     if (n >= V.PER_DAY) fail(429, 'Vous avez envoyé beaucoup de vidéos aujourd’hui. Réessayez demain.');
-    if ((await V.storageUsed(ctx)) + size > config.videoStorageBytes) {
-      const { sendPush } = require('../push');
-      for (const a of await db.all('SELECT id FROM users WHERE is_admin = 1 AND paid_at IS NOT NULL')) {
-        sendPush(ctx, a.id, { title: 'Espace vidéo plein', body: 'Supprimez d’anciennes vidéos ou augmentez VIDEO_STORAGE_MB.', url: '/admin', tag: 'video-storage' }).catch(() => {});
-      }
-      fail(409, 'L’espace vidéo du cercle est plein pour le moment. La Direction a été prévenue.', 'VIDEO_STORAGE_FULL');
-    }
+    if ((await V.storageUsed(ctx)) + size > config.videoStorageBytes) await storageFull();
     const poster = req.file ? await saveImage(ctx, req.file) : null;
     const id = V.newId();
-    // En envoi pendant la préparation : 0 morceau annoncé, taille fixée à la finalisation
+    // En envoi pendant la préparation : 0 morceau annoncé (taille fixée à la finalisation) ;
+    // la taille notée d'ici là est la place réservée, comptée dans l'espace occupé
     const chunks = streaming ? 0 : Math.ceil(size / V.CHUNK);
     await db.run(
       `INSERT INTO videos (id, owner_id, mime, size, duration, width, height, poster, chunks, complete, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-      id, req.user.id, mime, streaming ? 0 : size, duration, width, height, poster, chunks, Date.now(),
+      id, req.user.id, mime, size, duration, width, height, poster, chunks, Date.now(),
     );
     res.status(201).json({ id, chunkSize: V.CHUNK, chunks });
   });
@@ -131,6 +136,11 @@ module.exports = function videoRoutes(ctx) {
         chunks - 1, V.CHUNK, v.id,
       );
       if (got.n !== chunks || got.bytes !== size || got.last !== chunks - 1 || got.short) fail(409, 'Envoi incomplet : la vidéo n’a pas été entièrement reçue.');
+      // Espace du cercle : vérifié avec la taille réelle (la place réservée par cette vidéo est déduite)
+      if ((await V.storageUsed(ctx)) - v.size + size > config.videoStorageBytes) {
+        await V.removeVideo(ctx, v.id);
+        await storageFull();
+      }
       await db.run('UPDATE videos SET size = ?, chunks = ?, complete = 1 WHERE id = ?', size, chunks, v.id);
       v.size = size;
     } else {

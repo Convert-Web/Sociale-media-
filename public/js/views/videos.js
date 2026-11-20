@@ -4,7 +4,7 @@
 import { api, enc } from '../api.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, richText, num, toast, emptyState, spinner, onTaps, heartBurst, shareLink, verifiedMark } from '../dom.js';
-import { sound, reelsPlayer, cachedReels, rememberReels, preloadVideo, preloadStart, localVideo, sameVideo, setSource, PRIO, preloadEta, cancelPreload, holdPreloads, releasePreloads, clockLabel, countView, canProgressive, progressiveReady, progressiveCheck, playProgressive, disableProgressive } from '../components/video.js';
+import { sound, reelsPlayer, cachedReels, rememberReels, preloadVideo, preloadStart, localVideo, sameVideo, setSource, PRIO, preloadEta, cancelPreload, holdPreloads, releasePreloads, clockLabel, countView, canProgressive, progressiveReady, progressiveCheck, playProgressive, disableProgressive, downloadedBytes, relaxPreload } from '../components/video.js';
 import { reportDialog } from '../components/report.js';
 import { commentsSection } from '../components/post.js';
 import { openSheet, closeSheet } from '../components/sheet.js';
@@ -303,7 +303,14 @@ export async function videosView(ctx) {
         else stream(v);
         start();
       };
-      preloadVideo(v, { prio: PRIO.now }).then(go);
+      // force : c'est la vidéo regardée, téléchargée même en mode économie de données
+      const job = preloadVideo(v, { prio: PRIO.now, force: true });
+      if (!job) {
+        stream(v);
+        start();
+        return;
+      }
+      job.then(go);
       setTimeout(() => go(null), Math.min(4000, eta * 1300 + 700));
     } else {
       stream(v); // lecture en ligne immédiate, le réseau lui est réservé
@@ -315,25 +322,33 @@ export async function videosView(ctx) {
   // retour à la lecture classique (et lecture progressive coupée quelques jours sur ce téléphone)
   function playFromStart(v, token) {
     stopProgressive();
+    let shown = false; // une première image est arrivée : la lecture progressive marche ici
     const fallback = () => {
       if (token !== actToken) return;
+      const at = player.currentTime;
       disableProgressive();
       classic(v, token);
+      if (at > 0.5) pendingSeek = at; // reprise au même endroit
     };
     progressive = playProgressive(player, v, { onFail: fallback });
+    player.addEventListener('loadeddata', () => (shown = true), { once: true });
     start();
+    // Aucune image au bout de 4,5 s alors que le début est là : ce téléphone ne s'en sort pas
     watchdog = setTimeout(() => {
-      if (token === actToken && progressive && player.readyState < 2) fallback();
+      if (token === actToken && progressive && !shown && player.readyState < 2) fallback();
     }, 4500);
   }
 
   function activate(box) {
     if (active === box || !box?.__post) return;
+    // Vidéo quittée : seul son début reste voulu (la suite n'est plus téléchargée pour rien)
+    if (active?.__post && active.__post.video.url !== box.__post.video.url) relaxPreload(active.__post.video);
     active?.classList.remove('is-active', 'is-ready');
     active = box;
     const token = ++actToken;
     box.classList.add('is-active');
     userPaused = false;
+    pendingSeek = null;
     const v = box.__post.video;
     box.querySelector('.reel-holder').append(player);
     paintTime();
@@ -379,10 +394,12 @@ export async function videosView(ctx) {
   // Durée connue même pour une vidéo dont le fichier ne l'indique pas (enregistrée par le téléphone)
   const duration = () => (Number.isFinite(player.duration) && player.duration > 0 ? player.duration : active?.__post.video.duration || 0);
   let scrubbing = false;
+  let pendingSeek = null; // position demandée avant que la vidéo soit prête (barre touchée pendant le chargement)
   function paintTime() {
     const d = duration();
-    const t = Math.min(d, player.currentTime || 0);
-    const r = d && active && sameVideo(player, active.__post.video) ? t / d : 0;
+    const on = active && sameVideo(player, active.__post.video);
+    const t = Math.min(d, pendingSeek ?? (on ? player.currentTime || 0 : 0));
+    const r = d && (on || pendingSeek != null) ? t / d : 0;
     fill.style.transform = `scaleX(${r})`;
     knob.style.transform = `translateX(${r * bar.clientWidth}px)`;
     scrub.setAttribute('aria-valuenow', String(Math.round(t)));
@@ -390,10 +407,23 @@ export async function videosView(ctx) {
     if (scrubbing) timeLabel.replaceChildren(h('b', null, clockLabel(t)), h('span', null, ` / ${clockLabel(d)}`));
   }
 
+  // La vidéo à l'écran joue (et pas l'extrait muet qui déverrouille le lecteur) : elle s'affiche
   const onPlaying = () => {
-    active?.classList.add('is-ready');
+    if (!active || !sameVideo(player, active.__post.video)) return;
+    active.classList.add('is-ready');
     releasePreloads(); // la vidéo joue : les suivantes peuvent se télécharger
   };
+  const applySeek = () => {
+    if (pendingSeek == null || !active || !sameVideo(player, active.__post.video)) return;
+    try {
+      player.currentTime = pendingSeek;
+      pendingSeek = null;
+    } catch {
+      /* réessayé à l'événement suivant */
+    }
+  };
+  player.addEventListener('loadedmetadata', applySeek);
+  player.addEventListener('canplay', applySeek);
   const onTime = () => {
     if (!scrubbing) paintTime();
     // Vue comptée après 2 secondes de lecture (une fois par vidéo et par visite)
@@ -409,24 +439,35 @@ export async function videosView(ctx) {
   // Erreur pendant une lecture progressive : retour à la lecture classique
   const onError = () => {
     if (!progressive || !active) return;
+    const at = player.currentTime;
     disableProgressive();
     classic(active.__post.video, actToken);
+    if (at > 0.5) pendingSeek = at;
   };
   player.addEventListener('error', onError);
   // Lecture progressive bloquée plus de 6 secondes : reprise en lecture classique, au même endroit
   let stallTimer = 0;
+  // (une attente pendant que les morceaux continuent d'arriver — saut loin en avant — n'est pas un blocage)
   const onWaiting = () => {
     clearTimeout(stallTimer);
     if (!progressive || !active) return;
     const token = actToken;
-    const at = player.currentTime;
-    stallTimer = setTimeout(() => {
+    const v = active.__post.video;
+    let bytes = downloadedBytes(v);
+    const check = () => {
       if (token !== actToken || !progressive || player.readyState >= 3) return;
-      const v = active.__post.video;
+      const now = downloadedBytes(v);
+      if (now > bytes) {
+        bytes = now;
+        stallTimer = setTimeout(check, 6000);
+        return;
+      }
+      const at = player.currentTime;
       disableProgressive();
       classic(v, token);
-      player.addEventListener('loadedmetadata', () => token === actToken && (player.currentTime = at), { once: true });
-    }, 6000);
+      pendingSeek = at; // reprise au même endroit
+    };
+    stallTimer = setTimeout(check, 6000);
   };
   const onFlowing = () => clearTimeout(stallTimer);
   player.addEventListener('waiting', onWaiting);
@@ -440,19 +481,24 @@ export async function videosView(ctx) {
   // Glisser sur la barre : la vidéo suit le doigt, le temps s'affiche en grand
   let wasPlaying = false;
   let seekFrame = 0;
+  const onActiveVideo = () => Boolean(active && sameVideo(player, active.__post.video));
   const seekTo = (clientX) => {
     const rect = bar.getBoundingClientRect();
     const r = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
     const d = duration();
     if (!d) return;
     cancelAnimationFrame(seekFrame);
-    seekFrame = requestAnimationFrame(() => {
-      try {
-        player.currentTime = r * d;
-      } catch {
-        /* pas encore prête */
-      }
-    });
+    if (!onActiveVideo()) {
+      pendingSeek = r * d; // vidéo pas encore branchée : appliqué dès qu'elle l'est
+    } else {
+      seekFrame = requestAnimationFrame(() => {
+        try {
+          player.currentTime = r * d;
+        } catch {
+          pendingSeek = r * d; // pas encore prête : appliqué dès qu'elle l'est
+        }
+      });
+    }
     fill.style.transform = `scaleX(${r})`;
     knob.style.transform = `translateX(${r * rect.width}px)`;
     timeLabel.replaceChildren(h('b', null, clockLabel(r * d)), h('span', null, ` / ${clockLabel(d)}`));
@@ -464,8 +510,12 @@ export async function videosView(ctx) {
     scrubbing = true;
     scrub.setPointerCapture?.(e.pointerId);
     root.classList.add('scrubbing');
-    wasPlaying = !player.paused;
-    player.pause();
+    if (onActiveVideo()) {
+      wasPlaying = !player.paused;
+      player.pause();
+    } else {
+      wasPlaying = false; // la vidéo démarrera d'elle-même, à la position choisie
+    }
     seekTo(e.clientX);
   });
   scrub.addEventListener('pointermove', (e) => scrubbing && seekTo(e.clientX));
@@ -473,7 +523,7 @@ export async function videosView(ctx) {
     if (!scrubbing) return;
     scrubbing = false;
     root.classList.remove('scrubbing');
-    if (wasPlaying || !userPaused) player.play().catch(() => {});
+    if (onActiveVideo() && (wasPlaying || !userPaused)) player.play().catch(() => {});
     paintTime();
   };
   scrub.addEventListener('pointerup', endScrub);
@@ -648,16 +698,22 @@ export async function videosView(ctx) {
     const qs = q.toString();
     return `/api/videos/feed${qs ? `?${qs}` : ''}`;
   };
+  // Page suivante. Une page peut n'apporter aucune nouvelle vidéo (déjà affichées, écartées,
+  // auteurs masqués) : on enchaîne alors avec la suivante, pour ne jamais rester bloqué au bout
   async function loadMore() {
     if (loading || !more) return;
     loading = true;
     const g = gen;
     try {
-      const d = await api.get(feedUrl());
-      if (g !== gen) return;
-      more = d.hasMore;
-      cursor = d.cursor || null;
-      add(d.posts);
+      for (let pages = 0; pages < 6 && more; pages++) {
+        const d = await api.get(feedUrl());
+        if (g !== gen) return;
+        more = d.hasMore && Boolean(d.cursor);
+        cursor = d.cursor || null;
+        const before = all.length;
+        add(d.posts);
+        if (all.length > before) break;
+      }
       if (scope === 'all' && all.length <= 8) rememberReels(all.slice(), more, cursor);
     } catch (err) {
       if (g === gen) toast(err.message, 'error');
@@ -724,6 +780,8 @@ export async function videosView(ctx) {
     player.removeEventListener('canplaythrough', onReady);
     player.removeEventListener('error', onError);
     player.removeEventListener('waiting', onWaiting);
+    player.removeEventListener('loadedmetadata', applySeek);
+    player.removeEventListener('canplay', applySeek);
     player.removeEventListener('playing', onFlowing);
     clearTimeout(stallTimer);
     stopProgressive();
