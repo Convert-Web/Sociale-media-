@@ -2286,3 +2286,28 @@ html.reels-mode .upload-dock { bottom: auto; top: calc(env(safe-area-inset-top, 
 html.reels-mode .update-pill { top: calc(env(safe-area-inset-top, 0px) + 62px); }
 html.has-update.reels-mode .upload-dock { top: calc(env(safe-area-inset-top, 0px) + 122px); }
 @media (min-width: 768px) { .update-pill { top: 16px; } html.has-update .upload-dock { top: 72px; } }
+
+/* ===================================================================== v20
+   Corrections de l'inspection complète (parcours réels sur iPhone)
+   ===================================================================== */
+/* Carte de membre : numéro et nom alignés à gauche, même dans une page centrée (Bienvenue) :
+   le numéro ne passe plus sous l'étoile de la carte Fondateur */
+.mcard { text-align: left; }
+/* Invitation : la photo du parrain garde sa forme ronde */
+.invite-banner .avatar { flex: none; }
+/* Profil sur petit écran (320 px) : les chiffres restent sous la couverture */
+@media (max-width: 360px) { .profile-row { margin-top: -34px; } }
+/* Coin Vidéos vide : texte lisible sur fond noir */
+.reels-empty .empty p { color: rgba(255, 255, 255, 0.72); }
+/* Nombre de J'aime : rouge plus profond pour le chiffre (le cœur reste vif) */
+.act.liked > span, .act.liked > small { color: #d70040; }
+@media (prefers-color-scheme: dark) { .act.liked > span, .act.liked > small { color: #ff5c7c; } }
+/* Heure des messages : un peu plus lisible */
+.bubble time { opacity: 0.72; }
+/* Bandeau cookies ouvert : la page garde de la place en bas, aucun bouton ne reste dessous */
+html.cookie-open body { padding-bottom: 210px; }
+/* Code d'invitation : le texte indicatif tient en entier */
+.invite-code-input::placeholder { text-transform: none; letter-spacing: 0; font-family: var(--font); }
+/* Journal, « À la une » : titre lisible même sur une image chargée de texte */
+.journal-hero::after { background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.62) 42%, rgba(0, 0, 0, 0.12) 78%); }
+.journal-hero-text b { text-shadow: 0 1px 12px rgba(0, 0, 0, 0.45); }

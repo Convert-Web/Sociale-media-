@@ -6,6 +6,7 @@ const { fail, text, intParam, cleanWebsite } = require('../http');
 const { assertClean } = require('../contentFilter');
 const { single, saveImage, deleteUpload } = require('../uploads');
 const { authorOf, notify, retractNotification } = require('../social');
+const { removeAnnouncements } = require('../membership');
 
 const CATEGORIES = ['restaurant', 'hotel', 'bar', 'boutique', 'artisan', 'bienetre', 'services', 'voyage'];
 
@@ -115,6 +116,7 @@ module.exports = function placeRoutes(ctx) {
     await db.run('DELETE FROM notifications WHERE place_id = ?', row.id);
     await db.run('DELETE FROM places WHERE id = ?', row.id);
     if (row.photo) deleteUpload(ctx, row.photo);
+    for (const url of await removeAnnouncements(ctx, 'carnet', [row.id])) deleteUpload(ctx, url);
     res.json({ ok: true });
   });
 

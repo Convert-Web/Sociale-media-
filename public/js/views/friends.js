@@ -107,6 +107,7 @@ export function friendsView(ctx) {
       await fn();
       if (okMessage) toast(okMessage);
       await load();
+      loadSuggestions();
       refreshCounters();
     } catch (err) {
       toast(err.message, 'error');
@@ -136,22 +137,24 @@ export function friendsView(ctx) {
     body.replaceChildren(rows.length ? h('div', { class: 'explore-list' }, rows) : empty, suggestions);
   }
 
-  // « Vous connaissez peut-être »
+  // « Vous connaissez peut-être » : ni les amis, ni les demandes en cours ; rechargé après chaque action
   const suggestions = h('div');
-  api
-    .get('/api/suggestions?limit=6')
-    .then(({ users }) => {
-      if (!users.length) return;
-      suggestions.replaceChildren(
-        h('div', { class: 'section-title' }, 'Vous connaissez peut-être'),
-        h(
-          'div',
-          { class: 'explore-list' },
-          users.map((u) => personRow(u, [friendButton({ ...u, friendStatus: 'none' }, { size: 'btn-sm', onChange: () => load() })])),
-        ),
-      );
-    })
-    .catch(() => {});
+  const loadSuggestions = () =>
+    api
+      .get('/api/suggestions?limit=6&exclude=friends')
+      .then(({ users }) => {
+        if (!users.length) return suggestions.replaceChildren();
+        suggestions.replaceChildren(
+          h('div', { class: 'section-title' }, 'Vous connaissez peut-être'),
+          h(
+            'div',
+            { class: 'explore-list' },
+            users.map((u) => personRow(u, [friendButton({ ...u, friendStatus: 'none' }, { size: 'btn-sm', onChange: () => load().then(loadSuggestions) })])),
+          ),
+        );
+      })
+      .catch(() => {});
+  loadSuggestions();
 
   for (const [k, t] of Object.entries(tabs)) {
     t.addEventListener('click', () => {

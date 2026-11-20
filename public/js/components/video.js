@@ -415,11 +415,14 @@ export function videoPlayer(v, { onOpen, onDouble } = {}) {
 // ---------------------------------------------------------------------------
 let reelsCache = null;
 let reelsLoading = null;
+let reelsGen = 0; // un chargement lancé avant une publication ne remplace pas la liste plus récente
 export function prefetchReels() {
   if (reelsLoading) return reelsLoading;
+  const gen = reelsGen;
   reelsLoading = api
     .get('/api/videos/feed')
     .then((d) => {
+      if (gen !== reelsGen) return reelsCache;
       reelsCache = { posts: d.posts, hasMore: d.hasMore, at: Date.now() };
       // Dès l'entrée dans l'application : les premières vidéos en entier, une à une
       warmPosts(d.posts, { videos: 6 });
@@ -431,7 +434,15 @@ export function prefetchReels() {
     });
   return reelsLoading;
 }
-export const cachedReels = () => (reelsCache && Date.now() - reelsCache.at < 3 * 60 * 1000 ? reelsCache : null);
+// Liste gardée 2 minutes ; une liste vide n'est jamais réutilisée (une vidéo vient peut-être d'arriver)
+export const cachedReels = () => (reelsCache?.posts.length && Date.now() - reelsCache.at < 2 * 60 * 1000 ? reelsCache : null);
+// Une vidéo vient d'être publiée : la liste est rechargée pour l'inclure
+export function forgetReels() {
+  reelsCache = null;
+  reelsGen += 1;
+  reelsLoading = null;
+  prefetchReels();
+}
 export const rememberReels = (posts, hasMore) => {
   reelsCache = { posts, hasMore, at: Date.now() };
 };

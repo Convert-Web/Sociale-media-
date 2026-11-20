@@ -161,7 +161,18 @@ const PLACEHOLDERS = {
   mediatorUrl: 'https://…',
 };
 
-const kpi = (label, value, gold, sub) => h('div', { class: `kpi${gold ? ' gold' : ''}` }, h('small', null, label), h('b', { class: gold ? 'accent' : '' }, value), sub ? h('span', { class: 'muted small' }, sub) : null);
+const kpi = (label, value, gold, sub) => h('div', { class: `kpi${gold ? ' gold' : ''}` }, h('small', null, label), h('b', { class: gold ? 'accent' : '', dataset: { kpi: label } }, value), sub ? h('span', { class: 'muted small' }, sub) : null);
+// Après une admission : les compteurs du haut se mettent à jour sans recharger la page
+async function refreshKpis() {
+  try {
+    const { totals, config } = await api.get('/api/admin/overview');
+    const set = (label, v) => { const el = document.querySelector(`[data-kpi="${label}"]`); if (el) el.textContent = v; };
+    set('Membres', num(totals.members));
+    if (!config.paidEntry) set('Places de Fondateur', num(config.foundersLeft));
+  } catch {
+    /* les compteurs se mettront à jour au prochain affichage */
+  }
+}
 
 // Audience : mesure anonyme, sans cookie, faite par AURUM
 const PAGE_NAMES = {
@@ -358,6 +369,7 @@ async function admissionsSection(mode) {
               : `Admission acceptée : ${a.displayName} a reçu le lien pour régler son droit d’entrée.`,
         );
         card.remove();
+        refreshKpis();
       } catch (err) {
         toast(err.message, 'error');
       }

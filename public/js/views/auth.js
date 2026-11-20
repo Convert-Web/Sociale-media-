@@ -132,7 +132,9 @@ export function signupView(ctx) {
   const shownAt = Date.now();
 
   // Entrée sur invitation : code d'un parrain (lien d'invitation) ou demande d'admission
-  const onInvitation = store.config.admission === 'invitation';
+  // Le tout premier membre (la Direction) entre directement, sans invitation ni demande
+  const firstMember = !store.config.paidEntry && store.config.foundersLeft >= store.config.founderLimit;
+  const onInvitation = store.config.admission === 'invitation' && !firstMember;
   let code = (ctx.query.get('invitation') || rememberedInvitation()).toUpperCase();
   const inviteBox = h('div');
   const note = h('textarea', { class: 'textarea', rows: 3, maxlength: 500, placeholder: 'Votre activité, ce qui vous amène, qui vous connaissez au sein du cercle…' });
@@ -159,7 +161,10 @@ export function signupView(ctx) {
   paintEntry();
 
   displayName.addEventListener('input', () => {
-    if (!usernameTouched) username.value = slugify(displayName.value);
+    if (usernameTouched) return;
+    username.value = slugify(displayName.value);
+    // Rempli automatiquement : on revérifie le champ (un ancien « obligatoire » disparaît)
+    username.dispatchEvent(new Event('change', { bubbles: true }));
   });
   username.addEventListener('input', () => {
     usernameTouched = true;

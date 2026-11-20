@@ -720,7 +720,8 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
           sendInBackground({
             file: v.file,
             info: v.info,
-            title: body.trim() ? body.trim().slice(0, 40) : 'Votre vidéo',
+            // Coupé par caractère entier (jamais au milieu d'un emoji)
+            title: body.trim() ? Array.from(body.trim()).slice(0, 40).join('') : 'Votre vidéo',
             finish: async ({ id }) => {
               const fd = new FormData();
               fd.append('body', body);

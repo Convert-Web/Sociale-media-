@@ -28,7 +28,9 @@ export function messageFor(el) {
 let seq = 0;
 function show(el, msg) {
   const host = el.closest('.field') || el.parentElement;
-  let box = host.querySelector(':scope > .field-error');
+  // Message déjà affiché pour ce champ (une case à cocher le place après son libellé, hors du bloc)
+  const known = el.getAttribute('aria-describedby');
+  let box = (known && document.getElementById(known)) || host.querySelector(':scope > .field-error');
   if (!box) {
     box = document.createElement('small');
     box.className = 'field-error';

@@ -6,6 +6,7 @@ const { fail, text, intParam } = require('../http');
 const { assertClean } = require('../contentFilter');
 const { single, saveImage, deleteUpload } = require('../uploads');
 const { authorOf, notify, retractNotification } = require('../social');
+const { removeAnnouncements } = require('../membership');
 const { sendPush } = require('../push');
 const { announceEvent } = require('../bots');
 const { seesEarly, notifyFounders, releaseDue, HOUR } = require('../founders');
@@ -159,6 +160,7 @@ module.exports = function eventRoutes(ctx) {
     await db.run('DELETE FROM notifications WHERE event_id = ?', row.id);
     await db.run('DELETE FROM events WHERE id = ?', row.id);
     if (row.cover) deleteUpload(ctx, row.cover);
+    for (const url of await removeAnnouncements(ctx, 'agenda', [row.id])) deleteUpload(ctx, url);
     res.json({ ok: true });
   });
 

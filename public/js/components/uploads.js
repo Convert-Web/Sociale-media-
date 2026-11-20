@@ -3,7 +3,7 @@
 // l'écran montre l'avancement ; un toucher ouvre la vidéo une fois publiée, ou relance l'envoi.
 import { h, icon, toast } from '../dom.js';
 import { navigate } from '../router.js';
-import { uploadVideo } from './video.js';
+import { uploadVideo, forgetReels } from './video.js';
 
 const jobs = new Set();
 let dock = null;
@@ -115,6 +115,7 @@ function run(j) {
       const res = await j.finish(video);
       j.state = 'done';
       j.href = res?.href || null;
+      forgetReels(); // la nouvelle vidéo apparaît tout de suite dans le coin Vidéos
       paint();
       toast(res?.message || 'Votre vidéo est en ligne.');
       setTimeout(() => jobs.has(j) && j.state === 'done' && remove(j), 8000);

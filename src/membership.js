@@ -113,6 +113,10 @@ async function deleteUser(ctx, userId) {
   for (const g of await ctx.db.all('SELECT id FROM groupes WHERE owner_id = ?', userId)) {
     media.push(...(await deleteGroup(ctx, g.id)));
   }
+  // Ses adresses et ses événements disparaissent aussi : leurs annonces automatiques avec eux
+  const placeIds = (await ctx.db.all('SELECT id FROM places WHERE author_id = ?', userId)).map((r) => r.id);
+  const eventIds = (await ctx.db.all('SELECT id FROM events WHERE owner_id = ?', userId)).map((r) => r.id);
+  media.push(...(await removeAnnouncements(ctx, 'carnet', placeIds)), ...(await removeAnnouncements(ctx, 'agenda', eventIds)));
   await ctx.db.transaction(async (t) => {
     const user = await t.get('SELECT avatar, cover FROM users WHERE id = ?', userId);
     if (!user) return;
@@ -179,4 +183,15 @@ async function deletePost(ctx, postId) {
   });
 }
 
-module.exports = { admitMember, grantMembership, deleteUser, deletePost, deleteGroup };
+// Une adresse du carnet ou un événement disparaît : l'annonce automatique (AURUM, Le Concierge) qui y
+// menait disparaît aussi — aucun lien vers une page introuvable ne reste dans le Salon.
+async function removeAnnouncements(ctx, kind, ids) {
+  const media = [];
+  for (const id of ids) {
+    const rows = await ctx.db.all('SELECT p.id FROM posts p JOIN users u ON u.id = p.user_id WHERE u.is_bot = 1 AND p.body LIKE ?', `%/${kind}/${id}`);
+    for (const r of rows) media.push(...(await deletePost(ctx, r.id)));
+  }
+  return media;
+}
+
+module.exports = { admitMember, grantMembership, deleteUser, deletePost, deleteGroup, removeAnnouncements };

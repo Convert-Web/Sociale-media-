@@ -59,7 +59,7 @@ export function exploreView(ctx) {
       return;
     }
     if (users.length) results.append(h('div', { class: 'section-title' }, 'Membres'), h('div', { class: 'explore-list' }, users.map((u) => userRow(u))));
-    if (posts.length) results.append(h('div', { class: 'section-title' }, 'Publications'), posts.map((p) => postCard(p)));
+    if (posts.length) results.append(h('div', { class: 'section-title' }, 'Publications'), ...posts.map((p) => postCard(p)));
   }
 
   const run = () => {

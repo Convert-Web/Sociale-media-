@@ -212,14 +212,19 @@ module.exports = function userRoutes(ctx) {
   r.get('/suggestions', async (req, res) => {
     const limit = Math.min(intParam(req.query.limit) || 5, 30);
     const me = req.user.id;
+    // Page Amis : ni les amis, ni les demandes en cours (dans un sens ou dans l'autre)
+    const friendsMode = req.query.exclude === 'friends';
     const rows = await db.all(
       `${USER_LIST},
          (SELECT COUNT(*) FROM follows f WHERE f.followee_id = u.id) AS followers
        FROM users u
        WHERE u.paid_at IS NOT NULL AND u.is_bot = 0 AND u.id != ? AND ${USER_NOT_BLOCKED}
-         AND u.id NOT IN (SELECT followee_id FROM follows WHERE follower_id = ?)
+         AND ${friendsMode
+           ? `u.id NOT IN (SELECT addressee_id FROM friend_requests WHERE requester_id = ? AND status IN ('pending', 'accepted')
+                           UNION SELECT requester_id FROM friend_requests WHERE addressee_id = ? AND status IN ('pending', 'accepted'))`
+           : 'u.id NOT IN (SELECT followee_id FROM follows WHERE follower_id = ?)'}
        ORDER BY followers DESC, RANDOM() LIMIT ?`,
-      me, me, me, me, me, limit,
+      ...(friendsMode ? [me, me, me, me, me, me, limit] : [me, me, me, me, me, limit]),
     );
     res.json({ users: rows.map((row) => listUser(row, req.user)) });
   });

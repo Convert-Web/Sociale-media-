@@ -59,6 +59,7 @@ export function cookieBanner(force = false) {
   const close = (choice) => {
     write(choice);
     banner?.classList.add('out');
+    document.documentElement.classList.remove('cookie-open');
     setTimeout(() => {
       banner?.remove();
       banner = null;
@@ -82,6 +83,8 @@ export function cookieBanner(force = false) {
     ),
   );
   document.body.append(banner);
+  // Tant que le bandeau est affiché, la page peut défiler au-dessus de lui (boutons jamais cachés)
+  document.documentElement.classList.add('cookie-open');
 }
 
 // « Gérer mon choix » (politique de confidentialité)
