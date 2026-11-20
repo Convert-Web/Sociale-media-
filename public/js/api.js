@@ -35,7 +35,19 @@ export async function fromResponse(promise) {
   return handle(res);
 }
 
+// Version annoncée par le serveur à chaque réponse : quand elle change, l'application le signale
+// (js/update.js affiche alors le bouton « Mettre à jour »)
+let serverVersion = null;
+function watchVersion(res) {
+  const v = res.headers.get('x-aurum-version');
+  if (!v || v === serverVersion) return;
+  const first = serverVersion === null;
+  serverVersion = v;
+  if (!first) window.dispatchEvent(new CustomEvent('aurum:version', { detail: v }));
+}
+
 async function handle(res) {
+  watchVersion(res);
   const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null;
   if (!res.ok) {
     const err = new ApiError(res.status, data?.error || 'Une erreur est survenue.', data?.code);

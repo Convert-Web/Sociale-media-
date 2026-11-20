@@ -2,14 +2,14 @@
 // instantanée) : quand une nouvelle version est en ligne, un bouton bleu clair « Mettre à jour »
 // apparaît. Un toucher remplace les fichiers gardés par ceux de la nouvelle version et relance
 // l'application, à l'endroit où l'on était.
-// Vérification : au démarrage, en revenant sur l'application, au retour du réseau, et toutes les
-// 5 minutes tant que l'application est ouverte.
+// Vérification : au démarrage, à chaque retour dans l'application, au retour du réseau, toutes les
+// 2 minutes tant qu'elle est ouverte, et aussitôt qu'une réponse du serveur annonce une autre version.
 import { h, icon, toast } from './dom.js';
 import { store } from './store.js';
 import { uploading } from './components/uploads.js';
 
 const CACHE = 'aurum-app'; // même nom que dans sw.js
-const EVERY = 5 * 60 * 1000;
+const EVERY = 2 * 60 * 1000;
 const AGAIN_AFTER = 30 * 60 * 1000; // « Plus tard » : le bouton revient au bout de 30 minutes
 
 let started = false;
@@ -108,17 +108,36 @@ export async function applyUpdate() {
   location.reload();
 }
 
+// Le service worker vérifie aussi sa propre nouvelle version (au plus toutes les 10 minutes)
+let swCheckedAt = 0;
+function refreshServiceWorker() {
+  if (Date.now() - swCheckedAt < 10 * 60 * 1000) return;
+  swCheckedAt = Date.now();
+  navigator.serviceWorker?.getRegistration().then((reg) => reg?.update()).catch(() => {});
+}
+
 // Démarrage : appelé une fois l'application lancée
 export function startUpdateChecks() {
   if (started) return;
   started = true;
   startVersion = store.config?.version || null;
+  const soon = (guard = 15 * 1000) => {
+    if (document.visibilityState !== 'visible' || Date.now() - lastCheck < guard) return;
+    checkForUpdate();
+    refreshServiceWorker();
+  };
   setTimeout(() => checkForUpdate(), 2500);
-  setInterval(() => {
-    if (document.visibilityState === 'visible') checkForUpdate();
-  }, EVERY);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && Date.now() - lastCheck > 60 * 1000) checkForUpdate();
-  });
+  setInterval(() => soon(0), EVERY);
+  // Retour dans l'application (iPhone : l'application reste en mémoire, elle n'est pas relancée)
+  document.addEventListener('visibilitychange', () => soon());
+  addEventListener('pageshow', () => soon());
+  addEventListener('focus', () => soon());
   addEventListener('online', () => setTimeout(() => checkForUpdate(), 1500));
+  // Le serveur annonce une autre version dans une réponse ordinaire : on vérifie tout de suite
+  addEventListener('aurum:version', () => {
+    lastCheck = 0;
+    checkForUpdate();
+    swCheckedAt = 0;
+    refreshServiceWorker();
+  });
 }
