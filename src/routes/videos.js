@@ -13,23 +13,58 @@ module.exports = function videoRoutes(ctx) {
   r.use('/videos', requireMember);
 
   // Fil des vidéos (lecture plein écran, glisser pour la suivante)
+  // « Pour toi » : d'abord les vidéos pas encore vues (les plus récentes en tête), puis celles déjà
+  // vues et les siennes — on ne retombe pas sur la même vidéo tant qu'il en reste de nouvelles.
+  // Pas d'algorithme d'influence : l'ordre reste chronologique dans chaque partie.
+  // « Abonnements » : seulement les membres suivis (et soi-même), du plus récent au plus ancien.
+  // Suite : ?cursor=u123 (vidéos non vues avant 123) ou s123 (déjà vues avant 123) ; ?before=123 (ancien).
   r.get('/videos/feed', async (req, res) => {
-    const before = intParam(req.query.before);
-    if (!before) await V.purgeExpired(ctx);
     const limit = 8;
-    const rows = await db.all(
-      `${POST_SELECT} WHERE p.video_id IS NOT NULL AND p.created_at > ? AND (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${VISIBLE_POST}
-       ORDER BY p.id DESC LIMIT ?`,
-      req.user.id, Date.now() - config.videoTtlHours * 3600 * 1000, before, before, limit,
-    );
-    res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)), hasMore: rows.length === limit });
+    const since = Date.now() - config.videoTtlHours * 3600 * 1000;
+    const base = `${POST_SELECT} WHERE p.video_id IS NOT NULL AND p.created_at > ? AND (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${VISIBLE_POST}`;
+    const page = async (extra, before, n) =>
+      (await db.all(`${base} ${extra} ORDER BY p.id DESC LIMIT ?`, req.user.id, since, before, before, n));
+    const send = (rows, cursor, hasMore) =>
+      res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)), hasMore, cursor: hasMore ? cursor : null });
+    const legacy = intParam(req.query.before);
+    const m = /^([us])(\d{1,12})?$/.exec(String(req.query.cursor || ''));
+    if (!legacy && !m) await V.purgeExpired(ctx);
+
+    if (req.query.scope === 'following' || (legacy && !m)) {
+      const following = req.query.scope === 'following'
+        ? 'AND (p.user_id = v.id OR p.user_id IN (SELECT followee_id FROM follows WHERE follower_id = v.id))'
+        : '';
+      const rows = await page(following, legacy || (m?.[2] ? Number(m[2]) : null), limit);
+      const last = rows[rows.length - 1]?.id;
+      return send(rows, `u${last}`, rows.length === limit);
+    }
+
+    const SEEN = 'EXISTS (SELECT 1 FROM video_views vv WHERE vv.post_id = p.id AND vv.user_id = v.id)';
+    const unseen = `AND p.user_id != v.id AND NOT ${SEEN}`;
+    const seen = `AND (p.user_id = v.id OR ${SEEN})`;
+    const phase = m?.[1] || 'u';
+    const before = m?.[2] ? Number(m[2]) : null;
+    if (phase === 'u') {
+      const rows = await page(unseen, before, limit);
+      if (rows.length < limit) {
+        // Plus de nouveautés : on enchaîne avec les vidéos déjà vues
+        const want = limit - rows.length;
+        const more = await page(seen, null, want);
+        return send(rows.concat(more), `s${more[more.length - 1]?.id}`, more.length === want);
+      }
+      return send(rows, `u${rows[rows.length - 1].id}`, true);
+    }
+    const rows = await page(seen, before, limit);
+    return send(rows, `s${rows[rows.length - 1]?.id}`, rows.length === limit);
   });
 
   // 1. Ouverture : taille, durée, format, et image d'aperçu
   r.post('/videos', single('poster'), async (req, res) => {
     const b = req.body || {};
     const mime = String(b.mime || '').split(';')[0].trim().toLowerCase();
-    const size = Number(b.size);
+    // Envoi pendant la préparation : la taille finale n'est connue qu'à la fin (estimation pour l'espace)
+    const streaming = ['1', 'true'].includes(String(b.streaming));
+    const size = streaming ? Math.min(Number(b.estimate) || V.MAX_BYTES / 2, V.MAX_BYTES) : Number(b.size);
     const duration = Number(b.duration);
     const width = Math.round(Number(b.width)) || null;
     const height = Math.round(Number(b.height)) || null;
@@ -50,11 +85,12 @@ module.exports = function videoRoutes(ctx) {
     }
     const poster = req.file ? await saveImage(ctx, req.file) : null;
     const id = V.newId();
-    const chunks = Math.ceil(size / V.CHUNK);
+    // En envoi pendant la préparation : 0 morceau annoncé, taille fixée à la finalisation
+    const chunks = streaming ? 0 : Math.ceil(size / V.CHUNK);
     await db.run(
       `INSERT INTO videos (id, owner_id, mime, size, duration, width, height, poster, chunks, complete, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
-      id, req.user.id, mime, size, duration, width, height, poster, chunks, Date.now(),
+      id, req.user.id, mime, streaming ? 0 : size, duration, width, height, poster, chunks, Date.now(),
     );
     res.status(201).json({ id, chunkSize: V.CHUNK, chunks });
   });
@@ -64,10 +100,17 @@ module.exports = function videoRoutes(ctx) {
     const idx = Number(req.params.idx);
     const v = await db.get('SELECT * FROM videos WHERE id = ? AND owner_id = ?', String(req.params.id), req.user.id);
     if (!v || v.complete) fail(404, 'Envoi introuvable.');
-    if (!Number.isInteger(idx) || idx < 0 || idx >= v.chunks) fail(400, 'Morceau invalide.');
-    const expected = idx === v.chunks - 1 ? v.size - idx * V.CHUNK : V.CHUNK;
+    const streaming = v.chunks === 0;
+    const max = streaming ? Math.ceil(V.MAX_BYTES / V.CHUNK) : v.chunks;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= max) fail(400, 'Morceau invalide.');
     const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-    if (data.length !== expected) fail(400, 'Morceau incomplet : renvoyez-le.');
+    if (streaming) {
+      // Taille vérifiée à la finalisation (tous les morceaux font 1 Mo, sauf le dernier)
+      if (data.length < 1 || data.length > V.CHUNK) fail(400, 'Morceau incomplet : renvoyez-le.');
+    } else {
+      const expected = idx === v.chunks - 1 ? v.size - idx * V.CHUNK : V.CHUNK;
+      if (data.length !== expected) fail(400, 'Morceau incomplet : renvoyez-le.');
+    }
     if (idx === 0 && !V.looksLikeVideo(data)) fail(400, 'Ce fichier n’est pas une vidéo lisible.');
     await db.run('INSERT OR REPLACE INTO video_chunks (video_id, idx, data) VALUES (?, ?, ?)', v.id, idx, data);
     res.json({ ok: true });
@@ -77,10 +120,25 @@ module.exports = function videoRoutes(ctx) {
   r.post('/videos/:id/complete', async (req, res) => {
     const v = await db.get('SELECT * FROM videos WHERE id = ? AND owner_id = ?', String(req.params.id), req.user.id);
     if (!v) fail(404, 'Envoi introuvable.');
-    const { n } = await db.get('SELECT COUNT(*) AS n FROM video_chunks WHERE video_id = ?', v.id);
-    if (n !== v.chunks) fail(409, 'Envoi incomplet : la vidéo n’a pas été entièrement reçue.');
-    await db.run('UPDATE videos SET complete = 1 WHERE id = ?', v.id);
-    res.json({ video: { id: v.id, url: V.videoUrl(v.id, V.TYPES[v.mime]), poster: v.poster, width: v.width, height: v.height, duration: v.duration } });
+    if (v.chunks === 0) {
+      // Envoi pendant la préparation : la taille finale arrive maintenant, tout est vérifié
+      const size = Number(req.body?.size);
+      if (!Number.isSafeInteger(size) || size < 1000) fail(400, 'Vidéo invalide.');
+      if (size > V.MAX_BYTES) fail(413, 'Vidéo trop lourde (40 Mo maximum).');
+      const chunks = Math.ceil(size / V.CHUNK);
+      const got = await db.get(
+        'SELECT COUNT(*) AS n, COALESCE(SUM(LENGTH(data)), 0) AS bytes, MAX(idx) AS last, SUM(CASE WHEN idx < ? AND LENGTH(data) != ? THEN 1 ELSE 0 END) AS short FROM video_chunks WHERE video_id = ?',
+        chunks - 1, V.CHUNK, v.id,
+      );
+      if (got.n !== chunks || got.bytes !== size || got.last !== chunks - 1 || got.short) fail(409, 'Envoi incomplet : la vidéo n’a pas été entièrement reçue.');
+      await db.run('UPDATE videos SET size = ?, chunks = ?, complete = 1 WHERE id = ?', size, chunks, v.id);
+      v.size = size;
+    } else {
+      const { n } = await db.get('SELECT COUNT(*) AS n FROM video_chunks WHERE video_id = ?', v.id);
+      if (n !== v.chunks) fail(409, 'Envoi incomplet : la vidéo n’a pas été entièrement reçue.');
+      await db.run('UPDATE videos SET complete = 1 WHERE id = ?', v.id);
+    }
+    res.json({ video: { id: v.id, url: V.videoUrl(v.id, V.TYPES[v.mime]), poster: v.poster, width: v.width, height: v.height, duration: v.duration, size: v.size } });
   });
 
   // Annuler un envoi (avant publication)

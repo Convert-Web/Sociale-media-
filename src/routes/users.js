@@ -99,6 +99,16 @@ module.exports = function userRoutes(ctx) {
     res.json({ photos: rows.map((row) => ({ postId: row.post_id, url: row.url })) });
   });
 
+  // Vidéos d'un membre (grille du profil, avec le nombre de vues), encore en ligne
+  r.get('/users/:username/videos', async (req, res) => {
+    const u = await findVisible(req.params.username, req.user);
+    const rows = await db.all(
+      `${POST_SELECT} WHERE p.user_id = ? AND p.video_id IS NOT NULL AND p.created_at > ? AND ${NOT_BLOCKED} AND ${PUBLIC_POST} ORDER BY p.id DESC LIMIT 60`,
+      req.user.id, u.id, Date.now() - ctx.config.videoTtlHours * 3600 * 1000,
+    );
+    res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)) });
+  });
+
   r.get('/users/:username/:relation', async (req, res) => {
     const { relation } = req.params;
     if (relation !== 'followers' && relation !== 'following') fail(404, 'Introuvable.');

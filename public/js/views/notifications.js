@@ -5,6 +5,8 @@ import { h, icon, avatar, clear, spinner, emptyState, timeAgo, infinite } from '
 const TYPES = {
   like: { icon: 'heart', text: 'a réagi à votre publication' },
   comment: { icon: 'comment', text: 'a commenté votre publication' },
+  reply: { icon: 'comment', text: 'a répondu à votre commentaire' },
+  comment_like: { icon: 'heart', text: 'a aimé votre commentaire' },
   follow: { icon: 'userPlus', text: 'a commencé à vous suivre' },
   mention: { icon: 'at', text: 'vous a mentionné' },
   friend_request: { icon: 'userPlus', text: 'vous a envoyé une demande d’ami' },

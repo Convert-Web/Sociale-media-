@@ -76,7 +76,8 @@ const POST_SELECT = `
          (SELECT l.reaction FROM likes l WHERE l.post_id = p.id AND l.user_id = v.id) AS my_reaction,
          EXISTS(SELECT 1 FROM bookmarks b WHERE b.post_id = p.id AND b.user_id = v.id) AS saved,
          EXISTS(SELECT 1 FROM follows fw WHERE fw.follower_id = v.id AND fw.followee_id = p.user_id) AS follows_author,
-         (SELECT GROUP_CONCAT(pm.url, '|') FROM post_media pm WHERE pm.post_id = p.id) AS media
+         (SELECT GROUP_CONCAT(pm.url, '|') FROM post_media pm WHERE pm.post_id = p.id) AS media,
+         CASE WHEN p.video_id IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM video_views vv WHERE vv.post_id = p.id) END AS view_count
   FROM (SELECT ? AS id) v
   CROSS JOIN posts p
   JOIN users u ON u.id = p.user_id
@@ -126,6 +127,7 @@ function serializePost(ctx, row, viewer) {
         size: row.v_size || null, // le téléphone télécharge la vidéo entière d'avance (morceaux de 1 Mo)
         // Éphémère : effacée à cette date (comme une story)
         expiresAt: require('./videos').expiresAt(ctx, row.created_at),
+        views: row.view_count || 0,
       }
     : null;
   const images = video ? [] : [row.image, ...(row.media ? row.media.split('|') : [])].filter(Boolean);
@@ -166,10 +168,13 @@ async function getPost(ctx, postId, viewer) {
   return row ? serializePost(ctx, row, viewer) : null;
 }
 
+// Le premier paramètre est l'identifiant du membre qui lit (ses J'aime sur les commentaires)
 const COMMENT_SELECT = `
-  SELECT c.id, c.post_id, c.body, c.created_at, c.user_id, c.flagged,
-         u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot
-  FROM comments c JOIN users u ON u.id = c.user_id`;
+  SELECT c.id, c.post_id, c.parent_id, c.body, c.created_at, c.user_id, c.flagged,
+         u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
+         (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = c.id) AS like_count,
+         EXISTS(SELECT 1 FROM comment_likes cl WHERE cl.comment_id = c.id AND cl.user_id = v.id) AS liked
+  FROM (SELECT ? AS id) v CROSS JOIN comments c JOIN users u ON u.id = c.user_id`;
 
 function serializeComment(ctx, row, viewer) {
   return {
@@ -181,6 +186,10 @@ function serializeComment(ctx, row, viewer) {
     author: authorOf(ctx, row),
     canDelete: row.user_id === viewer.id || Boolean(viewer.is_admin),
     flagged: flaggedLabels(row.flagged),
+    // Réponse à un autre commentaire (un seul niveau, comme TikTok) et J'aime
+    parentId: row.parent_id || null,
+    likeCount: row.like_count || 0,
+    liked: Boolean(row.liked),
   };
 }
 
@@ -226,7 +235,7 @@ async function pushCounters(ctx, userId) {
   if (ctx.hub.isOnline(userId)) ctx.hub.send(userId, 'counters', await counters(ctx, userId));
 }
 
-const DEDUP = ['like', 'follow', 'friend_request', 'friend_accept', 'group_invite', 'group_request', 'event_join', 'place_endorse', 'admission_request', 'invite_accepted'];
+const DEDUP = ['like', 'comment_like', 'follow', 'friend_request', 'friend_accept', 'group_invite', 'group_request', 'event_join', 'place_endorse', 'admission_request', 'invite_accepted'];
 
 async function notify(ctx, { userId, actorId, type, postId = null, groupId = null, eventId = null, placeId = null }) {
   if (!userId || userId === actorId) return;

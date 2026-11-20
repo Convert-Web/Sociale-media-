@@ -187,6 +187,22 @@ CREATE TABLE IF NOT EXISTS video_chunks (
   PRIMARY KEY (video_id, idx)
 );
 
+-- Version 16 (coin Vidéos façon TikTok) : vues des vidéos, J'aime sur les commentaires
+CREATE TABLE IF NOT EXISTS video_views (
+  post_id     INTEGER NOT NULL,
+  user_id     INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (post_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS comment_likes (
+  comment_id  INTEGER NOT NULL,
+  user_id     INTEGER NOT NULL,
+  created_at  INTEGER NOT NULL,
+  PRIMARY KEY (comment_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_comment_likes_user ON comment_likes(user_id);
+CREATE INDEX IF NOT EXISTS idx_video_views_user ON video_views(user_id);
+
 -- Version 11 : avant-premières de la Direction pour les Fondateurs
 CREATE TABLE IF NOT EXISTS previews (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -420,6 +436,7 @@ const COLUMNS = [
   ['events', 'announce_pending', 'INTEGER NOT NULL DEFAULT 0'],
   ['posts', 'video_id', 'TEXT'],
   ['stories', 'video_id', 'TEXT'],
+  ['comments', 'parent_id', 'INTEGER'],
 ];
 
 async function migrate(client) {
@@ -454,6 +471,7 @@ async function openDatabase({ url, authToken }) {
   await migrate(client);
   // Index qui portent sur des colonnes ajoutées par migration : créés après elle
   await client.execute('CREATE INDEX IF NOT EXISTS idx_posts_video ON posts(id) WHERE video_id IS NOT NULL');
+  await client.execute('CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_id) WHERE parent_id IS NOT NULL');
 
   const db = wrap(client);
   // Transaction : fn reçoit un objet { get, all, run } lié à la transaction.

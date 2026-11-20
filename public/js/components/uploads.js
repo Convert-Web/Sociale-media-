@@ -29,14 +29,13 @@ function label(j) {
   if (j.state === 'done') return 'Vidéo en ligne · Voir';
   if (j.state === 'error') return 'Envoi interrompu · Réessayer';
   if (j.step === 'publish') return 'Publication…';
-  if (j.step === 'upload') return `Envoi ${Math.round(j.p * 100)} %`;
-  return `Préparation ${Math.round(j.p * 100)} %`;
+  // La vidéo part pendant sa préparation : un seul pourcentage, de 0 à 100
+  return `Envoi ${Math.min(99, Math.round(overall(j) * 100))} %`;
 }
 function overall(j) {
   if (j.state === 'done') return 1;
-  if (j.step === 'publish') return 0.97;
-  if (j.step === 'upload') return 0.55 + 0.4 * j.p;
-  return 0.55 * j.p;
+  if (j.step === 'publish') return 0.99;
+  return Math.min(0.98, j.p || 0);
 }
 
 // Chaque pastille est créée une fois (avec son apparition), puis seulement mise à jour :
@@ -89,7 +88,7 @@ function tap(j) {
   } else if (j.state === 'error') {
     run(j); // relancé dans le geste : le son de la vidéo est conservé
   } else {
-    toast('Gardez simplement AURUM ouvert : la vidéo continue de se préparer.');
+    toast('Gardez simplement AURUM ouvert : la vidéo part pendant sa préparation.');
   }
 }
 
@@ -104,11 +103,12 @@ function run(j) {
   j.step = 'prepare';
   j.p = 0;
   paint();
+  j.memo = j.memo || {}; // vidéo déjà préparée : une reprise ne refait que l'envoi
   const p = uploadVideo(j.file, j.info, (step, ratio) => {
     j.step = step;
     j.p = ratio;
     paint();
-  })
+  }, j.memo)
     .then(async (video) => {
       j.step = 'publish';
       paint();

@@ -432,7 +432,7 @@ export function postCard(post, { expanded = false } = {}) {
     ),
     previewTag,
     ...(hasMedia ? [] : textParts),
-    post.video ? videoPlayer(post.video, { onOpen: () => openReels({ postId: post.id, url: post.video.url }), onDouble: doubleLike }) : hasMedia ? gallery(post.images, doubleLike, post.author?.displayName) : null,
+    post.video ? videoPlayer(post.video, { postId: post.id, onOpen: () => openReels({ postId: post.id, url: post.video.url, video: post.video }), onDouble: doubleLike }) : hasMedia ? gallery(post.images, doubleLike, post.author?.displayName) : null,
     post.journal ? journalLink(post.journal) : null,
     h('div', { class: 'post-actions' }, reactBtn, faces, commentBtn, shareBtn, h('span', { class: 'grow' }), saveBtn),
     ...(hasMedia ? textParts : []),
@@ -451,15 +451,17 @@ function append(el, kids) {
 // ---------------------------------------------------------------------------
 // Commentaires
 // ---------------------------------------------------------------------------
-function commentEl(c, onDelete) {
+function commentEl(c, onDelete, onReply) {
   const actions = [];
+  // Répondre (un seul niveau de réponses, comme TikTok)
+  if (onReply) actions.push(h('button', { class: 'comment-reply-btn', onclick: () => onReply(c) }, 'Répondre'));
   if (c.canDelete) {
     actions.push(
       h(
         'button',
         {
           onclick: async () => {
-            if (!(await confirmDialog('Supprimer le commentaire ?', 'Cette action est définitive.', 'Supprimer'))) return;
+            if (!(await confirmDialog('Supprimer le commentaire ?', 'Ses réponses seront aussi supprimées. Cette action est définitive.', 'Supprimer'))) return;
             try {
               await api.del(`/api/comments/${c.id}`);
               onDelete(c);
@@ -475,28 +477,83 @@ function commentEl(c, onDelete) {
   if (c.author.id !== store.user.id) {
     actions.push(h('button', { onclick: () => reportDialog('comment', c.id, 'Signaler le commentaire') }, 'Signaler'));
   }
+  // J'aime sur le commentaire : cœur à droite, avec le nombre
+  const likeCount = h('small', null, c.likeCount ? num(c.likeCount) : '');
+  const likeBtn = h('button', { type: 'button', class: `comment-like${c.liked ? ' on' : ''}`, 'aria-label': 'J’aime le commentaire', 'aria-pressed': String(Boolean(c.liked)) }, icon(c.liked ? 'heart-fill' : 'heart', 'icon-sm'), likeCount);
+  const paintLike = () => {
+    likeBtn.classList.toggle('on', c.liked);
+    likeBtn.setAttribute('aria-pressed', String(c.liked));
+    likeBtn.firstChild.replaceWith(icon(c.liked ? 'heart-fill' : 'heart', 'icon-sm'));
+    likeCount.textContent = c.likeCount ? num(c.likeCount) : '';
+  };
+  likeBtn.addEventListener('click', async () => {
+    const was = c.liked;
+    c.liked = !was;
+    c.likeCount = Math.max(0, (c.likeCount || 0) + (was ? -1 : 1));
+    paintLike();
+    if (!was) {
+      likeBtn.classList.remove('pop');
+      void likeBtn.offsetWidth;
+      likeBtn.classList.add('pop');
+    }
+    try {
+      const r = was ? await api.del(`/api/comments/${c.id}/like`) : await api.post(`/api/comments/${c.id}/like`);
+      c.likeCount = r.likeCount;
+      paintLike();
+    } catch (err) {
+      c.liked = was;
+      c.likeCount = Math.max(0, (c.likeCount || 0) + (was ? 1 : -1));
+      paintLike();
+      toast(err.message, 'error');
+    }
+  });
   const commentBody = h('div', { class: 'comment-body' }, richText(c.body));
   const commentTranslate = translateLink(c.body, c.lang, { show: ([t]) => commentBody.replaceChildren(richText(t)), hide: () => commentBody.replaceChildren(richText(c.body)) });
   return h(
     'div',
-    { class: 'comment', dataset: { id: c.id } },
+    { class: `comment${c.parentId ? ' is-reply' : ''}`, dataset: { id: c.id } },
     h('a', { href: `/@${c.author.username}` }, avatar(c.author, 'sm')),
     h(
       'div',
       { class: 'comment-main' },
       h(
         'div',
-        { class: 'comment-bubble' },
-        h('div', { class: 'post-head' }, h('div', { class: 'who' }, nameLine(c.author), memberChip(c.author))),
-        c.flagged ? sensitive(h('div', null, commentBody, commentTranslate), c.flagged, { mine: c.author.id === store.user.id }) : [commentBody, commentTranslate],
+        { class: 'comment-row' },
+        h(
+          'div',
+          { class: 'comment-bubble' },
+          h('div', { class: 'post-head' }, h('div', { class: 'who' }, nameLine(c.author), memberChip(c.author))),
+          c.flagged ? sensitive(h('div', null, commentBody, commentTranslate), c.flagged, { mine: c.author.id === store.user.id }) : [commentBody, commentTranslate],
+        ),
+        likeBtn,
       ),
       h('div', { class: 'comment-meta' }, h('span', { title: fullDate(c.createdAt) }, timeAgo(c.createdAt)), actions),
     ),
   );
 }
 
-// Commentaires d'une publication : liste + saisie. Utilisée sous la publication et dans la
-// feuille de commentaires des Vidéos (la saisie y reste en bas, au-dessus du clavier).
+// Réponses rangées sous leur commentaire ; au-delà de deux, « Afficher N réponses »
+function repliesHost(parentEl) {
+  let host = parentEl.querySelector(':scope > .comment-main > .comment-replies');
+  if (!host) {
+    host = h('div', { class: 'comment-replies' });
+    parentEl.querySelector(':scope > .comment-main').append(host);
+  }
+  return host;
+}
+function foldReplies(host) {
+  const replies = [...host.querySelectorAll(':scope > .comment')];
+  host.querySelector(':scope > .comment-more')?.remove();
+  if (replies.length <= 2) return replies.forEach((r) => (r.hidden = false));
+  replies.forEach((r, i) => (r.hidden = i >= 1));
+  const more = h('button', { type: 'button', class: 'comment-more' }, `Afficher ${replies.length - 1} réponses de plus`);
+  more.addEventListener('click', () => {
+    replies.forEach((r) => (r.hidden = false));
+    more.remove();
+  });
+  host.append(more);
+}
+
 export function commentsSection(post, onCount, { placement = 'above' } = {}) {
   const list = h('div', { class: 'comments' }, spinner());
   let count = post.commentCount;
@@ -509,10 +566,41 @@ export function commentsSection(post, onCount, { placement = 'above' } = {}) {
     if (!list.querySelector('.comment')) list.append(empty);
     else empty.remove();
   };
+  // Un commentaire supprimé emporte ses réponses
   const removeComment = (c) => {
-    list.querySelector(`[data-id="${c.id}"]`)?.remove();
-    onCount(--count);
+    const el = list.querySelector(`.comment[data-id="${c.id}"]`);
+    const gone = el ? 1 + el.querySelectorAll('.comment').length : 1;
+    el?.remove();
+    count = Math.max(0, count - gone);
+    onCount(count);
     paintEmpty();
+  };
+  // Réponse en cours : bandeau « Réponse à … » au-dessus de la saisie
+  let replyTo = null;
+  const replyBar = h('div', { class: 'comment-replying', hidden: true });
+  const setReply = (c) => {
+    replyTo = c;
+    if (!c) {
+      replyBar.hidden = true;
+      replyBar.replaceChildren();
+      return;
+    }
+    replyBar.hidden = false;
+    replyBar.replaceChildren(
+      h('span', null, 'Réponse à ', h('b', null, c.author.displayName)),
+      h('button', { type: 'button', 'aria-label': 'Annuler la réponse', onclick: () => setReply(null) }, icon('x', 'icon-xs')),
+    );
+    if (!ta.value.trim()) {
+      ta.value = c.author.id === store.user.id ? '' : `@${c.author.username} `;
+      ta.dispatchEvent(new Event('input'));
+    }
+    ta.focus();
+  };
+  const place = (c, el) => {
+    const parent = c.parentId && list.querySelector(`.comment[data-id="${c.parentId}"]:not(.is-reply)`);
+    if (parent) repliesHost(parent).append(el);
+    else list.append(el);
+    return parent;
   };
   const form = h(
     'form',
@@ -524,11 +612,12 @@ export function commentsSection(post, onCount, { placement = 'above' } = {}) {
         if (!body) return;
         send.disabled = true;
         try {
-          const { comment } = await api.post(`/api/posts/${post.id}/comments`, { body });
+          const { comment } = await api.post(`/api/posts/${post.id}/comments`, { body, ...(replyTo ? { parentId: replyTo.id } : {}) });
           empty.remove();
-          const el = commentEl(comment, removeComment);
+          const el = commentEl(comment, removeComment, setReply);
           el.classList.add('comment-new');
-          list.append(el);
+          place(comment, el);
+          setReply(null);
           el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
           flaggedNotice(comment);
           onCount(++count);
@@ -541,6 +630,7 @@ export function commentsSection(post, onCount, { placement = 'above' } = {}) {
         }
       },
     },
+    replyBar,
     avatar(store.user, 'sm'),
     ta,
     send,
@@ -557,7 +647,12 @@ export function commentsSection(post, onCount, { placement = 'above' } = {}) {
     .get(`/api/posts/${post.id}/comments`)
     .then(({ comments }) => {
       clear(list);
-      for (const c of comments) list.append(commentEl(c, removeComment));
+      const hosts = new Set();
+      for (const c of comments) {
+        const parent = place(c, commentEl(c, removeComment, setReply));
+        if (parent) hosts.add(repliesHost(parent));
+      }
+      hosts.forEach(foldReplies);
       paintEmpty();
       if (comments.length !== count) onCount((count = comments.length));
     })
@@ -614,11 +709,13 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
     ta.placeholder = early ? 'Annonce réservée aux Fondateurs, puis publiée pour tous…' : placeholder || 'Que souhaitez-vous partager ?';
   });
 
+  // Vidéo en cours de lecture : on ne peut pas publier (sinon le texte partirait seul, sans la vidéo)
+  let readingVideo = false;
   const update = () => {
     const len = ta.value.length;
     counter.textContent = len > MAX_POST - 300 ? `${MAX_POST - len}` : '';
     counter.classList.toggle('warn', len > MAX_POST - 50);
-    submit.disabled = !ta.value.trim() && !files.length && !video;
+    submit.disabled = readingVideo || (!ta.value.trim() && !files.length && !video);
     addBtn.disabled = files.length >= MAX_PHOTOS || Boolean(video);
     videoBtn.disabled = files.length > 0 || Boolean(video);
   };
@@ -691,6 +788,8 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
     if (!file) return;
     if (!isVideoFile(file)) return toast('Format de vidéo non pris en charge.', 'error');
     showProgress('Lecture de la vidéo…', 0.05);
+    readingVideo = true;
+    update();
     try {
       const info = await readVideoInfo(file);
       if (!(info.duration > 0)) throw new Error('Vidéo illisible sur cet appareil.');
@@ -700,6 +799,8 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
     } catch (err) {
       toast(err.message, 'error');
     }
+    readingVideo = false;
+    update();
     progress.hidden = true;
   });
 
@@ -710,7 +811,7 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
       class: 'composer',
       onsubmit: async (e) => {
         e.preventDefault();
-        if (submit.disabled) return;
+        if (submit.disabled || readingVideo) return;
         if (early && video) return toast('Les avant-premières acceptent du texte et des photos, pas encore de vidéo.', 'error');
         // Vidéo : préparation et envoi en arrière-plan (lancés dans le geste, pour garder le son).
         // La fenêtre se ferme tout de suite : on continue de naviguer, une pastille suit l'envoi.

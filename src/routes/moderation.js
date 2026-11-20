@@ -2,7 +2,7 @@
 const express = require('express');
 const { requireMember, requireAdmin } = require('../auth');
 const { fail, text, intParam } = require('../http');
-const { deletePost, deleteUser } = require('../membership');
+const { deletePost, deleteUser, deleteComment } = require('../membership');
 const { deleteUpload } = require('../uploads');
 
 const REASONS = {
@@ -110,7 +110,7 @@ module.exports = function moderationRoutes(ctx) {
           for (const url of [post.image, ...media]) deleteUpload(ctx, url);
         }
       } else if (report.target_type === 'comment') {
-        await db.run('DELETE FROM comments WHERE id = ?', report.target_id);
+        await deleteComment(ctx, report.target_id);
       } else if (report.target_type === 'message') {
         await db.run('DELETE FROM messages WHERE id = ?', report.target_id);
       } else {

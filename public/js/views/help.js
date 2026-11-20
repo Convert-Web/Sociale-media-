@@ -26,6 +26,10 @@ const SECTIONS = [
       ['Comment aimer une vidéo ?', 'Touchez deux fois la vidéo, ou touchez le cœur à droite.'],
       ['Comment commenter sans quitter la vidéo ?', 'Touchez la bulle à droite : les commentaires s’ouvrent par-dessus la vidéo, qui continue. Glissez la feuille vers le bas pour la fermer.'],
       ['Le son ne marche pas', 'Touchez l’icône du haut-parleur en haut à droite. Vérifiez aussi que votre téléphone n’est pas en mode silencieux.'],
+      ['Comment avancer ou revenir dans une vidéo ?', 'Touchez ou faites glisser la fine barre tout en bas de la vidéo : le temps s’affiche en grand pendant que vous glissez.'],
+      ['Comment changer la vitesse ou masquer une vidéo ?', 'Restez appuyé sur la vidéo : vitesse (×0,5 à ×2), « Pas intéressé », masquer les vidéos d’un membre, garder, copier le lien ou signaler.'],
+      ['« Pour toi » et « Abonnements », c’est quoi ?', '« Pour toi » montre tout le cercle, en commençant par les vidéos que vous n’avez pas encore vues. « Abonnements » montre seulement les membres que vous suivez. Pas d’algorithme : l’ordre reste celui des publications.'],
+      ['Qui voit le nombre de vues ?', 'Chaque membre qui regarde une vidéo plus de deux secondes compte pour une vue (une seule fois). Vous voyez les vues de vos vidéos sur la vidéo et dans l’onglet « Vidéos » de votre profil.'],
     ],
   },
   {

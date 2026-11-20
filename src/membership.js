@@ -153,6 +153,12 @@ async function deleteUser(ctx, userId) {
     await t.run('UPDATE users SET invited_by = NULL WHERE invited_by = ?', userId);
     await t.run('DELETE FROM journal_items WHERE author_id = ?', userId);
     await t.run(`DELETE FROM likes WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
+    await t.run(
+      `DELETE FROM comment_likes WHERE user_id = ? OR comment_id IN (SELECT id FROM comments WHERE user_id = ? OR post_id IN (${mine}) OR parent_id IN (SELECT id FROM comments WHERE user_id = ?))`,
+      userId, userId, userId, userId,
+    );
+    await t.run(`DELETE FROM video_views WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
+    await t.run('DELETE FROM comments WHERE parent_id IN (SELECT id FROM comments WHERE user_id = ?)', userId);
     await t.run(`DELETE FROM comments WHERE user_id = ? OR post_id IN (${mine})`, userId, userId);
     await t.run(`DELETE FROM notifications WHERE user_id = ? OR actor_id = ? OR post_id IN (${mine})`, userId, userId, userId);
     await t.run('DELETE FROM posts WHERE user_id = ?', userId);
@@ -176,10 +182,23 @@ async function deletePost(ctx, postId) {
     await t.run('DELETE FROM bookmarks WHERE post_id = ?', postId);
     await t.run("DELETE FROM reports WHERE target_type = 'post' AND target_id = ?", postId);
     await t.run('DELETE FROM likes WHERE post_id = ?', postId);
+    await t.run('DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id = ?)', postId);
+    await t.run('DELETE FROM video_views WHERE post_id = ?', postId);
     await t.run('DELETE FROM comments WHERE post_id = ?', postId);
     await t.run('DELETE FROM notifications WHERE post_id = ?', postId);
     await t.run('DELETE FROM posts WHERE id = ?', postId);
     return media;
+  });
+}
+
+// Un commentaire disparaît avec ses réponses et leurs J'aime
+async function deleteComment(ctx, commentId) {
+  await ctx.db.transaction(async (t) => {
+    const ids = [commentId, ...(await t.all('SELECT id FROM comments WHERE parent_id = ?', commentId)).map((r) => r.id)];
+    const marks = ids.map(() => '?').join(',');
+    await t.run(`DELETE FROM comment_likes WHERE comment_id IN (${marks})`, ...ids);
+    await t.run(`DELETE FROM reports WHERE target_type = 'comment' AND target_id IN (${marks})`, ...ids);
+    await t.run(`DELETE FROM comments WHERE id IN (${marks})`, ...ids);
   });
 }
 
@@ -194,4 +213,4 @@ async function removeAnnouncements(ctx, kind, ids) {
   return media;
 }
 
-module.exports = { admitMember, grantMembership, deleteUser, deletePost, deleteGroup, removeAnnouncements };
+module.exports = { admitMember, grantMembership, deleteUser, deletePost, deleteGroup, removeAnnouncements, deleteComment };

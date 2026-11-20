@@ -2,7 +2,7 @@
 // se téléchargent en coulisse (priorité basse, sans gêner l'écran affiché). Les photos restent
 // gardées par le téléphone (un an) ; les vidéos sont gardées en mémoire, prêtes à jouer.
 // Rien n'est préchargé en mode « économie de données » ou sur une connexion très lente.
-import { preloadVideo } from './components/video.js';
+import { preloadVideo, preloadStart, canProgressive, PRIO } from './components/video.js';
 
 const thrifty = () => {
   const c = navigator.connection;
@@ -43,10 +43,9 @@ export function warmImages(urls) {
   pump();
 }
 
-// Vidéos : téléchargées en entier, une après l'autre (la première est prête en premier)
+// Vidéos : téléchargées en entier, une après l'autre, après tout ce qui est plus urgent
 const seenVideos = new Set();
-let chain = Promise.resolve();
-export function warmVideos(videos, max = 6) {
+export function warmVideos(videos, max = 3) {
   if (thrifty()) return;
   let n = 0;
   for (const v of videos) {
@@ -54,7 +53,9 @@ export function warmVideos(videos, max = 6) {
     if (!v?.url || (v.expiresAt && v.expiresAt <= Date.now()) || seenVideos.has(v.url)) continue;
     seenVideos.add(v.url);
     n++;
-    chain = chain.then(() => preloadVideo(v)).catch(() => {});
+    // Lecture progressive : le début suffit pour démarrer aussitôt (la première en entier)
+    if (canProgressive() && n > 1) preloadStart(v, PRIO.warm);
+    else preloadVideo(v, { prio: PRIO.warm });
   }
 }
 

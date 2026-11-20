@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const { requireMember } = require('../auth');
-const { deletePost } = require('../membership');
+const { deletePost, deleteComment } = require('../membership');
 const { fail, text, intParam } = require('../http');
 const { throttle } = require('../antispam');
 const { moderate, autoReport } = require('../contentFilter');
@@ -214,7 +214,7 @@ module.exports = function postRoutes(ctx) {
        WHERE c.post_id = ?
          AND c.user_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)
        ORDER BY c.id ASC LIMIT 500`,
-      post.id, req.user.id, req.user.id,
+      req.user.id, post.id, req.user.id, req.user.id,
     );
     res.json({ comments: rows.map((row) => serializeComment(ctx, row, req.user)) });
   });
@@ -224,14 +224,23 @@ module.exports = function postRoutes(ctx) {
     const post = await loadPost(req.params.id, req.user);
     const body = text(req.body.body, { field: 'Commentaire', max: 1000, required: true });
     const flagged = moderate(body);
+    // Réponse à un commentaire : rattachée au commentaire de premier niveau (un seul niveau)
+    let parent = null;
+    const parentId = intParam(req.body.parentId);
+    if (parentId) {
+      parent = await db.get('SELECT id, user_id, parent_id, post_id FROM comments WHERE id = ?', parentId);
+      if (!parent || parent.post_id !== post.id) fail(404, 'Ce commentaire n’existe plus.');
+    }
+    const top = parent ? parent.parent_id || parent.id : null;
     const { lastInsertRowid } = await db.run(
-      'INSERT INTO comments (post_id, user_id, body, flagged, created_at) VALUES (?, ?, ?, ?, ?)',
-      post.id, req.user.id, body, flagged, Date.now(),
+      'INSERT INTO comments (post_id, user_id, body, flagged, created_at, parent_id) VALUES (?, ?, ?, ?, ?, ?)',
+      post.id, req.user.id, body, flagged, Date.now(), top,
     );
     await autoReport(ctx, 'comment', lastInsertRowid, flagged);
     await notify(ctx, { userId: post.user_id, actorId: req.user.id, type: 'comment', postId: post.id });
+    if (parent && parent.user_id !== post.user_id) await notify(ctx, { userId: parent.user_id, actorId: req.user.id, type: 'reply', postId: post.id });
     await notifyMentions(ctx, body, req.user.id, post.id);
-    const row = await db.get(`${COMMENT_SELECT} WHERE c.id = ?`, lastInsertRowid);
+    const row = await db.get(`${COMMENT_SELECT} WHERE c.id = ?`, req.user.id, lastInsertRowid);
     res.status(201).json({ comment: serializeComment(ctx, row, req.user) });
   });
 
@@ -240,8 +249,39 @@ module.exports = function postRoutes(ctx) {
     const comment = id && (await db.get('SELECT * FROM comments WHERE id = ?', id));
     if (!comment) fail(404, 'Commentaire introuvable.');
     if (comment.user_id !== req.user.id && !req.user.is_admin) fail(403, 'Action non autorisée.');
-    await db.run('DELETE FROM comments WHERE id = ?', comment.id);
+    await deleteComment(ctx, comment.id);
     res.json({ ok: true });
+  });
+
+  // J'aime sur un commentaire
+  r.post('/comments/:id/like', async (req, res) => {
+    const id = intParam(req.params.id);
+    const comment = id && (await db.get('SELECT c.id, c.user_id, c.post_id FROM comments c WHERE c.id = ?', id));
+    if (!comment) fail(404, 'Commentaire introuvable.');
+    await loadPost(comment.post_id, req.user); // publication visible par ce membre
+    await db.run('INSERT OR IGNORE INTO comment_likes (comment_id, user_id, created_at) VALUES (?, ?, ?)', comment.id, req.user.id, Date.now());
+    await notify(ctx, { userId: comment.user_id, actorId: req.user.id, type: 'comment_like', postId: comment.post_id });
+    const { n } = await db.get('SELECT COUNT(*) AS n FROM comment_likes WHERE comment_id = ?', comment.id);
+    res.json({ liked: true, likeCount: n });
+  });
+  r.delete('/comments/:id/like', async (req, res) => {
+    const id = intParam(req.params.id);
+    const comment = id && (await db.get('SELECT id, user_id, post_id FROM comments WHERE id = ?', id));
+    if (!comment) fail(404, 'Commentaire introuvable.');
+    await db.run('DELETE FROM comment_likes WHERE comment_id = ? AND user_id = ?', comment.id, req.user.id);
+    await retractNotification(ctx, { userId: comment.user_id, actorId: req.user.id, type: 'comment_like', postId: comment.post_id });
+    const { n } = await db.get('SELECT COUNT(*) AS n FROM comment_likes WHERE comment_id = ?', comment.id);
+    res.json({ liked: false, likeCount: n });
+  });
+
+  // Vue d'une vidéo (comptée une fois par membre ; ses propres vues ne comptent pas)
+  r.post('/posts/:id/view', async (req, res) => {
+    const post = await loadPost(req.params.id, req.user);
+    if (post.video_id && post.user_id !== req.user.id) {
+      await db.run('INSERT OR IGNORE INTO video_views (post_id, user_id, created_at) VALUES (?, ?, ?)', post.id, req.user.id, Date.now());
+    }
+    const { n } = await db.get('SELECT COUNT(*) AS n FROM video_views WHERE post_id = ?', post.id);
+    res.json({ views: n });
   });
 
   return r;

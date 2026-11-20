@@ -1,7 +1,8 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, memberChip, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox, popMenu, confirmDialog, verifiedMark, botChip } from '../dom.js';
+import { h, icon, avatar, memberChip, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox, popMenu, confirmDialog, verifiedMark, botChip, remaining } from '../dom.js';
+import { openReels } from '../components/video.js';
 import { postList, backHead } from './feed.js';
 import { reportDialog } from '../components/report.js';
 import { friendButton } from './friends.js';
@@ -190,14 +191,17 @@ export async function profileView(ctx) {
   if (user.invitedBy) meta.push(h('span', null, icon('ticket'), 'Invité par\u00a0', h('a', { href: `/@${user.invitedBy.username}` }, user.invitedBy.displayName)));
   if (user.invitedCount) meta.push(h('span', null, icon('users'), `A fait entrer ${user.invitedCount} membre${user.invitedCount > 1 ? 's' : ''}`));
 
-  // Onglets : publications / photos
+  // Onglets : publications / vidéos / photos
   const content = h('div');
   const tabPosts = h('button', { class: 'tab active' }, icon('list', 'icon-sm'), 'Publications');
+  const tabVideos = h('button', { class: 'tab' }, icon('video', 'icon-sm'), 'Vidéos');
   const tabPhotos = h('button', { class: 'tab' }, icon('grid', 'icon-sm'), 'Photos');
+  const select = (tab) => {
+    for (const t of [tabPosts, tabVideos, tabPhotos]) t.classList.toggle('active', t === tab);
+  };
   let stopList = () => {};
   const showPosts = () => {
-    tabPosts.classList.add('active');
-    tabPhotos.classList.remove('active');
+    select(tabPosts);
     stopList();
     const list = postList((before) => api.get(`/api/users/${enc(user.username)}/posts${before ? `?before=${before}` : ''}`), {
       empty: () =>
@@ -206,9 +210,44 @@ export async function profileView(ctx) {
     content.replaceChildren(list.el);
     stopList = list.start();
   };
+  // Vidéos en grille (aperçu et nombre de vues), comme sur TikTok ; un toucher ouvre le plein écran
+  const showVideos = async () => {
+    select(tabVideos);
+    stopList();
+    stopList = () => {};
+    content.replaceChildren(spinner());
+    try {
+      const { posts } = await api.get(`/api/users/${enc(user.username)}/videos`);
+      content.replaceChildren(
+        posts.length
+          ? h(
+              'div',
+              { class: 'video-grid' },
+              posts.map((p) =>
+                h(
+                  'a',
+                  {
+                    href: `/videos?p=${p.id}`,
+                    class: 'video-cell',
+                    onclick: (e) => {
+                      e.preventDefault();
+                      openReels({ postId: p.id, video: p.video }); // dans le toucher : la vidéo démarre avec le son
+                    },
+                  },
+                  p.video.poster ? h('img', { src: p.video.poster, alt: `Vidéo de ${user.displayName}`, loading: 'lazy', decoding: 'async' }) : null,
+                  h('span', { class: 'video-cell-views' }, icon('play', 'icon-xs'), num(p.video.views || 0)),
+                  p.video.expiresAt ? h('span', { class: 'video-cell-time' }, icon('clock', 'icon-xs'), remaining(p.video.expiresAt)) : null,
+                ),
+              ),
+            )
+          : emptyState('video', 'Aucune vidéo', user.isMe ? 'Vos vidéos (24 h) apparaîtront ici, avec leurs vues.' : 'Aucune vidéo en ce moment.'),
+      );
+    } catch (err) {
+      content.replaceChildren(h('p', { class: 'muted', style: { padding: '20px' } }, err.message));
+    }
+  };
   const showPhotos = async () => {
-    tabPhotos.classList.add('active');
-    tabPosts.classList.remove('active');
+    select(tabPhotos);
     stopList();
     stopList = () => {};
     content.replaceChildren(spinner());
@@ -224,6 +263,7 @@ export async function profileView(ctx) {
     }
   };
   tabPosts.addEventListener('click', showPosts);
+  tabVideos.addEventListener('click', showVideos);
   tabPhotos.addEventListener('click', showPhotos);
   ctx.onCleanup(() => stopList());
   if (user.blocked) {
@@ -288,7 +328,7 @@ export async function profileView(ctx) {
       ),
       h('div', { class: 'profile-actions' }, actions),
     ),
-    user.blocked ? null : h('div', { class: 'tabs profile-tabs' }, tabPosts, tabPhotos),
+    user.blocked ? null : h('div', { class: 'tabs profile-tabs' }, tabPosts, tabVideos, tabPhotos),
     content,
   );
 }
