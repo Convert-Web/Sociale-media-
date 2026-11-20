@@ -38,11 +38,6 @@ module.exports = function pushRoutes(ctx) {
     res.json({ ok: true });
   });
 
-  r.get('/push/status', async (req, res) => {
-    const { c } = await db.get('SELECT COUNT(*) AS c FROM push_subscriptions WHERE user_id = ?', req.user.id);
-    res.json({ devices: c });
-  });
-
   // Notification d'essai sur tous les appareils du membre
   r.post('/push/test', async (req, res) => {
     const delivered = await sendPush(ctx, req.user.id, {

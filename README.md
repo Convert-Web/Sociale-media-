@@ -14,8 +14,8 @@ Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (bar
 |---|---|
 | **Droit d'entrée** | Gratuit pour les `FOUNDER_LIMIT` (100) premiers membres, puis automatique : paiement unique via **Stripe Checkout** (carte bancaire, et Apple Pay / Google Pay selon votre configuration Stripe), vérifié côté serveur + webhook signé. Case de renonciation au droit de rétractation (art. L221-28 du Code de la consommation). |
 | **Fondateurs** | Les 100 premiers membres : entrée gratuite à vie, **carte Fondateur** (métal noir, trame pop art) et **avant-premières** — les annonces de la Direction leur sont réservées 24 h, 48 h ou 7 jours avant d'être publiées pour tous, et les événements de la Direction s'ouvrent d'abord à eux pendant 48 h. Pas de couronne ni d'insigne à côté du nom. |
-| **Vidéos** | **Éphémères** : effacées définitivement 24 h après leur publication (`VIDEO_TTL_HOURS`), comme une story ; lecteur sans téléchargement. Une vidéo par publication (une minute au plus), dans le Salon et les groupes. Le téléphone la prépare (720p, ~1,4 Mbit/s) puis l'envoie en morceaux de 1 Mo ; elle est diffusée par plages d'octets (limite de 4,5 Mo de Vercel respectée). Lecture automatique et muette dès qu'elle est à l'écran, son au toucher, **mode plein écran vertical** (glisser pour la suivante, préchargée). Espace réservé : `VIDEO_STORAGE_MB` (3 000 Mo par défaut, la base Turso gratuite fait 5 Go). |
-| **Rapide comme une appli** | L'application est gardée sur le téléphone (service worker) : elle s'ouvre sans attendre le réseau. À chaque ouverture, la version est comparée à celle du serveur (`/api/version`) ; si elle a changé, le cache est vidé d'un bloc et la nouvelle version se charge au retour suivant, jamais un mélange. Onglet **Vidéos** dans la barre du bas, double-toucher pour aimer, **stories vidéo**. |
+| **Vidéos** | **Éphémères** : effacées définitivement 24 h après leur publication (`VIDEO_TTL_HOURS`), comme une story ; lecteur sans téléchargement. Une vidéo par publication (une minute au plus), dans le Salon et les groupes. Le téléphone la prépare en **1080p** (~2,1 Mbit/s, H.264) et l'envoie **pendant** la préparation, en morceaux de 1 Mo (limite de 4,5 Mo de Vercel respectée ; « Réessayer » après une coupure ne refait que l'envoi). **Lecture progressive** façon TikTok (MediaSource, ManagedMediaSource sur iPhone) : la vidéo démarre dès son premier morceau, avec retour automatique à la lecture classique au moindre souci. **Plein écran vertical** : onglets « Pour toi » (vidéos pas encore vues d'abord, sans algorithme) et « Abonnements », barre de lecture déplaçable, appui long (vitesse ×0,5 à ×2, pas intéressé, masquer un membre, garder, copier le lien, signaler), vues, « Son original », J'aime et réponses sur les commentaires. Espace réservé : `VIDEO_STORAGE_MB` (3 000 Mo par défaut, la base Turso gratuite fait 5 Go). |
+| **Rapide comme une appli** | L'application est gardée sur le téléphone (service worker) : elle s'ouvre sans attendre le réseau. Quand une nouvelle version est en ligne (annoncée par le serveur à chaque réponse), un bouton bleu clair **« Mettre à jour »** apparaît : un toucher vide le cache d'un bloc et charge la nouvelle version complète, jamais un mélange. Onglet **Vidéos** dans la barre du bas, double-toucher pour aimer, **stories vidéo**. |
 | **Filtre automatique** | Publications, commentaires et messages privés sont analysés à l'envoi (français, anglais, espagnol, italien, allemand, portugais ; écriture « l33t », lettres répétées ou espacées, astérisques). Propos haineux, menaces et numéros de carte bancaire : refusés. Insultes et propos déplacés : publiés mais floutés derrière un avertissement, et signalés automatiquement à la Direction. Les messages privés reçus peuvent être signalés (appui long). |
 | **Entrée sur invitation** | Par défaut, on entre au cercle **sur invitation** : chaque membre dispose de 3 invitations personnelles (lien à partager sur WhatsApp, iMessage…), la personne invitée entre immédiatement. Sans invitation, l'inscription devient une **demande d'admission** que la Direction accepte ou refuse (notification sur le téléphone). Interrupteur « Entrée sur invitation » dans la page Direction pour revenir à l'entrée libre. Le profil affiche « Invité par… ». |
 | **Agenda du cercle** | Événements privés (dîners, vernissages, voyages) : photo, date, lieu avec itinéraire, nombre de places, « Je viens », liste des participants, ajout au calendrier du téléphone (.ics), carte « Prochain événement » en tête du Salon. |
@@ -32,7 +32,7 @@ Design minimaliste inspiré d'Apple, pensé **d'abord pour le téléphone** (bar
 | **Enregistrés** | Mettre une publication de côté et la retrouver dans « Enregistrés ». |
 | **Sécurité** | Signaler une publication, un commentaire ou un membre ; bloquer un membre (contenus masqués, messages impossibles) ; file des signalements dans « Direction ». |
 | **Application** | Installable sur l'écran d'accueil (icône, plein écran), accueil guidé des nouveaux membres. |
-| **Profils** | Mise en page inspirée de X : couverture 3:1, photo qui chevauche, onglets soulignés « Publications / Photos ». **Outil de recadrage** (glisser, pincer, zoom) pour la photo de profil et la couverture : jamais d'image étirée. Visionneuse animée (glisser vers le bas pour fermer). |
+| **Profils** | Mise en page inspirée de X : couverture 3:1, photo qui chevauche, onglets soulignés « Publications / Vidéos / Photos » (vidéos en grille avec leurs vues). **Outil de recadrage** (glisser, pincer, zoom) pour la photo de profil et la couverture : jamais d'image étirée. Visionneuse animée (glisser vers le bas pour fermer). |
 | **Amis** | Demandes d'ami façon Facebook : Ajouter → Demande envoyée → Accepter / Refuser, liste d'amis, « Vous connaissez peut-être », bandeau dans Activité et badge rouge. Accepter une demande abonne les deux membres l'un à l'autre. |
 | **Groupes privés** | Création avec couverture, invitation de membres, demandes d'adhésion validées par le créateur ou les admins du groupe, rôles (créateur / admin / membre), discussion réservée aux membres. Les publications d'un groupe n'apparaissent jamais dans le Salon, les profils, la recherche ou les tendances. |
 | **Messagerie privée** | Conversations entre membres **en temps réel**, accusés de lecture « Vu », compteurs de non-lus. |
@@ -67,7 +67,6 @@ Deux services gratuits, **sans carte bancaire**, avec connexion par GitHub :
 
 Sur Vercel, les messages, notifications et nouvelles publications sont rafraîchis automatiquement toutes les quelques secondes (pas de connexion permanente sur ce type d'hébergement). Sur un serveur classique, ils arrivent instantanément.
 
-Autre possibilité : [Render](https://render.com) avec le fichier `render.yaml` (Render demande une carte bancaire, même pour l'offre gratuite).
 
 ## Lancer sur son ordinateur
 
@@ -112,7 +111,7 @@ Toutes les options sont décrites dans [`.env.example`](.env.example). Les princ
 | Variable | Rôle | Défaut |
 |---|---|---|
 | `PAID_ENTRY` | `true` pour exiger le paiement dès le premier membre (sinon : après les Fondateurs) | `false` |
-| `BASE_URL` | Adresse publique du site (automatique sur Render) | `http://localhost:3000` |
+| `BASE_URL` | Adresse publique du site (automatique sur Vercel) | `http://localhost:3000` |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Paiement | — |
 | `ENTRY_PRICE_CENTS` | Prix d'entrée en centimes | `999` |
 | `FOUNDER_LIMIT` | Nombre de Fondateurs | `100` |
@@ -130,12 +129,6 @@ N'importe quel hébergeur Node.js convient (Railway, Fly.io, un VPS…), avec Tu
 NODE_ENV=production BASE_URL=https://votre-domaine.fr npm start
 ```
 
-ou avec Docker :
-
-```bash
-docker build -t aurum .
-docker run -d -p 3000:3000 -v aurum-data:/data --env-file .env aurum
-```
 
 En production (`NODE_ENV=production`) : cookies sécurisés (HTTPS obligatoire), mode démo désactivé, en-têtes HSTS.
 

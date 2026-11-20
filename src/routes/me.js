@@ -10,7 +10,7 @@ const { deleteUser } = require('../membership');
 
 module.exports = function meRoutes(ctx) {
   const r = express.Router();
-  const { db, config } = ctx;
+  const { db } = ctx;
 
   const reload = async (id) => await db.get('SELECT * FROM users WHERE id = ?', id);
 

@@ -62,7 +62,11 @@ function pillFor(j) {
 
 function paint() {
   const d = ensureDock();
-  for (const [j, el] of pills) if (!jobs.has(j)) (el.remove(), pills.delete(j));
+  for (const [j, el] of pills) {
+    if (jobs.has(j)) continue;
+    el.remove();
+    pills.delete(j);
+  }
   for (const j of jobs) {
     const el = pillFor(j);
     if (el.parentNode !== d) d.append(el);

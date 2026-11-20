@@ -49,14 +49,6 @@ export async function savedVideos() {
   }
 }
 
-export async function isSavedLocally(postId) {
-  try {
-    return Boolean(await tx('readonly', (s) => s.getKey(keyOf(postId))));
-  } catch {
-    return false;
-  }
-}
-
 export async function removeSavedVideo(postId) {
   try {
     await tx('readwrite', (s) => s.delete(keyOf(postId)));

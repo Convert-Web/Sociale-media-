@@ -76,13 +76,12 @@ async function member(name, username) {
 }
 const sub = (name) => ({ endpoint: `https://push.example.com/${name}`, keys: { p256dh: 'BPublicKeyDeTest1234567890', auth: 'authsecret12' } });
 
-let owner;
 let ana;
 let ben;
 let eve;
 
 test('membres de test', async () => {
-  owner = await member('Direction', 'direction');
+  await member('Direction', 'direction'); // premier compte : la Direction
   ana = await member('Ana Martin', 'ana');
   ben = await member('Ben Morel', 'ben');
   eve = await member('Ève Durand', 'eve');
@@ -97,20 +96,23 @@ test('push : clé publique, abonnement, notification à la réception d’un mes
   assert.equal((await ben.post('/api/push/subscribe', { endpoint: 'http://pas-https', keys: {} })).status, 400);
   assert.equal((await ben.post('/api/push/subscribe', sub('ben-iphone'))).status, 201);
   assert.equal((await ben.post('/api/push/subscribe', sub('ben-expire'))).status, 201);
-  assert.equal((await ben.get('/api/push/status')).data.devices, 2);
+  assert.equal((await devices(ben)), 2);
 
   await ana.post('/api/conversations/ben', { body: 'Dîner jeudi au Plaza ?' });
   const sent = pushes.filter((p) => p.endpoint.endsWith('ben-iphone'));
   assert.equal(sent.length, 1);
   assert.deepEqual(sent[0].payload, { title: 'Ana Martin', body: 'Dîner jeudi au Plaza ?', url: '/messages/ana', tag: `dm-${ana.user.id}` });
   // L'appareil expiré a été oublié
-  assert.equal((await ben.get('/api/push/status')).data.devices, 1);
+  assert.equal((await devices(ben)), 1);
 
   const t = await ben.post('/api/push/test');
   assert.equal(t.data.delivered, 1);
   await ben.post('/api/push/unsubscribe', { endpoint: sub('ben-iphone').endpoint });
-  assert.equal((await ben.get('/api/push/status')).data.devices, 0);
+  assert.equal((await devices(ben)), 0);
 });
+
+// Appareils enregistrés pour les notifications d'un membre (lu dans la base)
+const devices = async (c) => (await ctx.db.get('SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ?', c.user.id)).n;
 
 test('amis : demande, compteur, acceptation, abonnement mutuel, retrait', async () => {
   await ben.post('/api/push/subscribe', sub('ben-iphone'));

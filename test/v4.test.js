@@ -74,7 +74,6 @@ async function signup(name, username, extra = {}) {
   c.user = r.data.user;
   return c;
 }
-const sub = (name) => ({ endpoint: `https://push.example.com/${name}`, keys: { p256dh: 'BPublicKeyDeTest1234567890', auth: 'authsecret12' } });
 
 
 let admin;

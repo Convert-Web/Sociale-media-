@@ -1,7 +1,7 @@
 // Vidéos : préparation sur le téléphone, envoi en morceaux, lecteur du fil.
 import { api, ApiError } from '../api.js';
 import { warmPosts } from '../warm.js';
-import { h, icon, remaining, onTaps } from '../dom.js';
+import { h, icon, onTaps } from '../dom.js';
 import { navigate } from '../router.js';
 
 export const MAX_SECONDS = 60;
@@ -505,9 +505,6 @@ export function noSave(el) {
   el.addEventListener('contextmenu', (e) => e.preventDefault());
   return el;
 }
-
-// Badge « éphémère » : temps restant avant l'effacement
-export const ephemeralBadge = (v, cls = 'vp-ephemeral') => (v.expiresAt ? h('span', { class: cls, title: 'Vidéo éphémère : effacée après ce délai' }, icon('clock', 'icon-xs'), remaining(v.expiresAt)) : null);
 
 // Préchargement : une vidéo du fil se télécharge quand elle approche de l'écran (un écran avant)
 // et que l'on ralentit dessus — pas quand on la survole en défilant vite (bande passante économisée)

@@ -76,7 +76,7 @@ async function member(name, username) {
 }
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
-const photo = (name) => new Blob([PNG], { type: 'image/png' });
+const photo = () => new Blob([PNG], { type: 'image/png' });
 
 let admin;
 let ana;

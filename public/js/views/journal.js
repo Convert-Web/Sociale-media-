@@ -4,7 +4,7 @@ import { store } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, nameLine, toast, popMenu, confirmDialog, emptyState, spinner, modal, timeAgo, debounce, skeletonPosts } from '../dom.js';
 import { backHead } from './feed.js';
-import { playItem, isCurrent, onPlayer, state as playerState, fmtTime } from '../components/player.js';
+import { playItem, isCurrent, onPlayer, state as playerState } from '../components/player.js';
 import { translateLink } from '../components/translate.js';
 
 const KIND_LABEL = { article: 'Actualité', podcast: 'Podcast', video: 'Vidéo' };

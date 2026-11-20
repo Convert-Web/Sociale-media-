@@ -1,7 +1,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, nameLine, memberChip, toast, popMenu, confirmDialog, emptyState, spinner, num, verifiedMark } from '../dom.js';
+import { h, icon, avatar, memberChip, toast, popMenu, confirmDialog, emptyState, spinner, num, verifiedMark } from '../dom.js';
 
 async function refreshCounters() {
   try {

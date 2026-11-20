@@ -379,6 +379,3 @@ export function pickMember(title, onPick) {
   search().catch(() => {});
 }
 
-export function goToConversation(u) {
-  navigate(`/messages/${u.username}`);
-}

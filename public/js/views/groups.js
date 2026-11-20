@@ -1,4 +1,4 @@
-import { api, enc } from '../api.js';
+import { api } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, nameLine, memberChip, toast, popMenu, confirmDialog, emptyState, spinner, num, modal, autosize, verifiedMark } from '../dom.js';
