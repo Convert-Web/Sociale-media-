@@ -16,6 +16,8 @@ function ensureDock() {
 }
 
 const busy = () => [...jobs].some((j) => j.state === 'running');
+// Un envoi est-il en cours ? (la mise à jour de l'application attend la fin de l'envoi)
+export const uploading = () => busy();
 // Quitter la page pendant un envoi : le navigateur demande confirmation
 addEventListener('beforeunload', (e) => {
   if (!busy()) return;

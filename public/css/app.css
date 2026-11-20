@@ -2267,3 +2267,22 @@ html.reels-mode .upload-dock { bottom: auto; top: calc(env(safe-area-inset-top, 
 .saved-info small { color: rgba(255, 255, 255, 0.7); font-size: 12.5px; }
 .saved-remove { margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); color: #fff; font-size: 13.5px; font-weight: 600; text-shadow: none; }
 .video-note { margin: 6px 2px 0; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+
+/* ===================================================================== v19
+   Mise à jour disponible : bouton bleu clair « Mettre à jour », sous la barre du haut
+   ===================================================================== */
+.update-pill { position: fixed; z-index: 98; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 60px); transform: translateX(-50%); display: inline-flex; align-items: stretch; max-width: calc(100% - 24px);
+  border-radius: 999px; background: #5ac8fa; color: #002a45; box-shadow: 0 10px 30px rgba(10, 132, 255, 0.3), 0 2px 6px rgba(0, 0, 0, 0.12); animation: dropIn 0.4s var(--spring); }
+.update-pill button { display: inline-flex; align-items: center; color: inherit; }
+.update-go { gap: 8px; padding: 11px 14px 11px 18px; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+.update-later { padding: 0 14px 0 11px; border-left: 1px solid rgba(0, 42, 69, 0.2); opacity: 0.75; }
+.update-pill .icon { color: inherit; }
+.update-pill.busy .update-go .icon { animation: spin 0.9s linear infinite; }
+.update-pill.busy .update-later { display: none; }
+.update-pill.busy .update-go { padding-right: 18px; }
+.update-go:active, .update-later:active { opacity: 0.6; }
+@media (prefers-color-scheme: dark) { .update-pill { background: #64d2ff; color: #00243b; } }
+/* Coin Vidéos : sous les boutons du haut ; une vidéo en cours d'envoi passe juste en dessous */
+html.reels-mode .update-pill { top: calc(env(safe-area-inset-top, 0px) + 62px); }
+html.has-update.reels-mode .upload-dock { top: calc(env(safe-area-inset-top, 0px) + 122px); }
+@media (min-width: 768px) { .update-pill { top: 16px; } html.has-update .upload-dock { top: 72px; } }

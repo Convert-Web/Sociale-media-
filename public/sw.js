@@ -2,9 +2,12 @@
    Les fichiers de l'application (pages, scripts, styles, polices, icônes) sont gardés sur
    le téléphone : l'application s'ouvre sans attendre le réseau. Les données (/api) et les
    photos/vidéos ne passent jamais par ce cache.
-   Mise à jour : une fois l'application démarrée, la page demande de comparer la version
-   gardée avec celle du serveur (/api/version). Si elle a changé, le cache est vidé d'un
-   bloc : le lancement suivant charge la nouvelle version complète, jamais un mélange. */
+   Mise à jour : la version des fichiers gardés est notée dans le cache (/__version). Quand le
+   serveur (/api/version) en annonce une autre, l'application affiche le bouton « Mettre à jour »
+   (js/update.js) : un toucher vide ce cache d'un bloc et relance l'application, qui charge la
+   nouvelle version complète, jamais un mélange. Le message « check-version » ci-dessous fait la
+   même chose d'office : il sert aux anciennes versions de l'application, et de filet de sécurité
+   si l'application gardée ne démarre pas (js/boot.js). */
 const CACHE = 'aurum-app';
 const STATIC = /^\/(js|css|fonts|img)\//;
 

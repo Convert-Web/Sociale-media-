@@ -28,6 +28,7 @@ import { carnetView, placeView } from './views/places.js';
 import { journalView, journalItemView } from './views/journal.js';
 import { videosView } from './views/videos.js';
 import { openReels, prefetchReels } from './components/video.js';
+import { startUpdateChecks } from './update.js';
 import { stop as stopPlayer } from './components/player.js';
 import { registerServiceWorker, syncPush } from './push.js';
 document.addEventListener('aurum:logout', () => stopPlayer());
@@ -630,8 +631,9 @@ setRenderer(render);
     setTimeout(() => prefetchReels(), 1200);
   }
   registerServiceWorker();
-  // Application démarrée : on peut comparer la version gardée avec celle du serveur
-  window.__aurumBooted?.();
+  // Application démarrée : nouvelle version en ligne ? un bouton « Mettre à jour » la propose
+  window.__aurumStarted = true;
+  startUpdateChecks();
   // Toucher une notification ouvre la bonne page
   navigator.serviceWorker?.addEventListener('message', (e) => {
     if (e.data?.type === 'navigate' && typeof e.data.url === 'string') {
