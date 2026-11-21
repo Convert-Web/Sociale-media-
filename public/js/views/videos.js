@@ -65,7 +65,7 @@ function slide(post) {
 
   const shareBtn = h('button', { class: 'reel-act', type: 'button', 'aria-label': 'Partager', onclick: (e) => (e.stopPropagation(), shareLink(`${post.author.displayName} sur AURUM`, `/p/${post.id}`)) }, icon('send'), h('small', null, 'Partager'));
 
-  // Enregistrer : la vidéo est gardée en entier sur le téléphone, dans « Enregistrés », même après 24 h
+  // Enregistrer : la vidéo est gardée en entier sur le téléphone, dans « Enregistrés » (lisible sans connexion)
   const saveLabel = h('small', null, post.saved ? 'Gardée' : 'Garder');
   const saveBtn = h('button', { class: `reel-act${post.saved ? ' saved' : ''}`, type: 'button', 'aria-label': 'Enregistrer sur le téléphone', 'aria-pressed': String(post.saved) }, icon('bookmark'), saveLabel);
   const paintSave = (on) => {
@@ -731,7 +731,7 @@ export async function videosView(ctx) {
         { class: 'reels-empty' },
         following
           ? emptyState('video', 'Rien de neuf chez vos abonnements', 'Les vidéos des membres que vous suivez apparaîtront ici.', h('button', { type: 'button', class: 'btn btn-primary', onclick: () => switchScope('all') }, 'Voir « Pour toi »'))
-          : emptyState('video', 'Aucune vidéo pour l’instant', 'Une minute au plus, visible 24 heures. Lancez le coin Vidéos !', h('button', { type: 'button', class: 'btn btn-primary', onclick: () => document.dispatchEvent(new CustomEvent('aurum:create')) }, 'Publier une vidéo')),
+          : emptyState('video', 'Aucune vidéo pour l’instant', 'Une minute au plus, en 1080p. Lancez le coin Vidéos !', h('button', { type: 'button', class: 'btn btn-primary', onclick: () => document.dispatchEvent(new CustomEvent('aurum:create')) }, 'Publier une vidéo')),
       ),
     );
   }

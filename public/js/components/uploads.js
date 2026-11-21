@@ -29,8 +29,9 @@ function label(j) {
   if (j.state === 'done') return 'Vidéo en ligne · Voir';
   if (j.state === 'error') return 'Envoi interrompu · Réessayer';
   if (j.step === 'publish') return 'Publication…';
-  // La vidéo part pendant sa préparation : un seul pourcentage, de 0 à 100
-  return `Envoi ${Math.min(99, Math.round(overall(j) * 100))} %`;
+  // Un seul pourcentage, de 0 à 100 : préparation (rapide), puis envoi
+  const pct = Math.min(99, Math.round(overall(j) * 100));
+  return j.step === 'prepare' ? `Préparation ${pct} %` : `Envoi ${pct} %`;
 }
 function overall(j) {
   if (j.state === 'done') return 1;

@@ -240,7 +240,7 @@ export async function profileView(ctx) {
                 ),
               ),
             )
-          : emptyState('video', 'Aucune vidéo', user.isMe ? 'Vos vidéos (24 h) apparaîtront ici, avec leurs vues.' : 'Aucune vidéo en ce moment.'),
+          : emptyState('video', 'Aucune vidéo', user.isMe ? 'Vos vidéos apparaîtront ici, avec leurs vues.' : 'Aucune vidéo en ce moment.'),
       );
     } catch (err) {
       content.replaceChildren(h('p', { class: 'muted', style: { padding: '20px' } }, err.message));

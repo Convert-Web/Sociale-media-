@@ -20,7 +20,7 @@ function pages(d) {
   const L = d.legal || {};
   const price = money(d.priceCents, d.currency);
   const limit = d.founderLimit;
-  const ttl = d.videoTtlHours || 24;
+  const ttl = d.videoTtlHours || 0; // 0 : vidéos gardées jusqu'à leur suppression
   // Valeur saisie par la Direction, ou mention « à compléter » tant qu'elle manque
   const v = (k) => (L[k] ? L[k] : h('span', { class: 'todo' }, 'à compléter'));
   const mail = () => (L.email ? h('a', { href: `mailto:${L.email}` }, L.email) : v('email'));
@@ -83,7 +83,7 @@ function pages(d) {
         ),
         p('En dehors de la fonction « Enregistrer » de l’application, il est interdit de copier, de capturer ou de diffuser hors du cercle les contenus des autres membres, notamment les vidéos et les messages privés.'),
         h2('5. Vos contenus'),
-        p('Vous restez propriétaire de ce que vous publiez. Vous accordez à AURUM, pour la seule durée de leur publication, le droit non exclusif et gratuit de les héberger et de les afficher aux membres autorisés à les voir, sans autre usage. Les vidéos et les stories sont éphémères : elles sont effacées du service ', `${ttl} heures`, ' après leur publication. Un membre peut enregistrer une vidéo pour la revoir : une copie est alors gardée dans l’application, sur son seul téléphone, pour son usage personnel.'),
+        p('Vous restez propriétaire de ce que vous publiez. Vous accordez à AURUM, pour la seule durée de leur publication, le droit non exclusif et gratuit de les héberger et de les afficher aux membres autorisés à les voir, sans autre usage. ', ttl ? `Les vidéos et les stories sont éphémères : elles sont effacées du service ${ttl} heures après leur publication.` : 'Vos vidéos restent en ligne jusqu’à ce que vous les supprimiez (ou que votre compte soit supprimé) ; les stories sont éphémères : elles sont effacées du service 24 heures après leur publication.', ' Un membre peut enregistrer une vidéo pour la revoir : une copie est alors gardée dans l’application, sur son seul téléphone, pour son usage personnel.'),
         h2('6. Modération et signalements'),
         p('Un filtre automatique examine les publications, commentaires et messages au moment de leur envoi. Les propos haineux, les menaces et les numéros de carte bancaire sont refusés. Les propos injurieux, sexuels ou les envois massifs sont masqués derrière un avertissement et signalés à la Direction.'),
         p('Tout membre peut signaler un contenu ou un profil depuis le menu « … ». La Direction examine chaque signalement, peut retirer un contenu manifestement illicite et vous informe des décisions qui vous concernent, avec leurs motifs. Vous pouvez contester une décision en écrivant à ', mail(), ' : elle sera réexaminée par une personne.'),
@@ -187,7 +187,8 @@ function pages(d) {
           ['Données', 'Durée'],
           [
             ['Compte et contenus', 'Tant que le compte existe ; effacés dès sa suppression'],
-            ['Vidéos et stories', `Effacées de nos serveurs ${ttl} heures après leur publication ; une copie peut rester sur le téléphone des membres qui ont enregistré une vidéo`],
+            ['Vidéos', ttl ? `Effacées de nos serveurs ${ttl} heures après leur publication ; une copie peut rester sur le téléphone des membres qui l’ont enregistrée` : 'Jusqu’à leur suppression par leur auteur ou la suppression de son compte ; une copie peut rester sur le téléphone des membres qui l’ont enregistrée'],
+            ['Stories', 'Effacées de nos serveurs 24 heures après leur publication'],
             ['Cookie de connexion', '30 jours, renouvelé à chaque connexion'],
             ['Demande d’admission refusée', '6 mois, puis supprimée'],
             ['Pièces comptables du paiement', '10 ans (obligation légale)'],
@@ -232,7 +233,7 @@ export async function legalView(ctx) {
   try {
     d = await legalData();
   } catch {
-    d = { legal: {}, priceCents: store.config?.priceCents || 999, currency: store.config?.currency || 'eur', founderLimit: store.config?.founderLimit || 100, videoTtlHours: 24 };
+    d = { legal: {}, priceCents: store.config?.priceCents || 999, currency: store.config?.currency || 'eur', founderLimit: store.config?.founderLimit || 100, videoTtlHours: store.config?.videoTtlHours || 0 };
   }
   const page = pages(d)[ctx.route.page];
   ctx.title = `${page.title} — AURUM`;

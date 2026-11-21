@@ -399,7 +399,7 @@ export function backHead(title, sub, extra) {
 
 // Publications enregistrées
 export function savedView(ctx) {
-  // Vidéos gardées sur ce téléphone (copies complètes, toujours visibles après 24 h)
+  // Vidéos gardées sur ce téléphone (copies complètes, lisibles sans connexion)
   const urls = [];
   ctx.onCleanup(() => urls.forEach((u) => URL.revokeObjectURL(u)));
   const videosHost = h('div');
@@ -442,7 +442,7 @@ export function savedView(ctx) {
       empty: () =>
         localIds.size
           ? h('div')
-          : emptyState('bookmark', 'Rien d’enregistré', 'Touchez le signet sous une publication pour la retrouver ici. Une vidéo enregistrée est gardée sur votre téléphone, même après 24 h.'),
+          : emptyState('bookmark', 'Rien d’enregistré', 'Touchez le signet sous une publication pour la retrouver ici. Une vidéo enregistrée est gardée sur votre téléphone, lisible même sans connexion.'),
     },
   );
   paintVideos().then(() => ctx.onCleanup(list.start()));

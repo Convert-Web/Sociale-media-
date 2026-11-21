@@ -73,6 +73,8 @@ async function isHevc(file) {
 
 export async function readVideoInfo(file) {
   const hevc = isHevc(file);
+  // Préparation rapide possible ? (au plus 4 s pour le savoir ; sinon méthode habituelle)
+  const fast = Promise.race([fastPrepCheck(file), sleep(4000).then(() => false)]);
   const url = URL.createObjectURL(file);
   const v = document.createElement('video');
   v.muted = true;
@@ -82,7 +84,7 @@ export async function readVideoInfo(file) {
   v.src = url;
   try {
     await once(v, 'loadedmetadata');
-    const info = { duration: v.duration, width: v.videoWidth, height: v.videoHeight, poster: null, url, audio: predecode(file), hevc: await hevc };
+    const info = { duration: v.duration, width: v.videoWidth, height: v.videoHeight, poster: null, url, audio: predecode(file), hevc: await hevc, fast: false };
     try {
       // iOS ne décode une image qu'après un début de lecture (muette : autorisée)
       await v.play().catch(() => {});
@@ -98,6 +100,7 @@ export async function readVideoInfo(file) {
     } catch {
       /* sans aperçu : la vidéo reste publiable */
     }
+    info.fast = await fast;
     return info;
   } finally {
     v.removeAttribute('src');
@@ -141,6 +144,94 @@ export function encodeSize(w, h) {
 //   part — on peut regarder d'autres vidéos avec le son pendant la préparation ;
 // - sinon : le son de la vidéo est capté directement (Web Audio), sans sortir des haut-parleurs.
 // À lancer depuis un geste (toucher « Publier ») : nécessaire sur iPhone.
+// ---------------------------------------------------------------------------
+// Préparation rapide (WebCodecs, librairie Mediabunny) : la vidéo est décodée et réencodée par
+// les circuits vidéo du téléphone, bien plus vite que le temps réel, image par image (aucune
+// image perdue), en 1080p H.264 avec le son d'origine. Fichier « fragmenté » : il se lit
+// progressivement dès son premier morceau. Sinon, ancienne méthode (rejouée en temps réel).
+// ---------------------------------------------------------------------------
+let mediabunny = null;
+const loadMediabunny = () => (mediabunny ||= import('../vendor/mediabunny-1.65.2.js'));
+const webCodecs = () => typeof VideoEncoder !== 'undefined' && typeof VideoDecoder !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
+// Débit de la préparation rapide : ~3,1 Mbit/s en 1080p (encodage soigné, bien plus net)
+const fastBitrate = (w, h) => Math.min(3_500_000, Math.max(1_500_000, Math.round(w * h * 30 * 0.05)));
+
+// Au choix de la vidéo : peut-elle être préparée vite sur ce téléphone ?
+async function fastPrepCheck(file) {
+  if (!webCodecs()) return false;
+  try {
+    const mb = await loadMediabunny();
+    const input = new mb.Input({ source: new mb.BlobSource(file), formats: mb.ALL_FORMATS });
+    const track = await input.getPrimaryVideoTrack();
+    if (!track || !(await track.canDecode())) return false;
+    return await mb.canEncodeVideo('avc', { width: 1080, height: 1920, bitrate: 3_000_000 });
+  } catch {
+    return false;
+  }
+}
+
+// onData(octets, position) : chaque morceau produit, dans l'ordre (envoi pendant la préparation)
+async function fastPrepare(file, info, onProgress, onData, signal) {
+  const mb = await loadMediabunny();
+  const input = new mb.Input({ source: new mb.BlobSource(file), formats: mb.ALL_FORMATS });
+  const track = await input.getPrimaryVideoTrack();
+  if (!track) throw new Error('Vidéo illisible.');
+  const hasAudio = Boolean(await input.getPrimaryAudioTrack());
+  // 60 images par seconde : ramenées à 30 (même fluidité à l'écran du fil, fichier deux fois plus léger)
+  const fps = (await track.computePacketStats(90).catch(() => null))?.averagePacketRate || 30;
+  const size = encodeSize(info.width, info.height);
+  const video = {
+    width: size.width,
+    height: size.height,
+    fit: 'contain',
+    codec: 'avc',
+    bitrate: fastBitrate(size.width, size.height),
+    keyFrameInterval: 2,
+    forceTranscode: true,
+    allowRotationMetadata: false, // rotation appliquée aux images : affichée pareil partout
+    allowTransformationMetadata: false,
+    hardwareAcceleration: 'no-preference', // le téléphone choisit ses circuits vidéo quand il en a
+    ...(fps > 35 ? { frameRate: 30 } : {}),
+  };
+  // Morceaux produits, gardés pour reconstituer le fichier entier (et transmis au fur et à mesure)
+  let parts = [];
+  let total = 0;
+  const attempt = async (audio) => {
+    parts = [];
+    total = 0;
+    const writable = new WritableStream({
+      write(chunk) {
+        const data = chunk.data.slice();
+        parts.push({ data, position: chunk.position });
+        total = Math.max(total, chunk.position + data.byteLength);
+        onData?.(data, chunk.position);
+      },
+    });
+    const target = new mb.StreamTarget(writable, { chunked: true, chunkSize: 256 * 1024 });
+    const output = new mb.Output({ format: new mb.Mp4OutputFormat({ fastStart: 'fragmented', minimumFragmentDuration: 1 }), target });
+    const conversion = await mb.Conversion.init({ input, output, video, audio, showWarnings: false });
+    const lost = (type) => conversion.discardedTracks.some((d) => d.track.type === type);
+    return { conversion, lost };
+  };
+  // Son AAC (iPhone) : gardé tel quel ; autre format : converti en AAC, sinon gardé dans son format
+  let run = await attempt((t) => (t.codec === 'aac' ? {} : { codec: 'aac', bitrate: 128_000 }));
+  if (hasAudio && run.lost('audio')) run = await attempt({});
+  if (!run.conversion.isValid || run.lost('video')) throw new Error('Préparation rapide impossible.');
+  if (hasAudio && run.lost('audio')) throw new Error('Son illisible en préparation rapide.');
+  run.conversion.onProgress = (p) => onProgress?.(Math.min(1, p));
+  const stop = () => run.conversion.cancel().catch(() => {});
+  signal?.addEventListener('abort', stop, { once: true });
+  try {
+    await run.conversion.execute();
+  } finally {
+    signal?.removeEventListener('abort', stop);
+  }
+  if (signal?.aborted) throw signal.reason || new Error('Préparation annulée.');
+  const whole = new Uint8Array(total);
+  for (const p of parts) whole.set(p.data, p.position);
+  return new Blob([whole], { type: 'video/mp4' });
+}
+
 function encodePlan(file) {
   const type = recorderType();
   if (!type) return null;
@@ -389,6 +480,55 @@ async function sendBlob(blob, mime, info, onStep) {
   }
 }
 
+// Envoi au fil de l'eau : chaque mégaoctet produit part aussitôt, trois à la fois. La taille finale
+// n'est connue qu'à la fin (place réservée d'après l'estimation, vérifiée par le serveur).
+function streamUpload({ mime, info, estimate, onTail }) {
+  const opened = openUpload({ mime, info, streaming: true, estimate: Math.min(MAX_BYTES, estimate) });
+  let produced = 0;
+  let finishing = false;
+  let pending = [];
+  let pendingSize = 0;
+  let index = 0;
+  const sender = chunkSender(opened, (sent) => finishing && onTail?.(Math.min(1, sent / produced)));
+  const cut = (final) => {
+    while (pendingSize >= CHUNK_UP || (final && pendingSize > 0)) {
+      const all = new Blob(pending);
+      const part = all.slice(0, CHUNK_UP);
+      sender.add(index++, part);
+      const rest = all.slice(part.size);
+      pending = rest.size ? [rest] : [];
+      pendingSize = rest.size;
+    }
+  };
+  return {
+    opened,
+    // Envoi abandonné : la place réservée sur le serveur est libérée
+    drop: () => opened.then(({ id }) => api.del(`/api/videos/${id}`)).catch(() => {}),
+    get produced() {
+      return produced;
+    },
+    get failed() {
+      return sender.failed;
+    },
+    push(data) {
+      const n = data.size ?? data.byteLength;
+      produced += n;
+      pending.push(data);
+      pendingSize += n;
+      cut(false);
+    },
+    async finish(size) {
+      if (sender.failed) throw sender.failed;
+      finishing = true;
+      cut(true);
+      await sender.drain();
+      const { id } = await opened;
+      const { video } = await api.post(`/api/videos/${id}/complete`, { size });
+      return video;
+    },
+  };
+}
+
 // Prépare la vidéo (1080p) et l'envoie EN MÊME TEMPS : chaque mégaoctet enregistré part aussitôt.
 // memo garde la vidéo préparée : si le réseau coupe, « Réessayer » renvoie sans tout refaire.
 // Renvoie la vidéo à joindre à la publication.
@@ -401,67 +541,83 @@ export async function uploadVideo(file, info, onStep, memo = {}) {
   // quel : aucune perte de qualité, aucune attente
   const light = mime === 'video/mp4' && !info.hevc && file.size <= MAX_BYTES && file.size <= guess * 1.1 && Math.max(info.width || 0, info.height || 0) <= MAX_SIDE;
   const heavy = !light && (file.size > KEEP_AS_IS || mime !== 'video/mp4' || info.hevc);
+  // Original meilleur que le résultat (vide, ou plus lourd qu'un MP4 lisible partout)
+  const keepOriginal = (out) => out.size < 1000 || (mime === 'video/mp4' && !info.hevc && out.size >= file.size && file.size <= MAX_BYTES);
+
+  // 1. Préparation rapide (circuits vidéo du téléphone), envoyée pendant qu'elle se fait
+  if (heavy && info.fast && !memo.slow) {
+    const fastGuess = ((fastBitrate(target.width, target.height) + 160_000) * (info.duration || 30)) / 8;
+    const up = streamUpload({ mime: 'video/mp4', info, estimate: fastGuess * 1.25, onTail: (r) => onStep?.('upload', 0.85 + 0.15 * r) });
+    const ctl = new AbortController();
+    let refused = null;
+    up.opened.catch((err) => {
+      refused = err; // envoi refusé d'entrée (espace plein, trop de vidéos…) : on arrête tout
+      ctl.abort(err);
+    });
+    let inOrder = true;
+    let out;
+    try {
+      out = await fastPrepare(file, info, (p) => onStep?.('stream', p * 0.85), (data, position) => {
+        if (!inOrder) return;
+        if (position !== up.produced) inOrder = false; // écriture hors séquence : envoi du fichier entier à la fin
+        else up.push(data);
+      }, ctl.signal);
+    } catch {
+      up.drop();
+      if (refused) throw refused;
+      // Préparation rapide interrompue : on réessaie avec la méthode habituelle (toucher la pastille)
+      memo.slow = true;
+      throw new Error('Préparation interrompue.');
+    }
+    if (keepOriginal(out)) {
+      up.drop();
+      return sendBlob(file, mime, info, (step, r) => onStep?.('upload', 0.85 + 0.15 * r));
+    }
+    memo.blob = out; // « Réessayer » après une coupure ne refait que l'envoi
+    memo.mime = 'video/mp4';
+    if (!inOrder || up.produced !== out.size) {
+      up.drop();
+      return sendBlob(out, 'video/mp4', info, (step, r) => onStep?.('upload', 0.85 + 0.15 * r));
+    }
+    try {
+      return await up.finish(out.size);
+    } catch (err) {
+      up.drop();
+      throw err;
+    }
+  }
+
+  // 2. Méthode habituelle : la vidéo est rejouée en temps réel et réenregistrée, envoyée au fil de l'eau
   const plan = heavy ? encodePlan(file) : null;
   if (!plan) return sendBlob(file, mime, info, onStep);
-
-  const estimate = Math.min(MAX_BYTES, guess * 1.25);
-  const opened = openUpload({ mime: plan.mime, info, streaming: true, estimate });
-  // Envoi abandonné : la place réservée sur le serveur est libérée
-  const drop = () => opened.then(({ id }) => api.del(`/api/videos/${id}`)).catch(() => {});
-  let recorded = 0; // octets enregistrés
-  let recDone = false;
-  // Avancement : l'enregistrement (0 à 90 %), puis les derniers morceaux (90 à 100 %)
-  const sender = chunkSender(opened, (sentBytes) => recDone && onStep?.('upload', 0.9 + 0.1 * Math.min(1, sentBytes / recorded)));
-  let pending = [];
-  let pendingSize = 0;
-  let index = 0;
-  const cut = (final) => {
-    while (pendingSize >= CHUNK_UP || (final && pendingSize > 0)) {
-      const all = new Blob(pending);
-      const part = all.slice(0, CHUNK_UP);
-      sender.add(index++, part);
-      const rest = all.slice(part.size);
-      pending = rest.size ? [rest] : [];
-      pendingSize = rest.size;
-    }
-  };
+  const up = streamUpload({ mime: plan.mime, info, estimate: guess * 1.25, onTail: (r) => onStep?.('upload', 0.9 + 0.1 * r) });
   const job = compress(file, info, plan, (p) => onStep?.('stream', Math.min(p, 1) * 0.9), (data) => {
-    recorded += data.size;
-    if (recorded > MAX_BYTES) return job?.cancel(new Error('Vidéo trop lourde : 40 Mo maximum. Raccourcissez-la un peu.'));
-    pending.push(data);
-    pendingSize += data.size;
-    cut(false);
+    if (up.produced + data.size > MAX_BYTES) return job?.cancel(new Error('Vidéo trop lourde : 40 Mo maximum. Raccourcissez-la un peu.'));
+    up.push(data);
   });
   // Envoi refusé d'entrée (espace plein, trop de vidéos…) : la préparation s'arrête aussitôt
-  opened.catch((err) => job.cancel(err));
+  up.opened.catch((err) => job.cancel(err));
   let out;
   try {
     out = await job;
   } catch (err) {
-    drop();
+    up.drop();
     if (err instanceof ApiError) throw err; // refus du serveur : message clair
     // Préparation impossible sur ce téléphone : la vidéo d'origine part telle quelle
     return sendBlob(file, mime, info, onStep);
   }
-  // Résultat vide, ou plus lourd qu'un MP4 d'origine (lisible partout) : l'original part à la place
-  if (out.size < 1000 || (mime === 'video/mp4' && !info.hevc && out.size >= file.size && file.size <= MAX_BYTES)) {
-    drop();
+  if (keepOriginal(out)) {
+    up.drop();
     return sendBlob(file, mime, info, onStep);
   }
   // La vidéo préparée est gardée : si le réseau coupe, « Réessayer » ne refait que l'envoi
   memo.blob = out;
   memo.mime = out.type || plan.mime;
   try {
-    if (sender.failed) throw sender.failed;
-    recDone = true;
-    cut(true);
     onStep?.('upload', 0.9);
-    await sender.drain();
-    const { id } = await opened;
-    const { video } = await api.post(`/api/videos/${id}/complete`, { size: out.size });
-    return video;
+    return await up.finish(out.size);
   } catch (err) {
-    drop();
+    up.drop();
     throw err;
   }
 }
@@ -524,7 +680,7 @@ const nearIo = typeof IntersectionObserver !== 'undefined'
 
 export function videoPlayer(v, { onOpen, onDouble, postId = null } = {}) {
   if (v.expiresAt && v.expiresAt <= Date.now()) {
-    return h('div', { class: 'vp vp-gone' }, icon('clock'), h('span', null, 'Vidéo éphémère disparue'));
+    return h('div', { class: 'vp vp-gone' }, icon('clock'), h('span', null, 'Vidéo disparue'));
   }
   // Pas de source tant que la vidéo n'approche pas de l'écran : elle se télécharge alors en entier
   const el = noSave(h('video', { class: 'vp-video', poster: v.poster || undefined, preload: 'auto', loop: true, playsinline: true, 'webkit-playsinline': '' }));

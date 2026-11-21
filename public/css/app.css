@@ -2347,3 +2347,21 @@ html.cookie-open body { padding-bottom: 210px; }
 .video-cell-time { position: absolute; z-index: 1; right: 6px; top: 6px; display: inline-flex; align-items: center; gap: 3px; padding: 3px 6px; border-radius: 999px; background: rgba(0, 0, 0, 0.45); color: #fff; font: 600 11px/1 var(--font); }
 .video-cell-time .icon { width: 10px; height: 10px; }
 @media (hover: hover) { .video-cell:hover img { opacity: 0.9; } }
+/* Brouillons (gardés sur le téléphone) */
+.draft-btn[disabled] { opacity: 0.4; }
+.drafts { display: grid; gap: 8px; padding: 4px 0 12px; }
+.draft-row { display: flex; align-items: center; gap: 6px; }
+.draft-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 16px; background: var(--surface-2); text-align: left; }
+.draft-open:active { background: var(--fill); }
+.draft-open .grow { display: grid; gap: 3px; min-width: 0; }
+.draft-open b { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.draft-open small { color: var(--muted); font-size: 12.5px; }
+.draft-thumb { position: relative; flex: none; width: 52px; height: 52px; border-radius: 12px; overflow: hidden; background: var(--fill); display: grid; place-items: center; }
+.draft-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.draft-ph { color: var(--muted); }
+.draft-play { position: absolute; left: 4px; bottom: 4px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: rgba(0, 0, 0, 0.55); color: #fff; }
+.draft-play .icon { width: 9px; height: 9px; }
+/* Fenêtre ouverte depuis une feuille (confirmation, signalement) : au-dessus de la feuille */
+.modal-backdrop.over-sheet { z-index: 94; }
+/* Menus contextuels : toujours au-dessus des feuilles et des fenêtres d'où ils s'ouvrent */
+.menu { z-index: 97; }

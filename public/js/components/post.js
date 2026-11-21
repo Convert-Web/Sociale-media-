@@ -12,6 +12,7 @@ import { sensitive, flaggedNotice } from './sensitive.js';
 import { readVideoInfo, videoPlayer, isVideoFile, clockLabel, MAX_SECONDS, openReels } from './video.js';
 import { sendInBackground } from './uploads.js';
 import { toggleSaved } from '../saved.js';
+import { saveDraft, deleteDraft, draftFiles } from '../drafts.js';
 
 const MAX_POST = 2000;
 const MAX_PHOTOS = 6;
@@ -305,7 +306,7 @@ export function postCard(post, { expanded = false } = {}) {
   });
 
   const saveBtn = h('button', { class: `act save-btn${post.saved ? ' saved' : ''}`, 'aria-label': 'Enregistrer', 'aria-pressed': String(post.saved) }, icon('bookmark'));
-  // Enregistrer : une vidéo est aussi gardée en entier sur le téléphone (au-delà de 24 h)
+  // Enregistrer : une vidéo est aussi gardée en entier sur le téléphone (lisible sans connexion)
   saveBtn.addEventListener('click', () =>
     toggleSaved(post, {
       onChange: (on) => {
@@ -423,7 +424,7 @@ export function postCard(post, { expanded = false } = {}) {
           memberChip(post.author),
           h('a', { href: link, title: fullDate(post.createdAt) }, timeAgo(post.createdAt)),
           edited,
-          // Vidéo éphémère : temps restant, discret, à côté de l'heure
+          // Vidéo éphémère (durée de vie réglée) : temps restant, discret, à côté de l'heure
           post.video?.expiresAt ? h('span', { class: 'post-ephemeral', title: 'Vidéo éphémère : effacée après ce délai' }, icon('clock', 'icon-xs'), `encore ${remaining(post.video.expiresAt)}`) : null,
         ),
       ),
@@ -672,8 +673,9 @@ export function commentsSection(post, onCount, { placement = 'above' } = {}) {
 // ---------------------------------------------------------------------------
 // Éditeur de publication (texte + jusqu'à 6 photos)
 // ---------------------------------------------------------------------------
-export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/posts' } = {}) {
+export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/posts', draft = null } = {}) {
   let files = [];
+  let draftId = draft?.id || null; // brouillon repris : retiré une fois publié
   const ta = h('textarea', {
     placeholder: placeholder || 'Que souhaitez-vous partager ?',
     maxlength: MAX_POST,
@@ -685,6 +687,8 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
   const previewHost = h('div', { class: 'preview-grid' });
   const fileInput = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', multiple: true, hidden: true });
   const submit = h('button', { class: 'btn btn-primary btn-sm', type: 'submit', disabled: true }, 'Publier');
+  // Brouillon : la publication est gardée sur ce téléphone, pour plus tard (Salon seulement)
+  const draftBtn = endpoint === '/api/posts' ? h('button', { class: 'btn btn-ghost btn-sm draft-btn', type: 'button', disabled: true }, 'Brouillon') : null;
   const addBtn = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Ajouter des photos', onclick: () => fileInput.click() }, icon('image'));
   // Vidéo : une par publication (une minute au plus), préparée puis envoyée en morceaux
   let video = null; // { file, info, posterUrl }
@@ -721,6 +725,7 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
     counter.textContent = len > MAX_POST - 300 ? `${MAX_POST - len}` : '';
     counter.classList.toggle('warn', len > MAX_POST - 50);
     submit.disabled = readingVideo || (!ta.value.trim() && !files.length && !video);
+    if (draftBtn) draftBtn.disabled = submit.disabled;
     addBtn.disabled = files.length >= MAX_PHOTOS || Boolean(video);
     videoBtn.disabled = files.length > 0 || Boolean(video);
   };
@@ -734,10 +739,10 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
           { class: 'preview preview-video' },
           video.posterUrl ? h('img', { src: video.posterUrl, alt: '' }) : h('span', { class: 'preview-video-ph' }, icon('video')),
           h('span', { class: 'preview-duration' }, icon('play', 'icon-xs'), clockLabel(video.info.duration)),
-          h('span', { class: 'preview-ephemeral' }, icon('clock', 'icon-xs'), `Éphémère · effacée après ${store.config?.videoTtlHours || 24} h`),
+          store.config?.videoTtlHours ? h('span', { class: 'preview-ephemeral' }, icon('clock', 'icon-xs'), `Éphémère · effacée après ${store.config.videoTtlHours} h`) : null,
           h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Retirer la vidéo', onclick: () => clearVideo() }, icon('x')),
         ),
-        h('p', { class: 'video-note' }, `Visible ${store.config?.videoTtlHours || 24} h dans le cercle. Les membres peuvent la garder sur leur téléphone.`),
+        h('p', { class: 'video-note' }, store.config?.videoTtlHours ? `Visible ${store.config.videoTtlHours} h dans le cercle. Les membres peuvent la garder sur leur téléphone.` : 'Visible dans le cercle et sur votre profil, jusqu’à ce que vous la supprimiez.'),
       );
       previewHost.dataset.count = '1';
       update();
@@ -787,10 +792,8 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
     video = null;
     paintPreviews();
   };
-  videoInput.addEventListener('change', async () => {
-    const file = videoInput.files[0];
-    videoInput.value = '';
-    if (!file) return;
+  // Vidéo choisie (ou reprise d'un brouillon) : lue, vérifiée, puis montrée en aperçu
+  const useVideo = async (file) => {
     if (!isVideoFile(file)) return toast('Format de vidéo non pris en charge.', 'error');
     showProgress('Lecture de la vidéo…', 0.05);
     readingVideo = true;
@@ -807,8 +810,37 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
     readingVideo = false;
     update();
     progress.hidden = true;
+  };
+  videoInput.addEventListener('change', () => {
+    const file = videoInput.files[0];
+    videoInput.value = '';
+    if (file) useVideo(file);
   });
 
+  // Tout vider après une publication (ou l'enregistrement d'un brouillon)
+  const reset = () => {
+    ta.value = '';
+    files.forEach((f) => URL.revokeObjectURL(f.url));
+    files = [];
+    if (video) clearVideo();
+    paintPreviews();
+    fit();
+  };
+  draftBtn?.addEventListener('click', async () => {
+    if (draftBtn.disabled) return;
+    draftBtn.disabled = true;
+    try {
+      await saveDraft({ id: draftId, body: ta.value, photos: files.map((f) => f.file), video });
+      toast('Brouillon enregistré sur ce téléphone : bouton + puis « Brouillons ».');
+      draftId = null;
+      reset();
+      onQueued?.();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      update();
+    }
+  });
 
   const form = h(
     'form',
@@ -823,6 +855,8 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
         if (video && !early) {
           const body = ta.value;
           const v = video;
+          const fromDraft = draftId;
+          draftId = null;
           sendInBackground({
             file: v.file,
             info: v.info,
@@ -833,6 +867,7 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
               fd.append('body', body);
               fd.append('video', id);
               const { post } = await api.post(endpoint, fd);
+              if (fromDraft) deleteDraft(fromDraft);
               if (post.flagged) flaggedNotice(post);
               store.emit('post:created', post);
               onPosted?.(post);
@@ -875,12 +910,9 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
             return;
           }
           const { post } = await api.post(endpoint, fd);
-          ta.value = '';
-          files.forEach((f) => URL.revokeObjectURL(f.url));
-          files = [];
-          if (video) clearVideo();
-          paintPreviews();
-          fit();
+          if (draftId) deleteDraft(draftId);
+          draftId = null;
+          reset();
           if (post.flagged) flaggedNotice(post);
           else toast(post.groupId ? 'Publié dans le groupe.' : 'Publié dans le Salon.');
           store.emit('post:created', post);
@@ -905,7 +937,7 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
         'div',
         { class: 'composer-bar' },
         h('div', { class: 'composer-tools' }, addBtn, fileInput, videoBtn, videoInput),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '14px' } }, counter, submit),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, counter, draftBtn, submit),
       ),
       canEarly ? h('div', { class: 'composer-early' }, earlyBtn, hoursSel) : null,
     ),
@@ -919,6 +951,15 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
     const imgs = [...(e.clipboardData?.items || [])].filter((i) => i.type.startsWith('image/')).map((i) => i.getAsFile());
     if (imgs.length) addFiles(imgs);
   });
+  // Brouillon repris : texte, photos et vidéo remis en place
+  if (draft) {
+    ta.value = draft.body || '';
+    const { photos, video: file } = draftFiles(draft);
+    if (photos.length) addFiles(photos);
+    if (file) useVideo(file);
+    update();
+    fit();
+  }
   form.focusInput = () => ta.focus();
   // Bouton « + » : ouvrir directement le choix des photos ou de la vidéo (dans le même geste)
   form.pickPhotos = () => fileInput.click();

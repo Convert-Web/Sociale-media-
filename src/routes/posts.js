@@ -35,8 +35,9 @@ module.exports = function postRoutes(ctx) {
     const postId = intParam(id);
     const post = postId && (await db.get('SELECT * FROM posts WHERE id = ?', postId));
     if (!post) fail(404, 'Publication introuvable.');
-    // Vidéo éphémère expirée : elle a disparu, même avant le ménage automatique
-    if (post.video_id && post.created_at <= Date.now() - ctx.config.videoTtlHours * 3600 * 1000) fail(404, 'Cette vidéo éphémère a disparu.');
+    // Vidéo arrivée en fin de vie (durée de vie réglée) : elle a disparu, même avant le ménage automatique
+    const live = require('../videos').liveSince(ctx);
+    if (post.video_id && live && post.created_at <= live) fail(404, 'Cette vidéo a disparu.');
     if (viewer && post.user_id !== viewer.id && (await isBlocked(ctx, viewer.id, post.user_id))) fail(404, 'Publication introuvable.');
     if (viewer && post.groupe_id && !viewer.is_admin) {
       const member = await db.get(
@@ -63,7 +64,7 @@ module.exports = function postRoutes(ctx) {
     const limit = Math.min(intParam(req.query.limit) || 15, 50);
     const scope = req.query.scope === 'following' ? 'following' : 'all';
     const me = req.user.id;
-    const live = Date.now() - ctx.config.videoTtlHours * 3600 * 1000; // vidéos éphémères encore visibles
+    const live = require('../videos').liveSince(ctx); // vidéos encore en ligne (toutes si elles sont gardées)
     const rows =
       scope === 'following'
         ? await db.all(

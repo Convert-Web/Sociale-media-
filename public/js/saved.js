@@ -1,6 +1,6 @@
 // Vidéos enregistrées sur le téléphone : une copie complète (vidéo, aperçu, auteur, texte) est
 // gardée dans l'application (base de données de l'appareil). Elle reste dans « Enregistrés »
-// même après l'effacement de la vidéo du cercle, 24 heures après sa publication.
+// même sans connexion, ou après l'effacement de la vidéo du cercle.
 // La copie ne quitte pas l'application : elle n'est visible que par la personne qui l'a enregistrée.
 import { store } from './store.js';
 import { preloadVideo, videoBlob } from './components/video.js';
@@ -126,7 +126,7 @@ export async function toggleSaved(post, { onChange } = {}) {
         } finally {
           clearTimeout(wait);
         }
-        toast('Vidéo gardée sur votre téléphone : retrouvez-la dans Enregistrés, même après 24 h.');
+        toast('Vidéo gardée sur votre téléphone : retrouvez-la dans Enregistrés, même sans connexion.');
       } else toast('Enregistré.');
     }
     store.emit('saved:changed', { id: post.id, saved: post.saved });

@@ -408,6 +408,8 @@ export function modal(title, body, { onClose } = {}) {
     ),
   );
   backdrop._onClose = onClose;
+  // Ouverte depuis une feuille (commentaires, brouillons…) : affichée par-dessus, et non derrière
+  if (document.querySelector('.sheet-backdrop')) backdrop.classList.add('over-sheet');
   document.body.append(backdrop);
   document.body.style.overflow = 'hidden';
   openModalEl = backdrop;

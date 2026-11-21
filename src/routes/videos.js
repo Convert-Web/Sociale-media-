@@ -29,7 +29,7 @@ module.exports = function videoRoutes(ctx) {
   // Suite : ?cursor=u123 (vidéos non vues avant 123) ou s123 (déjà vues avant 123) ; ?before=123 (ancien).
   r.get('/videos/feed', async (req, res) => {
     const limit = 8;
-    const since = Date.now() - config.videoTtlHours * 3600 * 1000;
+    const since = V.liveSince(ctx);
     const base = `${POST_SELECT} WHERE p.video_id IS NOT NULL AND p.created_at > ? AND (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${VISIBLE_POST}`;
     const page = async (extra, before, n) =>
       (await db.all(`${base} ${extra} ORDER BY p.id DESC LIMIT ?`, req.user.id, since, before, before, n));

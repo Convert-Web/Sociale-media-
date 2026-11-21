@@ -245,8 +245,9 @@ test('index.html : tous les modules préchargés en parallèle, aperçu de parta
   const walk = (d) => {
     for (const f of fs.readdirSync(d, { withFileTypes: true })) {
       const p = path.join(d, f.name);
-      if (f.isDirectory()) walk(p);
-      else if (f.name.endsWith('.js') && f.name !== 'boot.js') mods.push(`/${path.relative(path.join(ROOT, 'public'), p).split(path.sep).join('/')}`);
+      if (f.isDirectory()) {
+        if (f.name !== 'vendor') walk(p); // librairies chargées seulement à la demande (préparation des vidéos)
+      } else if (f.name.endsWith('.js') && f.name !== 'boot.js') mods.push(`/${path.relative(path.join(ROOT, 'public'), p).split(path.sep).join('/')}`);
     }
   };
   walk(path.join(ROOT, 'public/js'));

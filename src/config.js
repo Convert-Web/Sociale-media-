@@ -42,7 +42,8 @@ const config = {
   // Espace réservé aux vidéos dans la base (Turso gratuit : 5 Go au total)
   videoStorageBytes: (Number(env.VIDEO_STORAGE_MB) || 3000) * 1024 * 1024,
   // Vidéos éphémères : effacées définitivement après ce délai (comme les stories)
-  videoTtlHours: Number(env.VIDEO_TTL_HOURS) || 24,
+  // Durée de vie des vidéos publiées, en heures ; 0 (par défaut) : gardées tant que leur auteur ne les supprime pas
+  videoTtlHours: Math.max(0, Number(env.VIDEO_TTL_HOURS) || 0),
   // Comptes automatiques (AURUM, Le Concierge) : actifs sauf BOTS=off ; désactivés pendant les tests
   bots: env.BOTS !== 'off' && env.NODE_ENV !== 'test',
   // Droit d'entrée payant : désactivé par défaut (inscription gratuite).

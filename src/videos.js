@@ -54,17 +54,24 @@ async function removeVideo(ctx, id) {
   if (row?.poster) require('./uploads').deleteUpload(ctx, row.poster);
 }
 
-// Vidéos éphémères : la publication et la vidéo sont effacées définitivement après
-// config.videoTtlHours (24 h par défaut). Vérifié au plus une fois par minute, à l'ouverture
-// du Salon, des profils, des groupes et du fil des vidéos.
+// Durée de vie des vidéos publiées (config.videoTtlHours) : 0 par défaut, elles sont gardées tant
+// que leur auteur ne les supprime pas. Avec une durée (VIDEO_TTL_HOURS), la publication et la vidéo
+// sont effacées définitivement à son terme. Vérifié au plus une fois par minute.
+const ttlMs = (ctx) => (ctx.config.videoTtlHours > 0 ? ctx.config.videoTtlHours * 3600 * 1000 : 0);
+// Publications vidéo plus récentes que cette date : encore en ligne (0 : toutes)
+const liveSince = (ctx) => (ttlMs(ctx) ? Date.now() - ttlMs(ctx) : 0);
 const lastPurge = new WeakMap();
 async function purgeExpired(ctx, { force = false } = {}) {
   const now = Date.now();
   if (!force && now - (lastPurge.get(ctx.db) || 0) < 60 * 1000) return 0;
   lastPurge.set(ctx.db, now);
+  if (!ttlMs(ctx)) {
+    await cleanup(ctx); // vidéos gardées : seulement le ménage des envois abandonnés
+    return 0;
+  }
   const rows = await ctx.db.all(
     'SELECT id, image, video_id FROM posts WHERE video_id IS NOT NULL AND created_at < ? LIMIT 25',
-    now - ctx.config.videoTtlHours * 3600 * 1000,
+    now - ttlMs(ctx),
   );
   const { deletePost } = require('./membership');
   const { deleteUpload } = require('./uploads');
@@ -77,7 +84,8 @@ async function purgeExpired(ctx, { force = false } = {}) {
   return rows.length;
 }
 
-const expiresAt = (ctx, createdAt) => createdAt + ctx.config.videoTtlHours * 3600 * 1000;
+// Fin de vie d'une vidéo publiée (null : gardée)
+const expiresAt = (ctx, createdAt) => (ttlMs(ctx) ? createdAt + ttlMs(ctx) : null);
 
 // Diffusion par plages d'octets (lecture, avance rapide)
 function videoHandler(ctx) {
@@ -94,8 +102,9 @@ function videoHandler(ctx) {
       id,
     );
     if (!v || idx >= v.chunks) return next();
-    // Fin de vie : 24 h après la publication (ou fin de la story) ; vidéo pas encore publiée : 1 h
-    const end = v.posted_at ? expiresAt(ctx, v.posted_at) : v.story_expires || Date.now() + 3600 * 1000;
+    // Fin de vie : durée de vie de la publication (gardée : 30 jours de cache, renouvelés), fin de la
+    // story ; vidéo pas encore publiée : 1 h
+    const end = v.posted_at ? expiresAt(ctx, v.posted_at) ?? Date.now() + 30 * 86400 * 1000 : v.story_expires || Date.now() + 3600 * 1000;
     if (end <= Date.now()) return next();
     const key = `${id}:${idx}`;
     let data = cache.get(key)?.data;
@@ -130,12 +139,13 @@ function videoHandler(ctx) {
       m[1],
     );
     // Vidéo expirée : plus jamais diffusée, même avant le ménage
-    if (!v || (v.posted_at && expiresAt(ctx, v.posted_at) <= Date.now())) return next();
+    const lifeEnd = v?.posted_at ? expiresAt(ctx, v.posted_at) : null;
+    if (!v || (lifeEnd && lifeEnd <= Date.now())) return next();
     const type = v.mime === 'video/webm' ? 'video/webm' : 'video/mp4';
     res.setHeader('Content-Type', type);
     res.setHeader('Accept-Ranges', 'bytes');
-    // Éphémère : le navigateur ne la garde pas au-delà de la journée
-    res.setHeader('Cache-Control', `private, max-age=${Math.min(86400, ctx.config.videoTtlHours * 3600)}`);
+    // Gardée par le navigateur une journée au plus (moins si la vidéo s'efface avant)
+    res.setHeader('Cache-Control', `private, max-age=${ttlMs(ctx) ? Math.min(86400, ttlMs(ctx) / 1000) : 86400}`);
     // Le CDN de Vercel ne garde pas ces réponses partielles (chaque plage est différente) ;
     // le navigateur, lui, les garde en cache.
     res.setHeader('CDN-Cache-Control', 'no-store');
@@ -190,4 +200,4 @@ function videoHandler(ctx) {
   };
 }
 
-module.exports = { purgeExpired, expiresAt, CHUNK, MAX_BYTES, MAX_SECONDS, PER_DAY, TYPES, newId, videoUrl, idFromUrl, looksLikeVideo, storageUsed, cleanup, removeVideo, videoHandler };
+module.exports = { purgeExpired, expiresAt, liveSince, CHUNK, MAX_BYTES, MAX_SECONDS, PER_DAY, TYPES, newId, videoUrl, idFromUrl, looksLikeVideo, storageUsed, cleanup, removeVideo, videoHandler };

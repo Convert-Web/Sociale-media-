@@ -2,7 +2,8 @@
 import { api, enc } from './api.js';
 import { store, connectRealtime, disconnectRealtime } from './store.js';
 import { navigate, setRenderer, compile } from './router.js';
-import { h, icon, avatar, memberCard, cardSince, spinner, emptyState, closeModal, closeMenu, modal, num, clear, toast } from './dom.js';
+import { h, icon, avatar, memberCard, cardSince, spinner, emptyState, closeModal, closeMenu, modal, num, clear, toast, timeAgo, confirmDialog } from './dom.js';
+import { countDrafts, listDrafts, deleteDraft } from './drafts.js';
 import { composer } from './components/post.js';
 import { openSheet, closeSheet } from './components/sheet.js';
 import { newStory } from './components/stories.js';
@@ -103,17 +104,19 @@ store.on('counters', paintTitle);
 // Coquille (navigation latérale, colonne de droite, barre d'onglets mobile)
 // ---------------------------------------------------------------------------
 // Bouton « + » : trois choix clairs, en grand
-function openComposer(kind) {
+function openComposer(kind, draft = null) {
   // La fenêtre ne se ferme que si elle est encore ouverte (une vidéo publiée plus tard,
   // en arrière-plan, ne doit pas fermer une autre fenêtre ouverte entre-temps)
   const c = composer({
+    draft,
     onPosted: () => {
       if (c.isConnected) closeModal();
       document.dispatchEvent(new CustomEvent('aurum:posted'));
     },
     onQueued: () => c.isConnected && closeModal(),
   });
-  modal(kind === 'video' ? 'Nouvelle vidéo' : 'Nouvelle publication', c);
+  modal(draft ? 'Brouillon' : kind === 'video' ? 'Nouvelle vidéo' : 'Nouvelle publication', c);
+  if (draft) return c;
   if (kind === 'video') c.pickVideo();
   else if (kind === 'photos') c.pickPhotos();
   return c;
@@ -121,16 +124,55 @@ function openComposer(kind) {
 function openCreate() {
   const choice = (ic, title, sub, run) =>
     h('button', { type: 'button', class: 'create-choice', onclick: () => { closeSheet(); run(); } }, h('span', { class: 'create-icon' }, icon(ic)), h('span', { class: 'grow' }, h('b', null, title), h('small', null, sub)), icon('chevron', 'icon-sm'));
-  openSheet({
-    title: 'Créer',
-    body: h(
-      'div',
-      { class: 'create-list' },
-      choice('pen', 'Publication', 'Un texte, jusqu’à 6 photos', () => openComposer()),
-      choice('video', 'Vidéo', 'Une minute au plus · visible 24 h', () => openComposer('video')),
-      choice('sparkles', 'Story', 'Photo ou vidéo · disparaît après 24 h', () => newStory()),
-    ),
+  const list = h(
+    'div',
+    { class: 'create-list' },
+    choice('pen', 'Publication', 'Un texte, jusqu’à 6 photos', () => openComposer()),
+    choice('video', 'Vidéo', store.config?.videoTtlHours ? `Une minute au plus · visible ${store.config.videoTtlHours} h` : 'Une minute au plus · en 1080p', () => openComposer('video')),
+    choice('sparkles', 'Story', 'Photo ou vidéo · disparaît après 24 h', () => newStory()),
+  );
+  openSheet({ title: 'Créer', body: list });
+  // Brouillons gardés sur ce téléphone : proposés en dernier, s'il y en a
+  countDrafts().then((n) => {
+    if (n && list.isConnected) list.append(choice('pen', 'Brouillons', `${n} gardé${n > 1 ? 's' : ''} sur ce téléphone`, openDrafts));
   });
+}
+
+// Brouillons : reprendre (fenêtre de publication remplie) ou supprimer
+async function openDrafts() {
+  const body = h('div', { class: 'drafts' }, spinner());
+  openSheet({ title: 'Brouillons', body, tall: true });
+  const paint = async () => {
+    const drafts = await listDrafts();
+    if (!drafts.length) return body.replaceChildren(emptyState('pen', 'Aucun brouillon', 'Dans la fenêtre de publication, « Brouillon » garde votre texte, vos photos et votre vidéo pour plus tard.'));
+    body.replaceChildren(
+      ...drafts.map((d) => {
+        const thumbBlob = d.video?.poster || d.photos?.[0]?.blob || null;
+        const thumb = thumbBlob ? h('img', { src: URL.createObjectURL(thumbBlob), alt: '' }) : h('span', { class: 'draft-ph' }, icon('pen'));
+        const kind = d.video ? `Vidéo · ${Math.round(d.video.duration || 0)} s` : d.photos?.length ? `${d.photos.length} photo${d.photos.length > 1 ? 's' : ''}` : 'Texte';
+        const open = () => {
+          closeSheet();
+          openComposer(d.video ? 'video' : null, d);
+        };
+        return h(
+          'div',
+          { class: 'draft-row' },
+          h('button', { type: 'button', class: 'draft-open', onclick: open }, h('span', { class: 'draft-thumb' }, thumb, d.video ? h('span', { class: 'draft-play' }, icon('play', 'icon-xs')) : null), h('span', { class: 'grow' }, h('b', null, (d.body || '').trim().slice(0, 80) || 'Sans texte'), h('small', null, `${kind} · ${timeAgo(d.updatedAt)}`))),
+          h('button', {
+            type: 'button',
+            class: 'icon-btn',
+            'aria-label': 'Supprimer le brouillon',
+            onclick: async () => {
+              if (!(await confirmDialog('Supprimer ce brouillon ?', 'Il sera effacé de ce téléphone.', 'Supprimer'))) return;
+              await deleteDraft(d.id);
+              paint();
+            },
+          }, icon('trash')),
+        );
+      }),
+    );
+  };
+  paint();
 }
 
 // Menu « moi » sur téléphone : profil, amis, groupes, réglages… (la barre d'onglets n'a que cinq places)
