@@ -4,7 +4,7 @@
 import { api, enc } from '../api.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, richText, num, toast, emptyState, spinner, onTaps, heartBurst, shareLink, verifiedMark } from '../dom.js';
-import { sound, reelsPlayer, cachedReels, rememberReels, preloadVideo, preloadStart, localVideo, sameVideo, setSource, PRIO, preloadEta, cancelPreload, holdPreloads, releasePreloads, clockLabel, countView, canProgressive, progressiveReady, progressiveCheck, playProgressive, disableProgressive, downloadedBytes, relaxPreload } from '../components/video.js';
+import { sound, reelsPlayer, cachedReels, rememberReels, preloadVideo, preloadStart, localVideo, sameVideo, setSource, PRIO, preloadEta, cancelPreload, holdPreloads, releasePreloads, clockLabel, countView, canProgressive, progressiveReady, progressiveCheck, playProgressive, disableProgressive, downloadedBytes, relaxPreload, reportVideoIssue } from '../components/video.js';
 import { reportDialog } from '../components/report.js';
 import { commentsSection } from '../components/post.js';
 import { openSheet, closeSheet } from '../components/sheet.js';
@@ -326,6 +326,7 @@ export async function videosView(ctx) {
     const fallback = () => {
       if (token !== actToken) return;
       const at = player.currentTime;
+      reportVideoIssue('lecture progressive abandonnée', v, { rs: player.readyState, err: player.error?.code || null, shown });
       disableProgressive();
       classic(v, token);
       if (at > 0.5) pendingSeek = at; // reprise au même endroit
@@ -438,6 +439,7 @@ export async function videosView(ctx) {
   const onReady = () => releasePreloads();
   // Erreur pendant une lecture progressive : retour à la lecture classique
   const onError = () => {
+    if (active) reportVideoIssue('erreur de lecture', active.__post.video, { mode: player.dataset.mode, err: player.error?.code || null, msg: String(player.error?.message || '').slice(0, 120) });
     if (!progressive || !active) return;
     const at = player.currentTime;
     disableProgressive();
@@ -463,6 +465,7 @@ export async function videosView(ctx) {
         return;
       }
       const at = player.currentTime;
+      reportVideoIssue('lecture bloquée', v, { mode: player.dataset.mode, t: Math.round(at) });
       disableProgressive();
       classic(v, token);
       pendingSeek = at; // reprise au même endroit

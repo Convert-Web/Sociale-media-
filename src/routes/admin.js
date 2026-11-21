@@ -128,6 +128,42 @@ module.exports = function adminRoutes(ctx) {
     res.json({ count: n, top });
   });
 
+  // Dernières vidéos envoyées, avec leur fiche technique (diagnostic d'une vidéo qui lit mal)
+  r.get('/admin/videos', async (_req, res) => {
+    const rows = await db.all(
+      `SELECT v.id, v.mime, v.size, v.duration, v.width, v.height, v.chunks, v.complete, v.created_at, v.meta,
+              u.username, p.id AS post_id, s.id AS story_id
+       FROM videos v JOIN users u ON u.id = v.owner_id
+       LEFT JOIN posts p ON p.video_id = v.id LEFT JOIN stories s ON s.video_id = v.id
+       ORDER BY v.created_at DESC LIMIT 12`,
+    );
+    const V = require('../videos');
+    res.json({
+      videos: rows.map((r) => ({
+        id: r.id,
+        url: V.videoUrl(r.id, V.TYPES[r.mime]),
+        mime: r.mime,
+        size: r.size,
+        duration: r.duration,
+        width: r.width,
+        height: r.height,
+        chunks: r.chunks,
+        complete: Boolean(r.complete),
+        createdAt: r.created_at,
+        author: r.username,
+        postId: r.post_id,
+        storyId: r.story_id,
+        meta: (() => {
+          try {
+            return r.meta ? JSON.parse(r.meta) : null;
+          } catch {
+            return null;
+          }
+        })(),
+      })),
+    });
+  });
+
   // Mesure d'audience (30 derniers jours)
   r.get('/admin/analytics', async (_req, res) => {
     res.json(await analytics.summary(ctx, 30));

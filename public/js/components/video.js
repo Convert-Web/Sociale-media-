@@ -170,6 +170,46 @@ async function fastPrepCheck(file) {
   }
 }
 
+// Contrôle de la vidéo préparée, sur le téléphone, avant de la publier : même durée, son présent
+// si l'original en a, et trois images comparées à l'original (couleurs moyennes d'une miniature).
+// Une vidéo abîmée par la conversion (images vertes, figées, noires…) n'est jamais publiée.
+export async function checkPrepared(file, out) {
+  const mb = await loadMediabunny();
+  const src = new mb.Input({ source: new mb.BlobSource(file), formats: mb.ALL_FORMATS });
+  const res = new mb.Input({ source: new mb.BlobSource(out), formats: mb.ALL_FORMATS });
+  const [ts, tr] = [await src.getPrimaryVideoTrack(), await res.getPrimaryVideoTrack()];
+  if (!tr) return { ok: false, why: 'aucune image' };
+  const [ds, dr] = [await src.computeDuration(), await res.computeDuration()];
+  if (Math.abs(ds - dr) > Math.max(1, ds * 0.05)) return { ok: false, why: `durée ${dr.toFixed(1)} s au lieu de ${ds.toFixed(1)} s` };
+  if ((await src.getPrimaryAudioTrack()) && !(await res.getPrimaryAudioTrack())) return { ok: false, why: 'son perdu' };
+  const at = [0.15, 0.5, 0.85].map((r) => r * Math.min(ds, dr));
+  const shrink = (track) => new mb.CanvasSink(track, { width: 12, height: 20, fit: 'fill' });
+  const read = async (sink) => {
+    const out = [];
+    for await (const w of sink.canvasesAtTimestamps(at)) {
+      const c = w?.canvas;
+      if (!c) {
+        out.push(null);
+        continue;
+      }
+      const g = c.getContext('2d');
+      out.push(g.getImageData(0, 0, c.width, c.height).data);
+    }
+    return out;
+  };
+  const [a, b] = [await read(shrink(ts)), await read(shrink(tr))];
+  const diffs = a.map((pa, i) => {
+    const pb = b[i];
+    if (!pa || !pb) return 255;
+    let d = 0;
+    for (let k = 0; k < pa.length; k += 4) d += Math.abs(pa[k] - pb[k]) + Math.abs(pa[k + 1] - pb[k + 1]) + Math.abs(pa[k + 2] - pb[k + 2]);
+    return d / ((pa.length / 4) * 3);
+  });
+  // Écart moyen par point (0 à 255) : une vraie conversion reste sous ~15 ; une image abîmée dépasse 45
+  const bad = diffs.filter((d) => d > 45).length;
+  return { ok: bad < 2, why: bad >= 2 ? 'images abîmées' : '', diffs: diffs.map((d) => Math.round(d)) };
+}
+
 // onData(octets, position) : chaque morceau produit, dans l'ordre (envoi pendant la préparation)
 async function fastPrepare(file, info, onProgress, onData, signal) {
   const mb = await loadMediabunny();
@@ -464,7 +504,7 @@ function openUpload({ mime, size, info, streaming = false, estimate = 0 }) {
 }
 
 // Fichier déjà prêt : envoyé en morceaux de 1 Mo, trois à la fois
-async function sendBlob(blob, mime, info, onStep) {
+async function sendBlob(blob, mime, info, onStep, meta = null) {
   if (blob.size > MAX_BYTES) throw new Error('Vidéo trop lourde : 40 Mo maximum. Raccourcissez-la un peu.');
   const opened = openUpload({ mime, size: blob.size, info });
   const { id, chunkSize, chunks } = await opened;
@@ -472,7 +512,7 @@ async function sendBlob(blob, mime, info, onStep) {
     const sender = chunkSender(opened, (n) => onStep?.('upload', n / blob.size));
     for (let i = 0; i < chunks; i++) sender.add(i, blob.slice(i * chunkSize, Math.min(blob.size, (i + 1) * chunkSize)));
     await sender.drain();
-    const { video } = await api.post(`/api/videos/${id}/complete`);
+    const { video } = await api.post(`/api/videos/${id}/complete`, meta ? { meta } : {});
     return video;
   } catch (err) {
     api.del(`/api/videos/${id}`).catch(() => {}); // place libérée ; « Réessayer » repart proprement
@@ -517,13 +557,13 @@ function streamUpload({ mime, info, estimate, onTail }) {
       pendingSize += n;
       cut(false);
     },
-    async finish(size) {
+    async finish(size, meta = null) {
       if (sender.failed) throw sender.failed;
       finishing = true;
       cut(true);
       await sender.drain();
       const { id } = await opened;
-      const { video } = await api.post(`/api/videos/${id}/complete`, { size });
+      const { video } = await api.post(`/api/videos/${id}/complete`, { size, ...(meta ? { meta } : {}) });
       return video;
     },
   };
@@ -533,7 +573,14 @@ function streamUpload({ mime, info, estimate, onTail }) {
 // memo garde la vidéo préparée : si le réseau coupe, « Réessayer » renvoie sans tout refaire.
 // Renvoie la vidéo à joindre à la publication.
 export async function uploadVideo(file, info, onStep, memo = {}) {
-  if (memo.blob) return sendBlob(memo.blob, memo.mime, info, onStep);
+  const t0 = Date.now();
+  // Fiche technique (diagnostic de la Direction si une vidéo lit mal) : rien de personnel
+  const meta = memo.meta || (memo.meta = {
+    appareil: navigator.userAgent.slice(0, 180),
+    source: { type: file.type || fileMime(file), mo: +(file.size / 1048576).toFixed(1), largeur: info.width, hauteur: info.height, duree: +(info.duration || 0).toFixed(1), hevc: Boolean(info.hevc), rapidePossible: Boolean(info.fast) },
+  });
+  const done = (method, out, extra = {}) => Object.assign(meta, { methode: method, sortie: out ? { type: out.type, mo: +(out.size / 1048576).toFixed(1) } : null, secondes: Math.round((Date.now() - t0) / 100) / 10, ...extra });
+  if (memo.blob) return sendBlob(memo.blob, memo.mime, info, onStep, done(`${meta.methode || 'préparée'} (renvoi)`, memo.blob));
   const mime = fileMime(file);
   const target = encodeSize(info.width, info.height);
   const guess = ((target.bps + 128_000) * (info.duration || 30)) / 8; // poids probable une fois préparée
@@ -547,7 +594,8 @@ export async function uploadVideo(file, info, onStep, memo = {}) {
   // 1. Préparation rapide (circuits vidéo du téléphone), envoyée pendant qu'elle se fait
   if (heavy && info.fast && !memo.slow) {
     const fastGuess = ((fastBitrate(target.width, target.height) + 160_000) * (info.duration || 30)) / 8;
-    const up = streamUpload({ mime: 'video/mp4', info, estimate: fastGuess * 1.25, onTail: (r) => onStep?.('upload', 0.85 + 0.15 * r) });
+    const tail = (step, r) => onStep?.('upload', 0.85 + 0.15 * r);
+    const up = streamUpload({ mime: 'video/mp4', info, estimate: fastGuess * 1.25, onTail: (r) => tail('upload', r) });
     const ctl = new AbortController();
     let refused = null;
     up.opened.catch((err) => {
@@ -557,30 +605,48 @@ export async function uploadVideo(file, info, onStep, memo = {}) {
     let inOrder = true;
     let out;
     try {
-      out = await fastPrepare(file, info, (p) => onStep?.('stream', p * 0.85), (data, position) => {
+      out = await fastPrepare(file, info, (p) => onStep?.('stream', p * 0.8), (data, position) => {
         if (!inOrder) return;
         if (position !== up.produced) inOrder = false; // écriture hors séquence : envoi du fichier entier à la fin
         else up.push(data);
       }, ctl.signal);
-    } catch {
+    } catch (err) {
       up.drop();
       if (refused) throw refused;
       // Préparation rapide interrompue : on réessaie avec la méthode habituelle (toucher la pastille)
       memo.slow = true;
+      meta.rapide = `interrompue : ${String(err?.message || err).slice(0, 120)}`;
       throw new Error('Préparation interrompue.');
     }
     if (keepOriginal(out)) {
       up.drop();
-      return sendBlob(file, mime, info, (step, r) => onStep?.('upload', 0.85 + 0.15 * r));
+      return sendBlob(file, mime, info, tail, done('originale (plus légère)', file));
+    }
+    // Contrôle sur le téléphone : une vidéo abîmée par la conversion n'est jamais publiée
+    onStep?.('stream', 0.82);
+    let check;
+    try {
+      check = await checkPrepared(file, out);
+    } catch (err) {
+      check = { ok: true, why: `contrôle impossible : ${String(err?.message || err).slice(0, 80)}` };
+    }
+    if (!check.ok) {
+      up.drop();
+      // Original envoyé tel quel s'il n'est pas trop lourd ; sinon, méthode habituelle (toucher la pastille)
+      if (file.size <= MAX_BYTES) return sendBlob(file, mime, info, tail, done('originale (conversion écartée)', file, { controle: check }));
+      memo.slow = true;
+      meta.controle = check;
+      throw new Error('Préparation à refaire.');
     }
     memo.blob = out; // « Réessayer » après une coupure ne refait que l'envoi
     memo.mime = 'video/mp4';
+    done('rapide', out, { controle: check });
     if (!inOrder || up.produced !== out.size) {
       up.drop();
-      return sendBlob(out, 'video/mp4', info, (step, r) => onStep?.('upload', 0.85 + 0.15 * r));
+      return sendBlob(out, 'video/mp4', info, tail, meta);
     }
     try {
-      return await up.finish(out.size);
+      return await up.finish(out.size, meta);
     } catch (err) {
       up.drop();
       throw err;
@@ -589,7 +655,7 @@ export async function uploadVideo(file, info, onStep, memo = {}) {
 
   // 2. Méthode habituelle : la vidéo est rejouée en temps réel et réenregistrée, envoyée au fil de l'eau
   const plan = heavy ? encodePlan(file) : null;
-  if (!plan) return sendBlob(file, mime, info, onStep);
+  if (!plan) return sendBlob(file, mime, info, onStep, done(light ? 'originale (déjà légère)' : 'originale', file));
   const up = streamUpload({ mime: plan.mime, info, estimate: guess * 1.25, onTail: (r) => onStep?.('upload', 0.9 + 0.1 * r) });
   const job = compress(file, info, plan, (p) => onStep?.('stream', Math.min(p, 1) * 0.9), (data) => {
     if (up.produced + data.size > MAX_BYTES) return job?.cancel(new Error('Vidéo trop lourde : 40 Mo maximum. Raccourcissez-la un peu.'));
@@ -604,18 +670,19 @@ export async function uploadVideo(file, info, onStep, memo = {}) {
     up.drop();
     if (err instanceof ApiError) throw err; // refus du serveur : message clair
     // Préparation impossible sur ce téléphone : la vidéo d'origine part telle quelle
-    return sendBlob(file, mime, info, onStep);
+    return sendBlob(file, mime, info, onStep, done('originale (temps réel impossible)', file));
   }
   if (keepOriginal(out)) {
     up.drop();
-    return sendBlob(file, mime, info, onStep);
+    return sendBlob(file, mime, info, onStep, done('originale (plus légère)', file));
   }
   // La vidéo préparée est gardée : si le réseau coupe, « Réessayer » ne refait que l'envoi
   memo.blob = out;
   memo.mime = out.type || plan.mime;
+  done('temps réel', out);
   try {
     onStep?.('upload', 0.9);
-    return await up.finish(out.size);
+    return await up.finish(out.size, meta);
   } catch (err) {
     up.drop();
     throw err;
@@ -705,6 +772,7 @@ export function videoPlayer(v, { onOpen, onDouble, postId = null } = {}) {
     let shown = false;
     const fallback = () => {
       if (el.dataset.mode !== 'progressive') return;
+      reportVideoIssue('lecture progressive abandonnée (Salon)', v, { rs: el.readyState, err: el.error?.code || null });
       disableProgressive();
       setSource(el, v, v.url);
       if (wanted && !userPaused) el.play().catch(() => {});
@@ -819,6 +887,7 @@ export function videoPlayer(v, { onOpen, onDouble, postId = null } = {}) {
     },
     double: onDouble ? (e) => onDouble(wrap, e) : null,
   });
+  el.addEventListener('error', () => el.getAttribute('src') && reportVideoIssue('erreur de lecture (Salon)', v, { mode: el.dataset.mode, err: el.error?.code || null, msg: String(el.error?.message || '').slice(0, 120) }));
   el.addEventListener('play', () => (playMark.hidden = true));
   el.addEventListener('pause', () => (playMark.hidden = !userPaused));
   el.addEventListener('timeupdate', () => {
@@ -1199,6 +1268,21 @@ let mseOff = (() => {
     return false;
   }
 })();
+const reported = new Set();
+export function reportVideoIssue(kind, v, detail = {}) {
+  const key = `${kind}:${v?.url}`;
+  if (reported.has(key) || reported.size > 20) return;
+  reported.add(key);
+  const id = idOf(v);
+  fetch('/api/client-errors', {
+    method: 'POST',
+    headers: { 'x-aurum': '1', 'content-type': 'application/json' },
+    body: JSON.stringify({ message: `Vidéo : ${kind}`, stack: JSON.stringify({ video: id, ...detail }).slice(0, 900), path: '/videos' }),
+    keepalive: true,
+  }).catch(() => {});
+}
+const idOf = (v) => /\/media\/v\/([a-f0-9]{32})/.exec(v?.url || '')?.[1] || null;
+
 export function disableProgressive() {
   mseOff = true;
   try {
@@ -1287,12 +1371,15 @@ function mp4Info(b, type) {
   return ok ? { progressive: true, mime: `${type}; codecs="${codecs.join(',')}"` } : { progressive: false };
 }
 
+// Appareils Apple (iPhone, iPad, Safari) : lecteur natif, le plus fiable chez eux. La lecture
+// progressive (MediaSource) n'est utilisée que sur Android et ordinateur (Chrome, Edge, Firefox).
+const appleDevice = typeof navigator !== 'undefined' && /^Apple/.test(navigator.vendor || '');
 // Lecture progressive possible sur ce téléphone ? (selon la vidéo, voir progressiveReady)
-export const canProgressive = () => Boolean(MS) && !mseOff;
+export const canProgressive = () => Boolean(MS) && !mseOff && !appleDevice;
 
 // La vidéo peut-elle démarrer progressivement ? (null : on ne sait pas encore, premier morceau absent)
 export function progressiveReady(v) {
-  if (!MS || mseOff) return false;
+  if (!canProgressive()) return false;
   const e = v?.url && entries.get(v.url);
   if (!e?.info) return null;
   if (!e.info.progressive) return false;
@@ -1307,7 +1394,7 @@ export function progressiveReady(v) {
 // priorité absolue : l'attendre est bien plus rapide que de tout reprendre en ligne (au plus 8 s,
 // par sécurité ; téléchargement impossible : lecture en ligne)
 export async function progressiveCheck(v, ms = 8000) {
-  if (!MS || mseOff || !v?.url || !v.size) return false;
+  if (!canProgressive() || !v?.url || !v.size) return false;
   const e = want(v, PRIO.now, true);
   if (!e.info) await Promise.race([part(e, 0), sleep(ms)]);
   return progressiveReady(v) === true;

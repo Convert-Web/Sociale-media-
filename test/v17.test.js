@@ -144,3 +144,20 @@ test('les réglages publics annoncent des vidéos gardées', async () => {
   const pub = await client().get('/api/legal');
   assert.equal(pub.data.videoTtlHours, 0);
 });
+
+test('fiche technique d’une vidéo : enregistrée à la fin de l’envoi, lisible par la Direction seulement', async () => {
+  // Le premier membre inscrit est la Direction
+  const buf = fakeMp4(3000);
+  const init = await alice.post('/api/videos', openForm({ size: buf.length }));
+  assert.equal((await alice.put(`/api/videos/${init.data.id}/chunks/0`, buf)).status, 200);
+  const meta = { methode: 'rapide', secondes: 4.2, controle: { ok: true, diffs: [1, 0, 1] }, appareil: 'iPhone' };
+  assert.equal((await alice.post(`/api/videos/${init.data.id}/complete`, { meta })).status, 200);
+  const list = await alice.get('/api/admin/videos');
+  assert.equal(list.status, 200, JSON.stringify(list.data));
+  const v = list.data.videos.find((x) => x.id === init.data.id);
+  assert.deepEqual(v.meta, meta);
+  assert.equal(v.complete, true);
+  assert.match(v.url, /^\/media\/v\/[a-f0-9]{32}\.mp4$/);
+  // Un membre ordinaire n'y a pas accès
+  assert.equal((await bob.get('/api/admin/videos')).status, 403);
+});

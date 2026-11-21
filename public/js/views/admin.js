@@ -241,6 +241,57 @@ async function errorsSection() {
   return host;
 }
 
+// Dernières vidéos : fiche technique de chacune (méthode de préparation, format, contrôle), à copier
+// pour un diagnostic quand une vidéo lit mal
+async function videosSection() {
+  let d;
+  try {
+    d = await api.get('/api/admin/videos');
+  } catch {
+    return null;
+  }
+  if (!d.videos.length) return null;
+  const line = (v) => {
+    const m = v.meta || {};
+    const how = m.methode ? `préparée : ${m.methode}${m.secondes ? ` en ${m.secondes} s` : ''}` : 'préparation inconnue (ancienne version)';
+    const check = m.controle?.ok === false ? ` · contrôle : ${m.controle.why}` : '';
+    return `${(v.size / 1048576).toFixed(1)} Mo · ${Math.round(v.duration)} s · ${v.width || '?'}×${v.height || '?'} · ${how}${check}`;
+  };
+  const report = () =>
+    [`Diagnostic vidéos AURUM — ${new Date().toLocaleString('fr-FR')}`, `Site : ${location.origin}`, '']
+      .concat(
+        d.videos.map((v) =>
+          [
+            `• @${v.author} · ${new Date(v.createdAt).toLocaleString('fr-FR')} · ${v.postId ? `publication ${v.postId}` : v.storyId ? `story ${v.storyId}` : v.complete ? 'non publiée' : 'envoi inachevé'}`,
+            `  ${line(v)} · ${v.mime} · ${v.chunks} morceau(x)`,
+            `  Morceaux : ${location.origin}${v.url.replace(/\.(mp4|webm)$/, '')}/0.bin … /${Math.max(0, v.chunks - 1)}.bin`,
+            `  Fiche : ${JSON.stringify(v.meta || {})}`,
+          ].join('\n'),
+        ),
+      )
+      .join('\n');
+  const copyBtn = h('button', { type: 'button', class: 'btn btn-secondary btn-sm' }, icon('copy', 'icon-sm'), 'Copier le diagnostic');
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(report());
+      toast('Diagnostic copié : collez-le dans votre message.');
+    } catch {
+      toast('Copie impossible sur cet appareil.', 'error');
+    }
+  });
+  return h(
+    'div',
+    { class: 'card emails-card' },
+    h('p', { class: 'muted small' }, 'Une vidéo lit mal ? Copiez ce diagnostic (aucune donnée personnelle, seulement la fiche technique) et envoyez-le.'),
+    h(
+      'ol',
+      { class: 'error-list' },
+      d.videos.slice(0, 6).map((v) => h('li', null, h('b', null, `@${v.author} · ${timeAgo(v.createdAt)}`), h('small', null, line(v)))),
+    ),
+    copyBtn,
+  );
+}
+
 // Courriels : état de l'envoi, essais et Lettre du cercle
 async function emailsSection() {
   const host = h('div', { class: 'card emails-card' });
@@ -406,7 +457,7 @@ export async function adminView(ctx) {
   const data = await api.get('/api/admin/overview');
   botsState = { enabled: Boolean(data.config.bots), available: Boolean(data.config.botsAvailable) };
   const admissions = await admissionsSection(data.config.admission);
-  const [emails, legal, audience, errors] = await Promise.all([emailsSection(), legalSection(), audienceSection(), errorsSection()]);
+  const [emails, legal, audience, errors, videos] = await Promise.all([emailsSection(), legalSection(), audienceSection(), errorsSection(), videosSection()]);
   const reports = await reportsSection();
   const t = data.totals;
   const c = data.config;
@@ -517,6 +568,8 @@ export async function adminView(ctx) {
     entry,
     errors ? h('div', { class: 'section-title' }, 'Santé de l’application') : null,
     errors ? h('div', { class: 'admissions' }, errors) : null,
+    videos ? h('div', { class: 'section-title' }, 'Vidéos : diagnostic') : null,
+    videos ? h('div', { class: 'admissions' }, videos) : null,
     h('div', { class: 'section-title' }, 'Courriels'),
     h('div', { class: 'admissions' }, emails),
     h('div', { class: 'section-title' }, 'Informations légales'),

@@ -437,6 +437,7 @@ const COLUMNS = [
   ['posts', 'video_id', 'TEXT'],
   ['stories', 'video_id', 'TEXT'],
   ['comments', 'parent_id', 'INTEGER'],
+  ['videos', 'meta', 'TEXT'], // fiche technique de la préparation (diagnostic de la Direction)
 ];
 
 async function migrate(client) {

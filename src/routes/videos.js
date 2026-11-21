@@ -148,6 +148,9 @@ module.exports = function videoRoutes(ctx) {
       if (n !== v.chunks) fail(409, 'Envoi incomplet : la vidéo n’a pas été entièrement reçue.');
       await db.run('UPDATE videos SET complete = 1 WHERE id = ?', v.id);
     }
+    // Fiche technique envoyée par le téléphone (méthode, format d'origine, contrôle) : diagnostic
+    const meta = req.body?.meta && typeof req.body.meta === 'object' ? JSON.stringify(req.body.meta).slice(0, 3000) : null;
+    if (meta) await db.run('UPDATE videos SET meta = ? WHERE id = ?', meta, v.id);
     res.json({ video: { id: v.id, url: V.videoUrl(v.id, V.TYPES[v.mime]), poster: v.poster, width: v.width, height: v.height, duration: v.duration, size: v.size } });
   });
 
