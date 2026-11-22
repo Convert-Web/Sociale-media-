@@ -108,13 +108,13 @@ dimensionnés pour une communauté qui démarre :
 npm test
 ```
 
-23 tests d'intégration couvrent l'inscription (âge, mot de passe, conditions), la connexion, la
+24 tests couvrent l'inscription (âge, mot de passe, conditions), la connexion, la
 publication, la confidentialité (moi, amis, compte privé), le fil « Pour toi » (y compris « Pas
 intéressé »), Abonnements et Amis, J'aime, favoris, republications, vues et temps regardé, les
 commentaires (réponses, épinglage), les demandes d'abonnement, les blocages, les messages, la
 recherche, les sons, Duo, le profil, le LIVE (signalisation, chat, cœurs, cadeaux, bilan), le
 portefeuille, le studio, la modération, la suppression de compte, le mot de passe oublié, le contenu
-de démonstration et les adresses des pages.
+de démonstration, les adresses des pages et la reprise d’Ne base AURUM (y compris des membres arrivés après une première ouverture).
 
 ## Architecture
 

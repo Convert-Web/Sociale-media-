@@ -439,6 +439,8 @@ const COLUMNS = [
   ['users', 'onboarded_at', 'INTEGER'],
   // Fil « Pour toi » personnalisé (0 : classement sans centres d'intérêt, règlement DSA)
   ['users', 'personalized', 'INTEGER NOT NULL DEFAULT 1'],
+  // Compte venu d'AURUM déjà rendu privé (une seule fois : ensuite, chacun choisit)
+  ['users', 'legacy_checked', 'INTEGER NOT NULL DEFAULT 0'],
   // Publications
   ['posts', 'sound_id', 'INTEGER'],
   ['posts', 'privacy', "TEXT NOT NULL DEFAULT 'public'"],
@@ -492,41 +494,50 @@ async function migrate(client) {
   return have;
 }
 
-// Reprise d'une base d'AURUM (réseau privé) : une seule fois.
+// Reprise d'une base d'AURUM (réseau privé), vérifiée à CHAQUE démarrage : tant que Vibz n'est pas
+// en ligne, AURUM peut continuer d'accueillir des membres et des publications dans la même base
+// (une préversion de Vibz peut aussi l'ouvrir avant la mise en ligne). Quelques requêtes rapides.
 // AURUM était un cercle privé : ce que ses membres y ont publié ne devient pas public.
-// - leurs comptes deviennent privés (contenus visibles de leurs seuls abonnés, réglable ensuite) ;
+// - leurs comptes deviennent privés, une seule fois par compte (ensuite, chacun choisit) ;
 // - les publications des groupes privés et des comptes automatiques restent visibles de leur seul auteur ;
-// - hashtags et sons originaux des vidéos existantes sont recensés.
+// - hashtags et sons originaux des vidéos venues d'AURUM sont recensés.
 async function upgradeFromAurum(client, have) {
-  const done = await client.execute("SELECT value FROM settings WHERE key = 'vibz:upgraded'");
-  if (done.rows.length) return;
-  const { rows } = await client.execute('SELECT COUNT(*) AS n FROM users');
-  if (rows[0].n > 0 && have.has('users.member_number')) {
-    await client.execute('UPDATE users SET private_account = 1');
-    if (have.has('posts.groupe_id')) await client.execute("UPDATE posts SET privacy = 'private' WHERE groupe_id IS NOT NULL");
-    await client.execute("UPDATE posts SET privacy = 'private' WHERE user_id IN (SELECT id FROM users WHERE is_bot = 1)");
-    // Hashtags des publications existantes
-    const { extractTags } = require('./tags');
-    const posts = await client.execute('SELECT id, body FROM posts');
-    for (const p of posts.rows) {
-      for (const tag of extractTags(p.body)) {
-        await client.execute({ sql: 'INSERT OR IGNORE INTO post_tags (post_id, tag) VALUES (?, ?)', args: [p.id, tag] });
-      }
+  if (!have.has('users.member_number')) return; // base créée par Vibz : rien à reprendre
+  // Un compte venu d'AURUM porte un numéro de membre, une entrée réglée ou une demande d'admission
+  const legacy = ['member_number', 'paid_at', 'admission_requested_at', 'admission_approved_at', 'invited_by']
+    .filter((c) => have.has(`users.${c}`))
+    .map((c) => `${c} IS NOT NULL`)
+    .join(' OR ');
+  await client.execute(`UPDATE users SET private_account = 1, legacy_checked = 1 WHERE legacy_checked = 0 AND (${legacy})`);
+  if (have.has('posts.groupe_id')) await client.execute("UPDATE posts SET privacy = 'private' WHERE groupe_id IS NOT NULL AND privacy != 'private'");
+  await client.execute("UPDATE posts SET privacy = 'private' WHERE privacy != 'private' AND user_id IN (SELECT id FROM users WHERE is_bot = 1)");
+  // Hashtags des publications pas encore recensées (repère : la dernière publication traitée)
+  const { extractTags } = require('./tags');
+  const mark = await client.execute("SELECT value FROM settings WHERE key = 'vibz:tags-upto'");
+  const upto = Number(mark.rows[0]?.value || 0);
+  const posts = await client.execute({ sql: 'SELECT id, body FROM posts WHERE id > ? ORDER BY id LIMIT 5000', args: [upto] });
+  let last = upto;
+  for (const p of posts.rows) {
+    for (const tag of extractTags(p.body)) {
+      await client.execute({ sql: 'INSERT OR IGNORE INTO post_tags (post_id, tag) VALUES (?, ?)', args: [p.id, tag] });
     }
-    // Son original de chaque vidéo
-    const vids = await client.execute(
-      `SELECT p.id, p.user_id, p.video_id, p.image, p.created_at, v.duration, u.display_name
-       FROM posts p JOIN videos v ON v.id = p.video_id JOIN users u ON u.id = p.user_id WHERE p.sound_id IS NULL`,
-    );
-    for (const p of vids.rows) {
-      const r = await client.execute({
-        sql: 'INSERT INTO sounds (title, author_id, post_id, video_id, duration, cover, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        args: [`son original - ${p.display_name}`, p.user_id, p.id, p.video_id, p.duration, p.image, p.created_at],
-      });
-      await client.execute({ sql: 'UPDATE posts SET sound_id = ? WHERE id = ?', args: [Number(r.lastInsertRowid), p.id] });
-    }
+    last = p.id;
   }
-  await client.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('vibz:upgraded', '1')");
+  if (last > upto) {
+    await client.execute({ sql: "INSERT INTO settings (key, value) VALUES ('vibz:tags-upto', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [String(last)] });
+  }
+  // Son original des vidéos qui n'en ont pas encore (vidéos publiées par AURUM)
+  const vids = await client.execute(
+    `SELECT p.id, p.user_id, p.video_id, p.image, p.created_at, v.duration, u.display_name
+     FROM posts p JOIN videos v ON v.id = p.video_id JOIN users u ON u.id = p.user_id WHERE p.sound_id IS NULL LIMIT 500`,
+  );
+  for (const p of vids.rows) {
+    const r = await client.execute({
+      sql: 'INSERT INTO sounds (title, author_id, post_id, video_id, duration, cover, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      args: [`son original - ${p.display_name}`, p.user_id, p.id, p.video_id, p.duration, p.image, p.created_at],
+    });
+    await client.execute({ sql: 'UPDATE posts SET sound_id = ? WHERE id = ? AND sound_id IS NULL', args: [Number(r.lastInsertRowid), p.id] });
+  }
 }
 
 async function openDatabase({ url, authToken }) {
