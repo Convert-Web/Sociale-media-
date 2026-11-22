@@ -1530,6 +1530,10 @@ input[type='range'] {
     padding-left: 18px;
     padding-right: 18px;
   }
+  /* La barre latérale porte déjà Pour toi, Abonnements, Explorer, LIVE et la recherche */
+  .feed-top:not(.single) {
+    display: none;
+  }
   .slide {
     --vw: min(calc((100dvh - 48px) * 0.5625), calc(100% - 200px));
     --vh: calc(100dvh - 48px);
@@ -4451,7 +4455,7 @@ input[type='range'] {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.8);
 }
-.chat-line.gift span {
+.chat-line.is-gift span {
   background: rgba(255, 200, 61, 0.22);
   border-radius: 8px;
   padding: 2px 8px;

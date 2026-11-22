@@ -198,7 +198,7 @@ function slide(post) {
   );
 
   const progress = post.kind === 'video' ? null : h('div', { class: 'slide-progress' });
-  box.append(media, h('div', { class: 'slide-shade' }), h('span', { class: 'slide-play', hidden: true }, icon('play')), rail, info, progress);
+  box.append(...[media, h('div', { class: 'slide-shade' }), h('span', { class: 'slide-play', hidden: true }, icon('play')), rail, info, progress].filter(Boolean));
   box.__like = () => like(true);
   box.__paintLike = paintLike;
   box.__paintSave = paintSave;

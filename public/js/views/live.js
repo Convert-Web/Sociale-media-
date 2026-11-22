@@ -82,7 +82,7 @@ function chatFeed() {
       likeBuffer += e.count;
       for (let i = 0; i < Math.min(6, e.count); i++) setTimeout(floatHeart, i * 140);
     } else if (e.type === 'gift' && e.gift) {
-      push(h('div', { class: 'chat-line gift' }, h('span', null, who, ` a envoyé ${e.gift.name}${e.count > 1 ? ` ×${e.count}` : ''} `, e.gift.emoji)));
+      push(h('div', { class: 'chat-line is-gift' }, h('span', null, who, ` a envoyé ${e.gift.name}${e.count > 1 ? ` ×${e.count}` : ''} `, e.gift.emoji)));
       const card = h('div', { class: 'gift-pop' }, e.user ? avatar(e.user, 'sm') : null, h('span', null, h('b', null, e.user?.displayName || ''), h('small', null, `a envoyé ${e.gift.name}`)), h('span', { class: 'gift-pop-emoji' }, e.gift.emoji), e.count > 1 ? h('span', { class: 'gift-pop-count' }, `×${e.count}`) : null);
       gifts.append(card);
       setTimeout(() => card.remove(), 3600);
