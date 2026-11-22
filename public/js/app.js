@@ -203,7 +203,7 @@ function buildShell() {
     tab('home', '/', 'home', 'homeFill', 'Accueil', { onclick: () => unlockPlayer() }),
     tab('friends', '/amis', 'friends', 'friendsFill', 'Amis'),
     h('a', { href: '/creer', class: 'tab tab-create', 'aria-label': 'Créer', onclick: (e) => guard(e, 'Connecte-toi pour publier une vidéo.') }, h('span', { class: 'create-btn' }, icon('plus'))),
-    tab('inbox', '/boite', 'inbox', 'inboxFill', 'Boîte de réception', { badge: badge('inbox'), onclick: (e) => guard(e, 'Connecte-toi pour voir tes messages et ton activité.') }),
+    tab('inbox', '/boite', 'inbox', 'inboxFill', 'Boîte', { badge: badge('inbox'), onclick: (e) => guard(e, 'Connecte-toi pour voir tes messages et ton activité.') }),
     register('profile', h('a', { href: profileHref(), class: 'tab tab-profile', onclick: (e) => guard(e, 'Connecte-toi pour voir ton profil.') }, tabAvatar, h('span', { class: 'tab-label' }, 'Profil'))),
   );
   // Un toucher sur l'onglet « Profil » quand on a déjà un compte : son profil

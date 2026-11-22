@@ -4,13 +4,14 @@ import { store } from '../store.js';
 import { warmPosts } from '../warm.js';
 import { h, icon, onTaps } from '../dom.js';
 
-export const MAX_SECONDS = 60;
+// Durée maximale d'une vidéo, fixée par le serveur (VIDEO_MAX_SECONDS, 3 minutes par défaut)
+export const maxSeconds = () => store.config?.videoMaxSeconds || 180;
 const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 // Poids maximal d'une vidéo, fixé par le serveur (VIDEO_MAX_MB, 250 Mo par défaut)
 export const maxVideoBytes = () => store.config?.videoMaxBytes || 250 * 1024 * 1024;
 const megas = (n) => Math.ceil(n / 1048576);
 const tooBig = (size) =>
-  `Vidéo trop lourde (${megas(size)} Mo) : ${megas(maxVideoBytes())} Mo au maximum. Raccourcissez-la, ou filmez en 4K 30 i/s ou en 1080p.`;
+  `Vidéo trop lourde (${megas(size)} Mo) : ${megas(maxVideoBytes())} Mo au maximum. Raccourcis-la, ou filme en 1080p.`;
 
 export const isVideoFile = (f) => Boolean(f && (VIDEO_TYPES.includes(f.type) || /\.(mp4|mov|m4v|webm)$/i.test(f.name || '')));
 export const clockLabel = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
@@ -25,7 +26,7 @@ const fileMime = (f) => (VIDEO_TYPES.includes(f.type) ? f.type : /\.webm$/i.test
 
 // Durée, dimensions et image d'aperçu (prise à 0,5 s). La vidéo elle-même n'est jamais modifiée :
 // elle sera publiée telle qu'elle a été filmée.
-export async function readVideoInfo(file) {
+export async function readVideoInfo(file, { knownDuration = 0 } = {}) {
   if (file.size > maxVideoBytes()) throw new Error(tooBig(file.size));
   const url = URL.createObjectURL(file);
   const v = document.createElement('video');
@@ -36,7 +37,32 @@ export async function readVideoInfo(file) {
   v.src = url;
   try {
     await once(v, 'loadedmetadata');
-    const info = { duration: v.duration, width: v.videoWidth, height: v.videoHeight, poster: null, url };
+    // Vidéo enregistrée par un navigateur (WebM) : la durée n'est connue qu'après un saut à la fin
+    if (!Number.isFinite(v.duration) || v.duration <= 0) {
+      await new Promise((resolve) => {
+        const t = setTimeout(resolve, 3000);
+        v.addEventListener('durationchange', function f() {
+          if (Number.isFinite(v.duration) && v.duration > 0) {
+            clearTimeout(t);
+            v.removeEventListener('durationchange', f);
+            resolve();
+          }
+        });
+        try {
+          v.currentTime = 1e9;
+        } catch {
+          resolve();
+        }
+      });
+      try {
+        v.currentTime = 0;
+      } catch {
+        /* sans importance */
+      }
+    }
+    const measured = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+    const info = { duration: measured || knownDuration || 0, width: v.videoWidth, height: v.videoHeight, poster: null, url };
+    if (!info.duration) throw new Error('Durée de la vidéo illisible.');
     try {
       // iOS ne décode une image qu'après un début de lecture (muette : autorisée)
       await v.play().catch(() => {});

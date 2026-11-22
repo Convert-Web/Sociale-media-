@@ -75,7 +75,7 @@ export function signupView(ctx) {
   const month = h('select', { class: 'input', required: true, 'aria-label': 'Mois' }, h('option', { value: '' }, 'Mois'), MONTHS.map((m, i) => h('option', { value: String(i + 1) }, m)));
   const year = h('select', { class: 'input', required: true, 'aria-label': 'Année' }, h('option', { value: '' }, 'Année'), Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map((y) => h('option', { value: String(y) }, String(y))));
   const email = h('input', { class: 'input', type: 'email', autocomplete: 'email', required: true, placeholder: 'adresse@exemple.fr' });
-  const username = h('input', { class: 'input', type: 'text', autocomplete: 'username', required: true, minlength: 2, maxlength: 24, placeholder: 'nom_utilisateur', autocapitalize: 'none', spellcheck: 'false' });
+  const username = h('input', { class: 'input', type: 'text', autocomplete: 'username', minlength: 2, maxlength: 24, placeholder: 'nom_utilisateur', autocapitalize: 'none', spellcheck: 'false' });
   const userHint = h('small', { class: 'field-hint' }, 'Lettres, chiffres, « _ » et « . » — modifiable ensuite.');
   const name = h('input', { class: 'input', type: 'text', autocomplete: 'name', maxlength: 30, placeholder: 'Ton nom (facultatif)' });
   const pw = passwordInput({ autocomplete: 'new-password', placeholder: '8 caractères au moins' });
@@ -95,13 +95,10 @@ export function signupView(ctx) {
     }
   }, 300);
   username.addEventListener('input', check);
+  // Suggestion tirée de l'e-mail : affichée en exemple, utilisée seulement si le champ reste vide
   email.addEventListener('change', () => {
-    if (username.value) return;
-    const base = email.value.split('@')[0].toLowerCase().replace(/[^a-z0-9_.]/g, '').slice(0, 20);
-    if (base.length >= 2) {
-      username.value = base;
-      check();
-    }
+    const base = email.value.split('@')[0].toLowerCase().replace(/[^a-z0-9_.]/g, '').replace(/^[._]+|[._]+$/g, '').slice(0, 20);
+    if (base.length >= 2) username.placeholder = base;
   });
   const form = h(
     'form',
@@ -115,8 +112,8 @@ export function signupView(ctx) {
           const { user } = await api.post('/api/auth/signup', {
             birthdate,
             email: email.value.trim(),
-            username: username.value.trim(),
-            displayName: name.value.trim() || username.value.trim(),
+            username: username.value.trim() || username.placeholder,
+            displayName: name.value.trim() || username.value.trim() || username.placeholder,
             password: pw.input.value,
             terms: terms.checked,
             website: trap.value,

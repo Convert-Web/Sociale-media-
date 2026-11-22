@@ -485,9 +485,12 @@ export async function shrinkImage(file, maxDim = 1600, quality = 0.85) {
 
 export const TOO_BIG_GIF = 4 * 1024 * 1024;
 
-// Logo : un « V » qui joue, dans un carré aux couleurs de Vibz
+// Logo : un « V » qui joue, dans un carré aux couleurs de Vibz (un dégradé propre à chaque logo :
+// un dégradé défini dans un élément masqué ne s'afficherait pas ailleurs)
+let logoSeq = 0;
 export function logoMark(size = 40) {
   const el = h('span', { class: 'logo-mark', style: { width: `${size}px`, height: `${size}px` }, 'aria-hidden': 'true' });
-  el.innerHTML = '<svg viewBox="0 0 48 48"><defs><linearGradient id="vz" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b5cff"/><stop offset="1" stop-color="#ff3d7f"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#vz)"/><path d="M13 14.5 22.6 34a1.6 1.6 0 0 0 2.9 0L35 14.5" fill="none" stroke="#fff" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="35" cy="14.5" r="3.4" fill="#ffd84d"/></svg>';
+  const id = `vz${++logoSeq}`;
+  el.innerHTML = `<svg viewBox="0 0 48 48"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b5cff"/><stop offset="1" stop-color="#ff3d7f"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#${id})"/><path d="M13 14.5 22.6 34a1.6 1.6 0 0 0 2.9 0L35 14.5" fill="none" stroke="#fff" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="35" cy="14.5" r="3.4" fill="#ffd84d"/></svg>`;
   return el;
 }
