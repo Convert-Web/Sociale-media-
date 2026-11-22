@@ -11,7 +11,7 @@ const SECTIONS = [
     icon: 'sparkles',
     items: [
       ['Comment publier ?', 'Touchez le bouton + en bas de l’écran, puis « Publication ». Écrivez quelques mots, ajoutez jusqu’à 6 photos si vous le souhaitez, et touchez « Publier ».'],
-      ['Comment publier une vidéo ?', 'Bouton + puis « Vidéo ». Choisissez une vidéo d’une minute au plus et touchez « Publier » : elle se prépare en quelques secondes et s’envoie en arrière-plan, vous pouvez continuer à naviguer. Elle reste dans le cercle et sur votre profil tant que vous ne la supprimez pas.'],
+      ['Comment publier une vidéo ?', 'Bouton + puis « Vidéo ». Choisissez une vidéo d’une minute au plus et touchez « Publier » : elle part telle quelle, en qualité d’origine (aucune recompression), et s’envoie en arrière-plan ; vous pouvez continuer à naviguer. En cas de coupure, l’envoi reprend là où il s’était arrêté. Sur iPhone, pour envoyer exactement le fichier filmé, touchez « Options » dans la fenêtre de choix et prenez le format « Actuel » s’il vous est proposé. Elle reste dans le cercle et sur votre profil tant que vous ne la supprimez pas.'],
       ['Qu’est-ce qu’une story ?', 'Une photo ou une vidéo visible 24 heures en haut du Salon. Bouton + puis « Story », ou touchez votre photo avec le + en haut du Salon.'],
       ['Mes vidéos restent-elles en ligne ?', 'Oui : elles restent dans le cercle et sur votre profil tant que vous ne les supprimez pas (menu « … » de la publication). Les stories, elles, sont effacées après 24 heures.'],
       ['Comment publier plus tard ?', 'Dans la fenêtre de publication, touchez « Brouillon » : votre texte, vos photos et votre vidéo sont gardés sur ce téléphone. Retrouvez-les avec le bouton + puis « Brouillons ».'],

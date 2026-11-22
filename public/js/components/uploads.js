@@ -1,6 +1,8 @@
-// Vidéos envoyées en arrière-plan : la fenêtre se ferme aussitôt, la préparation et l'envoi
-// continuent pendant que l'on regarde des vidéos ou écrit des messages. Une pastille en haut de
+// Vidéos envoyées en arrière-plan, en qualité d'origine : la fenêtre se ferme aussitôt, l'envoi
+// continue pendant que l'on regarde des vidéos ou écrit des messages. Une pastille en haut de
 // l'écran montre l'avancement ; un toucher ouvre la vidéo une fois publiée, ou relance l'envoi.
+// Après une coupure (réseau, application mise en arrière-plan), l'envoi reprend de lui-même là
+// où il s'était arrêté.
 import { h, icon, toast } from '../dom.js';
 import { navigate } from '../router.js';
 import { uploadVideo, forgetReels } from './video.js';
@@ -27,11 +29,10 @@ addEventListener('beforeunload', (e) => {
 
 function label(j) {
   if (j.state === 'done') return 'Vidéo en ligne · Voir';
-  if (j.state === 'error') return 'Envoi interrompu · Réessayer';
+  if (j.state === 'error') return j.auto ? 'Connexion perdue · reprise automatique' : 'Envoi interrompu · Réessayer';
   if (j.step === 'publish') return 'Publication…';
-  // Un seul pourcentage, de 0 à 100 : préparation (rapide), puis envoi
-  const pct = Math.min(99, Math.round(overall(j) * 100));
-  return j.step === 'prepare' ? `Préparation ${pct} %` : `Envoi ${pct} %`;
+  if (j.step === 'prepare') return 'Démarrage de l’envoi…';
+  return `Envoi ${Math.min(99, Math.round(overall(j) * 100))} %`;
 }
 function overall(j) {
   if (j.state === 'done') return 1;
@@ -91,30 +92,47 @@ function tap(j) {
     remove(j);
     if (j.href) navigate(j.href);
   } else if (j.state === 'error') {
-    run(j); // relancé dans le geste : le son de la vidéo est conservé
+    run(j); // reprise là où l'envoi s'était arrêté
   } else {
-    toast('Gardez simplement AURUM ouvert : la vidéo part pendant sa préparation.');
+    toast('Gardez AURUM ouvert : la vidéo part en qualité d’origine. En cas de coupure, l’envoi reprend là où il s’était arrêté.');
   }
 }
 
 function remove(j) {
+  clearTimeout(j.timer);
   jobs.delete(j);
   if (j.poster) URL.revokeObjectURL(j.poster);
   paint();
 }
 
+// Coupure réseau (ou serveur momentanément indisponible) : reprise automatique. Un refus (vidéo
+// trop lourde, espace plein, trop de vidéos aujourd'hui…) attend un toucher.
+const resumable = (err) => typeof err?.status === 'number' && (err.status === 0 || err.status >= 500 || err.status === 408);
+function resumeLater(j) {
+  clearTimeout(j.timer);
+  j.timer = setTimeout(() => j.state === 'error' && j.auto && document.visibilityState === 'visible' && run(j), Math.min(60000, 5000 * j.tries));
+}
+const resumeAll = () => {
+  for (const j of jobs) if (j.state === 'error' && j.auto) run(j);
+};
+addEventListener('online', resumeAll);
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && resumeAll());
+
 function run(j) {
+  clearTimeout(j.timer);
   j.state = 'running';
-  j.step = 'prepare';
-  j.p = 0;
+  j.step = j.memo?.upload ? 'upload' : 'prepare';
   paint();
-  j.memo = j.memo || {}; // vidéo déjà préparée : une reprise ne refait que l'envoi
-  const p = uploadVideo(j.file, j.info, (step, ratio) => {
+  j.memo = j.memo || {}; // envoi déjà commencé : une reprise n'envoie que les morceaux manquants
+  // Vidéo déjà reçue par le serveur (seule la publication avait échoué) : elle n'est pas renvoyée
+  const sent = j.video ? Promise.resolve(j.video) : uploadVideo(j.file, j.info, (step, ratio) => {
     j.step = step;
     j.p = ratio;
     paint();
-  }, j.memo)
+  }, j.memo);
+  const p = sent
     .then(async (video) => {
+      j.video = video;
       j.step = 'publish';
       paint();
       const res = await j.finish(video);
@@ -127,8 +145,15 @@ function run(j) {
     })
     .catch((err) => {
       j.state = 'error';
+      j.tries = (j.tries || 0) + 1;
+      j.auto = resumable(err) && j.tries <= 12; // au-delà, la reprise se fait d'un toucher
       paint();
-      toast(`${err.message || 'Envoi interrompu.'} Touchez la pastille pour réessayer.`, 'error');
+      if (j.auto) {
+        resumeLater(j);
+        if (j.tries === 1) toast('Connexion perdue : l’envoi reprendra tout seul, là où il s’est arrêté.');
+      } else {
+        toast(`${err.message || 'Envoi interrompu.'} Touchez la pastille pour réessayer.`, 'error');
+      }
     });
   return p;
 }
@@ -136,7 +161,7 @@ function run(j) {
 // À appeler dans le geste de l'utilisateur (toucher « Publier »).
 // finish(video) publie la vidéo une fois envoyée et renvoie { href, message }.
 export function sendInBackground({ file, info, title, finish }) {
-  const j = { file, info, title, finish, poster: info.poster ? URL.createObjectURL(info.poster) : null, state: 'running', step: 'prepare', p: 0 };
+  const j = { file, info, title, finish, poster: info.poster ? URL.createObjectURL(info.poster) : null, state: 'running', step: 'prepare', p: 0, tries: 0 };
   jobs.add(j);
   run(j);
   return j;

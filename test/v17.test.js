@@ -161,3 +161,50 @@ test('fiche technique d’une vidéo : enregistrée à la fin de l’envoi, lisi
   // Un membre ordinaire n'y a pas accès
   assert.equal((await bob.get('/api/admin/videos')).status, 403);
 });
+
+test('qualité d’origine : 250 Mo par vidéo par défaut, annoncés à l’application', async () => {
+  assert.equal(ctx.config.videoMaxBytes, 250 * MB);
+  const session = await alice.get('/api/session');
+  assert.equal(session.data.config.videoMaxBytes, 250 * MB);
+  // Une vidéo 4K d'une minute (~170 Mo) est acceptée ; au-delà de 250 Mo, refus clair
+  const big = await alice.post('/api/videos', openForm({ size: 170 * MB, duration: '58', width: '2160', height: '3840' }));
+  assert.equal(big.status, 201, JSON.stringify(big.data));
+  assert.equal(big.data.chunks, 170);
+  assert.equal((await alice.del(`/api/videos/${big.data.id}`)).status, 200);
+  const tooBig = await alice.post('/api/videos', openForm({ size: 251 * MB }));
+  assert.equal(tooBig.status, 413);
+  assert.match(tooBig.data.error, /250 Mo maximum/);
+});
+
+test('envoi reprenable : morceaux renvoyés sans dommage, manque détecté puis complété', async () => {
+  const buf = fakeMp4(3 * MB + 1234);
+  const init = await alice.post('/api/videos', openForm({ size: buf.length }));
+  assert.equal(init.data.chunks, 4);
+  const put = (i) => alice.put(`/api/videos/${init.data.id}/chunks/${i}`, buf.subarray(i * MB, (i + 1) * MB));
+  // Coupure après deux morceaux : la fin manque, l'envoi n'est pas terminé
+  assert.equal((await put(0)).status, 200);
+  assert.equal((await put(2)).status, 200);
+  assert.equal((await alice.post(`/api/videos/${init.data.id}/complete`)).status, 409);
+  // Reprise : le même morceau renvoyé ne gêne pas, puis les manquants
+  assert.equal((await put(2)).status, 200);
+  assert.equal((await put(1)).status, 200);
+  assert.equal((await put(3)).status, 200);
+  const done = await alice.post(`/api/videos/${init.data.id}/complete`, { meta: { methode: 'originale', reprises: 1 } });
+  assert.equal(done.status, 200, JSON.stringify(done.data));
+  const posted = await alice.post('/api/posts', { body: 'Originale', video: done.data.video.id });
+  assert.equal(posted.status, 201);
+  // Octet pour octet : la vidéo publiée est exactement le fichier envoyé
+  const base = posted.data.post.video.url.replace(/\.mp4$/, '');
+  const parts = [];
+  for (let i = 0; i < 4; i++) {
+    const r = await client().get(`${base}/${i}.bin`);
+    assert.equal(r.status, 200);
+    // Taille totale annoncée avec chaque morceau (lecture en ligne assemblée par le téléphone)
+    assert.equal(r.headers.get('x-video-size'), String(buf.length));
+    parts.push(r.data);
+  }
+  assert.ok(Buffer.concat(parts).equals(buf));
+  const range = await client().get(posted.data.post.video.url, { range: `bytes=${3 * MB}-` });
+  assert.equal(range.status, 206);
+  assert.ok(range.data.equals(buf.subarray(3 * MB)));
+});

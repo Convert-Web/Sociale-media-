@@ -241,7 +241,7 @@ async function errorsSection() {
   return host;
 }
 
-// Dernières vidéos : fiche technique de chacune (méthode de préparation, format, contrôle), à copier
+// Dernières vidéos : fiche technique de chacune (envoi d'origine ou ancienne préparation, format), à copier
 // pour un diagnostic quand une vidéo lit mal
 async function videosSection() {
   let d;
@@ -253,7 +253,8 @@ async function videosSection() {
   if (!d.videos.length) return null;
   const line = (v) => {
     const m = v.meta || {};
-    const how = m.methode ? `préparée : ${m.methode}${m.secondes ? ` en ${m.secondes} s` : ''}` : 'préparation inconnue (ancienne version)';
+    const sent = m.secondes ? ` · envoyée en ${m.secondes} s${m.reprises ? ` (${m.reprises} reprise(s))` : ''}` : '';
+    const how = m.methode === 'originale' ? `originale, sans recompression${sent}` : m.methode ? `préparée : ${m.methode}${sent}` : 'préparation inconnue (ancienne version)';
     const check = m.controle?.ok === false ? ` · contrôle : ${m.controle.why}` : '';
     return `${(v.size / 1048576).toFixed(1)} Mo · ${Math.round(v.duration)} s · ${v.width || '?'}×${v.height || '?'} · ${how}${check}`;
   };

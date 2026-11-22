@@ -374,7 +374,7 @@ export async function videosView(ctx) {
       }
     } else {
       // Déjà lancée en ligne (toucher d'ouverture) : pas de second téléchargement de la même vidéo
-      if (player.getAttribute('src') === v.url) {
+      if (player.dataset.mode === 'en-ligne') {
         cancelPreload(v);
         holdPreloads(6000);
       }

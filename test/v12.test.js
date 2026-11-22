@@ -28,6 +28,7 @@ before(async () => {
     adminEmails: [],
     videoStorageBytes: 8 * 1024 * 1024, // 8 Mo pour vérifier le plafond
     videoTtlHours: 24, // mode « vidéos éphémères » (réglable), vérifié ici
+    videoMaxBytes: 40 * 1024 * 1024, // plafond réglable (VIDEO_MAX_MB), vérifié ici à 40 Mo
     stripe: { secretKey: '', webhookSecret: '' },
   };
   const created = await createApp(cfg, { stripe: null, mailer: { send: async () => {}, sendBatch: async (l) => l.length } });

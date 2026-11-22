@@ -690,9 +690,9 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
   // Brouillon : la publication est gardée sur ce téléphone, pour plus tard (Salon seulement)
   const draftBtn = endpoint === '/api/posts' ? h('button', { class: 'btn btn-ghost btn-sm draft-btn', type: 'button', disabled: true }, 'Brouillon') : null;
   const addBtn = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Ajouter des photos', onclick: () => fileInput.click() }, icon('image'));
-  // Vidéo : une par publication (une minute au plus), préparée puis envoyée en morceaux
+  // Vidéo : une par publication (une minute au plus), envoyée telle quelle (qualité d'origine)
   let video = null; // { file, info, posterUrl }
-  const videoInput = h('input', { type: 'file', accept: 'video/mp4,video/quicktime,video/webm,video/*', hidden: true });
+  const videoInput = h('input', { type: 'file', accept: 'video/*', hidden: true });
   const videoBtn = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Ajouter une vidéo', onclick: () => videoInput.click() }, icon('video'));
   const progress = h('div', { class: 'upload-progress', hidden: true }, h('i'), h('span'));
   const showProgress = (label, ratio) => {
@@ -742,7 +742,7 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
           store.config?.videoTtlHours ? h('span', { class: 'preview-ephemeral' }, icon('clock', 'icon-xs'), `Éphémère · effacée après ${store.config.videoTtlHours} h`) : null,
           h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Retirer la vidéo', onclick: () => clearVideo() }, icon('x')),
         ),
-        h('p', { class: 'video-note' }, store.config?.videoTtlHours ? `Visible ${store.config.videoTtlHours} h dans le cercle. Les membres peuvent la garder sur leur téléphone.` : 'Visible dans le cercle et sur votre profil, jusqu’à ce que vous la supprimiez.'),
+        h('p', { class: 'video-note' }, `Publiée en qualité d’origine, sans recompression. ${store.config?.videoTtlHours ? `Visible ${store.config.videoTtlHours} h dans le cercle. Les membres peuvent la garder sur leur téléphone.` : 'Visible dans le cercle et sur votre profil, jusqu’à ce que vous la supprimiez.'}`),
       );
       previewHost.dataset.count = '1';
       update();
@@ -850,8 +850,8 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
         e.preventDefault();
         if (submit.disabled || readingVideo) return;
         if (early && video) return toast('Les avant-premières acceptent du texte et des photos, pas encore de vidéo.', 'error');
-        // Vidéo : préparation et envoi en arrière-plan (lancés dans le geste, pour garder le son).
-        // La fenêtre se ferme tout de suite : on continue de naviguer, une pastille suit l'envoi.
+        // Vidéo : l'original part en arrière-plan, sans recompression. La fenêtre se ferme tout de
+        // suite : on continue de naviguer, une pastille suit l'envoi.
         if (video && !early) {
           const body = ta.value;
           const v = video;
@@ -879,7 +879,7 @@ export function composer({ onPosted, onQueued, placeholder, endpoint = '/api/pos
           video = null; // l'envoi garde ses propres références (fichier, aperçu)
           paintPreviews();
           fit();
-          toast('Vidéo en préparation : continuez à naviguer.');
+          toast('Vidéo en cours d’envoi, en qualité d’origine : continuez à naviguer.');
           onQueued?.();
           return;
         }

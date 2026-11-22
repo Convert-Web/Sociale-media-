@@ -1,7 +1,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { h, icon, avatar, timeAgo, toast, modal, spinner, clear, nameLine, shrinkImage, confirmDialog } from '../dom.js';
-import { isVideoFile, readVideoInfo, noSave, sound, clockLabel, MAX_SECONDS, preloadVideo, localVideo } from './video.js';
+import { isVideoFile, readVideoInfo, noSave, sound, clockLabel, MAX_SECONDS, preloadVideo, localVideo, setSource } from './video.js';
 import { sendInBackground } from './uploads.js';
 import { warmImages, warmVideos } from '../warm.js';
 
@@ -9,7 +9,7 @@ const DURATION = 5000; // durée d'affichage d'une story
 
 // Nouvelle story depuis n'importe où (bouton « + ») : choix de la photo ou de la vidéo
 export function newStory() {
-  const input = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,video/*', hidden: true });
+  const input = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif,video/*', hidden: true });
   document.body.append(input);
   input.addEventListener('change', () => {
     const f = input.files[0];
@@ -26,7 +26,7 @@ export function storiesBar() {
   const bar = h('div', { class: 'stories-bar', role: 'list', 'aria-label': 'Stories' });
   let groups = [];
   // Photo ou vidéo (une minute au plus)
-  const picker = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,video/*', hidden: true });
+  const picker = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif,video/*', hidden: true });
   picker.addEventListener('change', () => {
     const f = picker.files[0];
     picker.value = '';
@@ -134,7 +134,7 @@ function createStory(file, onDone) {
   );
 }
 
-// Story vidéo : aperçu, légende, préparation puis envoi en morceaux
+// Story vidéo : aperçu, légende, puis envoi de la vidéo d'origine en morceaux
 async function createVideoStory(file, onDone) {
   let info;
   try {
@@ -155,7 +155,7 @@ async function createVideoStory(file, onDone) {
         class: 'modal-body story-create',
         onsubmit: (e) => {
           e.preventDefault();
-          // Préparation et envoi en arrière-plan (lancés dans le geste) : on continue de naviguer
+          // Envoi en arrière-plan : on continue de naviguer
           const text = caption.value;
           sendInBackground({
             file,
@@ -171,7 +171,7 @@ async function createVideoStory(file, onDone) {
             },
           });
           m.close();
-          toast('Story en préparation : continuez à naviguer.');
+          toast('Story en cours d’envoi, en qualité d’origine : continuez à naviguer.');
         },
       },
       h(
@@ -371,7 +371,7 @@ export function openViewer(groups, startGroup, onClose) {
       img.hidden = true;
       vid.hidden = false;
       vid.poster = s.media || '';
-      vid.src = localVideo(s.video) || s.video.url; // déjà téléchargée : démarrage immédiat
+      setSource(vid, s.video, localVideo(s.video) || s.video.url); // déjà téléchargée : démarrage immédiat
       vid.muted = !sound.get();
       const play = () => vid.play().catch(() => {
         vid.muted = true; // son refusé sans geste : lecture muette

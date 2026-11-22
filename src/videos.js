@@ -1,14 +1,16 @@
 'use strict';
 // Vidéos des membres, compatibles avec un hébergement gratuit :
-// - Vercel refuse les requêtes et réponses de plus de 4,5 Mo : la vidéo (déjà compressée
-//   par le téléphone) est envoyée en morceaux de 1 Mo, et diffusée par plages d'octets
-//   (« Range »), comme le demandent de toute façon Safari et Chrome pour lire une vidéo ;
+// - Vercel refuse les requêtes et réponses de plus de 4,5 Mo : la vidéo (d'origine, jamais
+//   recompressée) est envoyée en morceaux de 1 Mo, et diffusée par morceaux (gardés par le CDN
+//   de Vercel) ou par plages d'octets (« Range »), comme le demandent Safari et Chrome ;
 // - les morceaux sont rangés dans la base (Turso), comme les photos ;
 // - un plafond global protège l'espace gratuit de la base (VIDEO_STORAGE_MB).
 const crypto = require('node:crypto');
 
 const CHUNK = 1024 * 1024; // 1 Mo par morceau stocké
-const MAX_BYTES = 40 * 1024 * 1024; // 40 Mo par vidéo (une minute bien compressée en pèse ~12)
+// Poids maximal d'une vidéo : config.videoMaxBytes (VIDEO_MAX_MB, 250 Mo par défaut). Les vidéos sont
+// publiées telles que filmées, en qualité d'origine (une minute en 4K à 30 i/s pèse ~170 Mo).
+const maxBytes = (ctx) => ctx.config.videoMaxBytes || 250 * 1024 * 1024;
 const MAX_SECONDS = 61;
 const RESPONSE_CAP = 3 * CHUNK; // 3 Mo par réponse au plus (limite de Vercel : 4,5 Mo)
 const PER_DAY = 15; // vidéos envoyées par membre et par 24 h
@@ -47,8 +49,9 @@ async function cleanup(ctx) {
 
 async function removeVideo(ctx, id) {
   if (!id) return;
-  if (ctx.videoCache) for (let i = 0; i < MAX_BYTES / CHUNK; i++) ctx.videoCache.delete(`${id}:${i}`);
-  const row = await ctx.db.get('SELECT poster FROM videos WHERE id = ?', id);
+  const row = await ctx.db.get('SELECT poster, chunks, size FROM videos WHERE id = ?', id);
+  const n = Math.max(row?.chunks || 0, Math.ceil((row?.size || 0) / CHUNK), Math.ceil(maxBytes(ctx) / CHUNK));
+  if (ctx.videoCache) for (let i = 0; i < n; i++) ctx.videoCache.delete(`${id}:${i}`);
   await ctx.db.run('DELETE FROM video_chunks WHERE video_id = ?', id);
   await ctx.db.run('DELETE FROM videos WHERE id = ?', id);
   if (row?.poster) require('./uploads').deleteUpload(ctx, row.poster);
@@ -96,7 +99,7 @@ function videoHandler(ctx) {
 
   async function sendChunk(id, idx, req, res, next) {
     const v = await ctx.db.get(
-      `SELECT v.chunks, p.created_at AS posted_at, s.expires_at AS story_expires
+      `SELECT v.chunks, v.size, p.created_at AS posted_at, s.expires_at AS story_expires
        FROM videos v LEFT JOIN posts p ON p.video_id = v.id LEFT JOIN stories s ON s.video_id = v.id
        WHERE v.id = ? AND v.complete = 1`,
       id,
@@ -118,6 +121,7 @@ function videoHandler(ctx) {
     const ttl = Math.max(60, Math.floor((end - Date.now()) / 1000));
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Length', data.length);
+    res.setHeader('X-Video-Size', String(v.size)); // taille totale : lecture en ligne assemblée par le téléphone (sw.js)
     res.setHeader('Cache-Control', `public, max-age=${ttl}, immutable`);
     res.setHeader('CDN-Cache-Control', `public, max-age=${ttl}`);
     res.setHeader('Vercel-CDN-Cache-Control', `public, max-age=${ttl}`);
@@ -200,4 +204,4 @@ function videoHandler(ctx) {
   };
 }
 
-module.exports = { purgeExpired, expiresAt, liveSince, CHUNK, MAX_BYTES, MAX_SECONDS, PER_DAY, TYPES, newId, videoUrl, idFromUrl, looksLikeVideo, storageUsed, cleanup, removeVideo, videoHandler };
+module.exports = { purgeExpired, expiresAt, liveSince, CHUNK, maxBytes, MAX_SECONDS, PER_DAY, TYPES, newId, videoUrl, idFromUrl, looksLikeVideo, storageUsed, cleanup, removeVideo, videoHandler };

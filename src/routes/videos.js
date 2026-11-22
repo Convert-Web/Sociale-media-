@@ -74,13 +74,14 @@ module.exports = function videoRoutes(ctx) {
     // Envoi pendant la préparation : la taille finale n'est connue qu'à la fin. L'espace est réservé
     // d'après l'estimation (au moins 1 Mo), puis vérifié à nouveau avec la taille réelle.
     const streaming = ['1', 'true'].includes(String(b.streaming));
-    const size = streaming ? Math.round(Math.min(Math.max(Number(b.estimate) || V.MAX_BYTES / 2, V.CHUNK), V.MAX_BYTES)) : Number(b.size);
+    const max = V.maxBytes(ctx);
+    const size = streaming ? Math.round(Math.min(Math.max(Number(b.estimate) || max / 2, V.CHUNK), max)) : Number(b.size);
     const duration = Number(b.duration);
     const width = Math.round(Number(b.width)) || null;
     const height = Math.round(Number(b.height)) || null;
     if (!V.TYPES[mime]) fail(400, 'Format de vidéo non pris en charge (MP4, MOV ou WebM).');
     if (!Number.isSafeInteger(size) || size < 1000) fail(400, 'Vidéo invalide.');
-    if (size > V.MAX_BYTES) fail(413, 'Vidéo trop lourde (40 Mo maximum).');
+    if (size > max) fail(413, `Vidéo trop lourde : ${Math.round(max / 1048576)} Mo maximum.`);
     if (!Number.isFinite(duration) || duration <= 0) fail(400, 'Durée de la vidéo illisible.');
     if (duration > V.MAX_SECONDS) fail(400, 'Vidéo trop longue : une minute au maximum.');
     await V.cleanup(ctx);
@@ -106,8 +107,8 @@ module.exports = function videoRoutes(ctx) {
     const v = await db.get('SELECT * FROM videos WHERE id = ? AND owner_id = ?', String(req.params.id), req.user.id);
     if (!v || v.complete) fail(404, 'Envoi introuvable.');
     const streaming = v.chunks === 0;
-    const max = streaming ? Math.ceil(V.MAX_BYTES / V.CHUNK) : v.chunks;
-    if (!Number.isInteger(idx) || idx < 0 || idx >= max) fail(400, 'Morceau invalide.');
+    const last = streaming ? Math.ceil(V.maxBytes(ctx) / V.CHUNK) : v.chunks;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= last) fail(400, 'Morceau invalide.');
     const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     if (streaming) {
       // Taille vérifiée à la finalisation (tous les morceaux font 1 Mo, sauf le dernier)
@@ -129,7 +130,7 @@ module.exports = function videoRoutes(ctx) {
       // Envoi pendant la préparation : la taille finale arrive maintenant, tout est vérifié
       const size = Number(req.body?.size);
       if (!Number.isSafeInteger(size) || size < 1000) fail(400, 'Vidéo invalide.');
-      if (size > V.MAX_BYTES) fail(413, 'Vidéo trop lourde (40 Mo maximum).');
+      if (size > V.maxBytes(ctx)) fail(413, `Vidéo trop lourde : ${Math.round(V.maxBytes(ctx) / 1048576)} Mo maximum.`);
       const chunks = Math.ceil(size / V.CHUNK);
       const got = await db.get(
         'SELECT COUNT(*) AS n, COALESCE(SUM(LENGTH(data)), 0) AS bytes, MAX(idx) AS last, SUM(CASE WHEN idx < ? AND LENGTH(data) != ? THEN 1 ELSE 0 END) AS short FROM video_chunks WHERE video_id = ?',

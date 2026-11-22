@@ -44,6 +44,8 @@ const config = {
   // Vidéos éphémères : effacées définitivement après ce délai (comme les stories)
   // Durée de vie des vidéos publiées, en heures ; 0 (par défaut) : gardées tant que leur auteur ne les supprime pas
   videoTtlHours: Math.max(0, Number(env.VIDEO_TTL_HOURS) || 0),
+  // Poids maximal d'une vidéo (publiée telle que filmée, en qualité d'origine) : 250 Mo par défaut
+  videoMaxBytes: Math.max(10, Number(env.VIDEO_MAX_MB) || 250) * 1024 * 1024,
   // Comptes automatiques (AURUM, Le Concierge) : actifs sauf BOTS=off ; désactivés pendant les tests
   bots: env.BOTS !== 'off' && env.NODE_ENV !== 'test',
   // Droit d'entrée payant : désactivé par défaut (inscription gratuite).

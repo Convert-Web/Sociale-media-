@@ -1,14 +1,17 @@
-// Vidéos : préparation sur le téléphone, envoi en morceaux, lecteur du fil.
+// Vidéos : envoi de la vidéo d'origine (qualité maximale), en morceaux, et lecteur du fil.
 import { api, ApiError } from '../api.js';
+import { store } from '../store.js';
 import { warmPosts } from '../warm.js';
 import { h, icon, onTaps } from '../dom.js';
 import { navigate } from '../router.js';
 
 export const MAX_SECONDS = 60;
-export const MAX_BYTES = 40 * 1024 * 1024;
-const KEEP_AS_IS = 8 * 1024 * 1024; // une petite vidéo MP4 part telle quelle (plus rapide)
-const CHUNK_UP = 1024 * 1024; // morceaux envoyés (même taille que sur le serveur)
 const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
+// Poids maximal d'une vidéo, fixé par le serveur (VIDEO_MAX_MB, 250 Mo par défaut)
+export const maxVideoBytes = () => store.config?.videoMaxBytes || 250 * 1024 * 1024;
+const megas = (n) => Math.ceil(n / 1048576);
+const tooBig = (size) =>
+  `Vidéo trop lourde (${megas(size)} Mo) : ${megas(maxVideoBytes())} Mo au maximum. Raccourcissez-la, ou filmez en 4K 30 i/s ou en 1080p.`;
 
 export const isVideoFile = (f) => Boolean(f && (VIDEO_TYPES.includes(f.type) || /\.(mp4|mov|m4v|webm)$/i.test(f.name || '')));
 export const clockLabel = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
@@ -21,60 +24,10 @@ const once = (el, ev) => new Promise((resolve, reject) => {
 });
 const fileMime = (f) => (VIDEO_TYPES.includes(f.type) ? f.type : /\.webm$/i.test(f.name) ? 'video/webm' : /\.mov$/i.test(f.name) ? 'video/quicktime' : 'video/mp4');
 
-// Durée, dimensions et image d'aperçu (prise à 0,5 s)
-// Bande-son décodée dès le choix de la vidéo (pendant que l'on écrit son texte) : si c'est prêt
-// au moment de publier, la préparation se fait en silence ; sinon on capte le son de la vidéo
-// elle-même (méthode éprouvée). Dans les deux cas, le son est conservé.
-const decodeWith = (ac, buf) =>
-  new Promise((resolve, reject) => {
-    const p = ac.decodeAudioData(buf, resolve, reject);
-    if (p && typeof p.then === 'function') p.then(resolve, reject);
-  });
-function predecode(file) {
-  const state = { state: 'pending', buffer: null };
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC || file.size > 80 * 1024 * 1024) {
-    state.state = 'failed';
-    return state;
-  }
-  let ac = null;
-  file
-    .arrayBuffer()
-    .then((buf) => {
-      ac = new AC();
-      return decodeWith(ac, buf);
-    })
-    .then((buffer) => {
-      state.buffer = buffer;
-      state.state = buffer && buffer.duration > 0 ? 'ok' : 'failed';
-    })
-    .catch(() => (state.state = 'failed'))
-    .finally(() => ac?.close?.().catch(() => {}));
-  return state;
-}
-
-// Vidéo en HEVC (H.265, réglage « haute efficacité » de certains téléphones) : lue par peu
-// d'appareils, elle est toujours préparée (H.264) avant l'envoi. Repérée à son code de format
-// dans le début ou la fin du fichier (où se trouve sa description).
-async function isHevc(file) {
-  try {
-    const span = 1536 * 1024;
-    const parts = [file.slice(0, span)];
-    if (file.size > span) parts.push(file.slice(Math.max(span, file.size - span)));
-    for (const part of parts) {
-      const text = new TextDecoder('latin1').decode(new Uint8Array(await part.arrayBuffer()));
-      if (text.includes('hvc1') || text.includes('hev1')) return true;
-    }
-  } catch {
-    /* illisible : traité comme une vidéo ordinaire */
-  }
-  return false;
-}
-
+// Durée, dimensions et image d'aperçu (prise à 0,5 s). La vidéo elle-même n'est jamais modifiée :
+// elle sera publiée telle qu'elle a été filmée.
 export async function readVideoInfo(file) {
-  const hevc = isHevc(file);
-  // Préparation rapide possible ? (au plus 4 s pour le savoir ; sinon méthode habituelle)
-  const fast = Promise.race([fastPrepCheck(file), sleep(4000).then(() => false)]);
+  if (file.size > maxVideoBytes()) throw new Error(tooBig(file.size));
   const url = URL.createObjectURL(file);
   const v = document.createElement('video');
   v.muted = true;
@@ -84,7 +37,7 @@ export async function readVideoInfo(file) {
   v.src = url;
   try {
     await once(v, 'loadedmetadata');
-    const info = { duration: v.duration, width: v.videoWidth, height: v.videoHeight, poster: null, url, audio: predecode(file), hevc: await hevc, fast: false };
+    const info = { duration: v.duration, width: v.videoWidth, height: v.videoHeight, poster: null, url };
     try {
       // iOS ne décode une image qu'après un début de lecture (muette : autorisée)
       await v.play().catch(() => {});
@@ -100,333 +53,18 @@ export async function readVideoInfo(file) {
     } catch {
       /* sans aperçu : la vidéo reste publiable */
     }
-    info.fast = await fast;
     return info;
+  } catch (err) {
+    URL.revokeObjectURL(url);
+    throw err;
   } finally {
     v.removeAttribute('src');
     v.load();
   }
 }
 
-function recorderType() {
-  if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return null;
-  // H.264 d'abord (lu partout, iPhone compris), dans un profil qui accepte le 1080p
-  const list = [
-    'video/mp4;codecs=avc1.640028,mp4a.40.2',
-    'video/mp4;codecs=avc1.4d0028,mp4a.40.2',
-    'video/mp4;codecs=avc1.42E028,mp4a.40.2',
-    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-    'video/mp4;codecs=avc1,mp4a',
-    'video/mp4',
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm',
-  ];
-  return list.find((t) => MediaRecorder.isTypeSupported(t)) || null;
-}
-
-// Qualité : 1080p (côté le plus long 1920 px), jamais agrandie. Débit selon le nombre de pixels :
-// ~2,1 Mbit/s en 1080p, 1,2 Mbit/s au minimum (720p et moins) : la netteté du 1080p, avec des
-// fichiers assez légers pour démarrer vite en 4G.
-const MAX_SIDE = 1920;
-export function encodeSize(w, h) {
-  const scale = Math.min(1, MAX_SIDE / Math.max(w || 1, h || 1));
-  const W = Math.max(2, Math.round(((w || 720) * scale) / 2) * 2);
-  const H = Math.max(2, Math.round(((h || 1280) * scale) / 2) * 2);
-  const bps = Math.min(2_400_000, Math.max(1_200_000, Math.round(W * H * 30 * 0.034)));
-  return { width: W, height: H, bps };
-}
-
-// Compression (1080p, ~2,1 Mbit/s) : la vidéo est rejouée en temps réel dans une toile et
-// réenregistrée, avec son son. Chaque seconde enregistrée est remise à onData : l'envoi
-// commence pendant la préparation (la vidéo est en ligne quelques secondes après la fin). Deux façons de garder le son :
-// - bande-son déjà décodée (cas habituel) : la vidéo est rejouée en MUET et le son est mêlé à
-//   part — on peut regarder d'autres vidéos avec le son pendant la préparation ;
-// - sinon : le son de la vidéo est capté directement (Web Audio), sans sortir des haut-parleurs.
-// À lancer depuis un geste (toucher « Publier ») : nécessaire sur iPhone.
-// ---------------------------------------------------------------------------
-// Préparation rapide (WebCodecs, librairie Mediabunny) : la vidéo est décodée et réencodée par
-// les circuits vidéo du téléphone, bien plus vite que le temps réel, image par image (aucune
-// image perdue), en 1080p H.264 avec le son d'origine. Fichier « fragmenté » : il se lit
-// progressivement dès son premier morceau. Sinon, ancienne méthode (rejouée en temps réel).
-// ---------------------------------------------------------------------------
-let mediabunny = null;
-const loadMediabunny = () => (mediabunny ||= import('../vendor/mediabunny-1.65.2.js'));
-const webCodecs = () => typeof VideoEncoder !== 'undefined' && typeof VideoDecoder !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
-// Débit de la préparation rapide : ~3,1 Mbit/s en 1080p (encodage soigné, bien plus net)
-const fastBitrate = (w, h) => Math.min(3_500_000, Math.max(1_500_000, Math.round(w * h * 30 * 0.05)));
-
-// Au choix de la vidéo : peut-elle être préparée vite sur ce téléphone ?
-async function fastPrepCheck(file) {
-  if (!webCodecs()) return false;
-  try {
-    const mb = await loadMediabunny();
-    const input = new mb.Input({ source: new mb.BlobSource(file), formats: mb.ALL_FORMATS });
-    const track = await input.getPrimaryVideoTrack();
-    if (!track || !(await track.canDecode())) return false;
-    return await mb.canEncodeVideo('avc', { width: 1080, height: 1920, bitrate: 3_000_000 });
-  } catch {
-    return false;
-  }
-}
-
-// Contrôle de la vidéo préparée, sur le téléphone, avant de la publier : même durée, son présent
-// si l'original en a, et trois images comparées à l'original (couleurs moyennes d'une miniature).
-// Une vidéo abîmée par la conversion (images vertes, figées, noires…) n'est jamais publiée.
-export async function checkPrepared(file, out) {
-  const mb = await loadMediabunny();
-  const src = new mb.Input({ source: new mb.BlobSource(file), formats: mb.ALL_FORMATS });
-  const res = new mb.Input({ source: new mb.BlobSource(out), formats: mb.ALL_FORMATS });
-  const [ts, tr] = [await src.getPrimaryVideoTrack(), await res.getPrimaryVideoTrack()];
-  if (!tr) return { ok: false, why: 'aucune image' };
-  const [ds, dr] = [await src.computeDuration(), await res.computeDuration()];
-  if (Math.abs(ds - dr) > Math.max(1, ds * 0.05)) return { ok: false, why: `durée ${dr.toFixed(1)} s au lieu de ${ds.toFixed(1)} s` };
-  if ((await src.getPrimaryAudioTrack()) && !(await res.getPrimaryAudioTrack())) return { ok: false, why: 'son perdu' };
-  const at = [0.15, 0.5, 0.85].map((r) => r * Math.min(ds, dr));
-  const shrink = (track) => new mb.CanvasSink(track, { width: 12, height: 20, fit: 'fill' });
-  const read = async (sink) => {
-    const out = [];
-    for await (const w of sink.canvasesAtTimestamps(at)) {
-      const c = w?.canvas;
-      if (!c) {
-        out.push(null);
-        continue;
-      }
-      const g = c.getContext('2d');
-      out.push(g.getImageData(0, 0, c.width, c.height).data);
-    }
-    return out;
-  };
-  const [a, b] = [await read(shrink(ts)), await read(shrink(tr))];
-  const diffs = a.map((pa, i) => {
-    const pb = b[i];
-    if (!pa || !pb) return 255;
-    let d = 0;
-    for (let k = 0; k < pa.length; k += 4) d += Math.abs(pa[k] - pb[k]) + Math.abs(pa[k + 1] - pb[k + 1]) + Math.abs(pa[k + 2] - pb[k + 2]);
-    return d / ((pa.length / 4) * 3);
-  });
-  // Écart moyen par point (0 à 255) : une vraie conversion reste sous ~15 ; une image abîmée dépasse 45
-  const bad = diffs.filter((d) => d > 45).length;
-  return { ok: bad < 2, why: bad >= 2 ? 'images abîmées' : '', diffs: diffs.map((d) => Math.round(d)) };
-}
-
-// onData(octets, position) : chaque morceau produit, dans l'ordre (envoi pendant la préparation)
-async function fastPrepare(file, info, onProgress, onData, signal) {
-  const mb = await loadMediabunny();
-  const input = new mb.Input({ source: new mb.BlobSource(file), formats: mb.ALL_FORMATS });
-  const track = await input.getPrimaryVideoTrack();
-  if (!track) throw new Error('Vidéo illisible.');
-  const hasAudio = Boolean(await input.getPrimaryAudioTrack());
-  // 60 images par seconde : ramenées à 30 (même fluidité à l'écran du fil, fichier deux fois plus léger)
-  const fps = (await track.computePacketStats(90).catch(() => null))?.averagePacketRate || 30;
-  const size = encodeSize(info.width, info.height);
-  const video = {
-    width: size.width,
-    height: size.height,
-    fit: 'contain',
-    codec: 'avc',
-    bitrate: fastBitrate(size.width, size.height),
-    keyFrameInterval: 2,
-    forceTranscode: true,
-    allowRotationMetadata: false, // rotation appliquée aux images : affichée pareil partout
-    allowTransformationMetadata: false,
-    hardwareAcceleration: 'no-preference', // le téléphone choisit ses circuits vidéo quand il en a
-    ...(fps > 35 ? { frameRate: 30 } : {}),
-  };
-  // Morceaux produits, gardés pour reconstituer le fichier entier (et transmis au fur et à mesure)
-  let parts = [];
-  let total = 0;
-  const attempt = async (audio) => {
-    parts = [];
-    total = 0;
-    const writable = new WritableStream({
-      write(chunk) {
-        const data = chunk.data.slice();
-        parts.push({ data, position: chunk.position });
-        total = Math.max(total, chunk.position + data.byteLength);
-        onData?.(data, chunk.position);
-      },
-    });
-    const target = new mb.StreamTarget(writable, { chunked: true, chunkSize: 256 * 1024 });
-    const output = new mb.Output({ format: new mb.Mp4OutputFormat({ fastStart: 'fragmented', minimumFragmentDuration: 1 }), target });
-    const conversion = await mb.Conversion.init({ input, output, video, audio, showWarnings: false });
-    const lost = (type) => conversion.discardedTracks.some((d) => d.track.type === type);
-    return { conversion, lost };
-  };
-  // Son AAC (iPhone) : gardé tel quel ; autre format : converti en AAC, sinon gardé dans son format
-  let run = await attempt((t) => (t.codec === 'aac' ? {} : { codec: 'aac', bitrate: 128_000 }));
-  if (hasAudio && run.lost('audio')) run = await attempt({});
-  if (!run.conversion.isValid || run.lost('video')) throw new Error('Préparation rapide impossible.');
-  if (hasAudio && run.lost('audio')) throw new Error('Son illisible en préparation rapide.');
-  run.conversion.onProgress = (p) => onProgress?.(Math.min(1, p));
-  const stop = () => run.conversion.cancel().catch(() => {});
-  signal?.addEventListener('abort', stop, { once: true });
-  try {
-    await run.conversion.execute();
-  } finally {
-    signal?.removeEventListener('abort', stop);
-  }
-  if (signal?.aborted) throw signal.reason || new Error('Préparation annulée.');
-  const whole = new Uint8Array(total);
-  for (const p of parts) whole.set(p.data, p.position);
-  return new Blob([whole], { type: 'video/mp4' });
-}
-
-function encodePlan(file) {
-  const type = recorderType();
-  if (!type) return null;
-  // Seul un MP4 est lu partout : on ne convertit en WebM que si le fichier est trop lourd
-  if (!type.startsWith('video/mp4') && file.size <= MAX_BYTES && fileMime(file) === 'video/mp4') return null;
-  return { type, mime: type.split(';')[0] };
-}
-
-function compress(file, info, plan, onProgress, onData) {
-  const { type } = plan;
-  const pre = info.audio?.state === 'ok' ? info.audio.buffer : null;
-  window.__aurumSoundMethod = pre ? 'decodee' : 'captee';
-  const url = URL.createObjectURL(file);
-  const v = document.createElement('video');
-  v.playsInline = true;
-  v.setAttribute('playsinline', '');
-  v.preload = 'auto';
-  v.muted = Boolean(pre);
-  v.src = url;
-  Object.assign(v.style, { position: 'fixed', left: '0', top: '0', width: '2px', height: '2px', opacity: '0', pointerEvents: 'none' });
-  document.body.append(v);
-  // Contexte audio créé et relancé dans le geste (sinon il reste suspendu sur iPhone)
-  let ac = null;
-  let dest = null;
-  try {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    ac = new AC();
-    dest = ac.createMediaStreamDestination();
-    if (!pre) ac.createMediaElementSource(v).connect(dest); // son capté depuis la vidéo
-    ac.resume?.().catch(() => {});
-  } catch {
-    ac = null;
-    dest = null;
-    v.muted = true;
-  }
-  const started = v.play(); // dans le geste de l'utilisateur
-  let cancel = null;
-  const job = new Promise((resolve, reject) => {
-    let rec = null;
-    let raf = 0;
-    let source = null;
-    let retry = 0;
-    let finished = false;
-    const done = (err, blob) => {
-      if (finished) return;
-      finished = true;
-      cancelAnimationFrame(raf);
-      clearTimeout(timer);
-      clearTimeout(retry);
-      v.pause();
-      v.remove();
-      URL.revokeObjectURL(url);
-      try {
-        source?.stop();
-      } catch {
-        /* déjà arrêtée */
-      }
-      ac?.close().catch(() => {});
-      if (err) reject(err);
-      else resolve(blob);
-    };
-    const timer = setTimeout(() => done(new Error('Préparation de la vidéo trop longue.')), (info.duration * 4 + 60) * 1000);
-    cancel = (err) => {
-      try {
-        if (rec && rec.state !== 'inactive') {
-          rec.ondataavailable = null;
-          rec.onstop = null;
-          rec.stop();
-        }
-      } catch {
-        /* déjà arrêté */
-      }
-      done(err || new Error('Préparation annulée.'));
-    };
-    // Une autre vidéo joue avec le son (méthode « son capté ») : on attend qu'elle s'arrête
-    const otherAudible = () => [...document.querySelectorAll('video, audio')].some((m) => m !== v && !m.paused && !m.muted);
-    const resume = () => {
-      clearTimeout(retry);
-      if (finished || v.ended || document.visibilityState !== 'visible') return;
-      if (!pre && otherAudible()) {
-        retry = setTimeout(resume, 1000);
-        return;
-      }
-      v.play().catch(() => (retry = setTimeout(resume, 1000)));
-    };
-    (async () => {
-      await started.catch(() => {});
-      v.pause();
-      v.currentTime = 0;
-      await once(v, 'seeked').catch(() => {});
-      const size = encodeSize(v.videoWidth, v.videoHeight);
-      const c = document.createElement('canvas');
-      c.width = size.width;
-      c.height = size.height;
-      const g = c.getContext('2d', { alpha: false });
-      g.imageSmoothingEnabled = true;
-      g.imageSmoothingQuality = 'high';
-      g.drawImage(v, 0, 0, c.width, c.height);
-      const stream = c.captureStream(30);
-      if (dest) for (const t of dest.stream.getAudioTracks()) stream.addTrack(t);
-      const opts = { mimeType: type, videoBitsPerSecond: size.bps, ...(dest ? { audioBitsPerSecond: 128_000 } : {}) };
-      try {
-        rec = new MediaRecorder(stream, opts);
-      } catch {
-        rec = new MediaRecorder(stream, { ...opts, mimeType: plan.mime }); // profil refusé : format simple
-      }
-      const parts = [];
-      rec.ondataavailable = (e) => {
-        if (!e.data.size) return;
-        parts.push(e.data);
-        onData?.(e.data);
-      };
-      rec.onstop = () => done(null, new Blob(parts, { type: type.split(';')[0] }));
-      rec.onerror = () => done(new Error('Préparation de la vidéo impossible.'));
-      const draw = () => {
-        g.drawImage(v, 0, 0, c.width, c.height);
-        onProgress?.(Math.min(1, v.currentTime / info.duration));
-        if (!v.ended) raf = requestAnimationFrame(draw);
-      };
-      v.addEventListener('ended', () => {
-        g.drawImage(v, 0, 0, c.width, c.height);
-        setTimeout(() => rec.state !== 'inactive' && rec.stop(), 150);
-      }, { once: true });
-      // Interruption (application en arrière-plan, autre vidéo sonore) : tout se met en pause,
-      // son compris, puis reprend au même endroit
-      v.addEventListener('pause', () => {
-        if (finished || v.ended) return;
-        if (pre) ac?.suspend().catch(() => {});
-        if (rec?.state === 'recording') rec.pause();
-        retry = setTimeout(resume, 400);
-      });
-      v.addEventListener('playing', () => {
-        ac?.resume().catch(() => {});
-        if (rec?.state === 'paused') rec.resume();
-      });
-      const onVisible = () => document.visibilityState === 'visible' && v.paused && !v.ended && resume();
-      document.addEventListener('visibilitychange', onVisible);
-      v.addEventListener('ended', () => document.removeEventListener('visibilitychange', onVisible), { once: true });
-      rec.start(1000);
-      await v.play();
-      if (pre && ac && dest) {
-        source = ac.createBufferSource();
-        source.buffer = pre;
-        source.connect(dest);
-        source.start(0, Math.min(v.currentTime, pre.duration));
-      }
-      draw();
-    })().catch((err) => done(err));
-  });
-  job.cancel = (err) => cancel?.(err);
-  return job;
-}
-
 // Envoi d'un morceau de 1 Mo, avec reprise : jusqu'à 8 essais (~25 s), et attente du retour du
-// réseau. Échec réseau : erreur « connexion » (la pastille propose de reprendre l'envoi)
+// réseau. Échec réseau : erreur « connexion » (l'envoi reprendra là où il s'est arrêté)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const backOnline = () => (navigator.onLine === false ? new Promise((r) => addEventListener('online', r, { once: true })) : null);
 async function putChunk(id, i, part) {
@@ -449,53 +87,29 @@ async function putChunk(id, i, part) {
   }
 }
 
-// Morceaux envoyés trois à la fois, au fur et à mesure qu'ils sont prêts
-function chunkSender(opened, onSent) {
-  const queue = [];
-  const flying = new Set();
+// Morceaux envoyés quatre à la fois ; onSent(i, octets) dès que le serveur a reçu un morceau
+async function sendChunks(id, list, onSent) {
   let failed = null;
-  let sent = 0;
-  const pump = () => {
-    while (!failed && flying.size < 3 && queue.length) {
-      const { i, part } = queue.shift();
-      const p = opened
-        .then(({ id }) => putChunk(id, i, part))
-        .then(() => {
-          sent += part.size;
-          onSent?.(sent);
-        })
-        .catch((err) => (failed = failed || err))
-        .finally(() => {
-          flying.delete(p);
-          pump();
-        });
-      flying.add(p);
+  let next = 0;
+  const worker = async () => {
+    while (!failed && next < list.length) {
+      const { i, part } = list[next++];
+      try {
+        await putChunk(id, i, part);
+        onSent(i, part.size);
+      } catch (err) {
+        failed = failed || err;
+      }
     }
   };
-  return {
-    add(i, part) {
-      queue.push({ i, part });
-      pump();
-    },
-    get failed() {
-      return failed;
-    },
-    async drain() {
-      while ((queue.length || flying.size) && !failed) await Promise.race(flying);
-      if (failed) throw failed;
-    },
-  };
+  await Promise.all(Array.from({ length: Math.min(4, list.length) }, worker));
+  if (failed) throw failed;
 }
 
-function openUpload({ mime, size, info, streaming = false, estimate = 0 }) {
+function openUpload({ mime, size, info }) {
   const fd = new FormData();
   fd.append('mime', mime);
-  if (streaming) {
-    fd.append('streaming', '1');
-    fd.append('estimate', String(Math.max(1000, Math.round(estimate))));
-  } else {
-    fd.append('size', String(size));
-  }
+  fd.append('size', String(size));
   fd.append('duration', String(info.duration));
   if (info.width) fd.append('width', String(info.width));
   if (info.height) fd.append('height', String(info.height));
@@ -503,189 +117,63 @@ function openUpload({ mime, size, info, streaming = false, estimate = 0 }) {
   return api.post('/api/videos', fd);
 }
 
-// Fichier déjà prêt : envoyé en morceaux de 1 Mo, trois à la fois
-async function sendBlob(blob, mime, info, onStep, meta = null) {
-  if (blob.size > MAX_BYTES) throw new Error('Vidéo trop lourde : 40 Mo maximum. Raccourcissez-la un peu.');
-  const opened = openUpload({ mime, size: blob.size, info });
-  const { id, chunkSize, chunks } = await opened;
-  try {
-    const sender = chunkSender(opened, (n) => onStep?.('upload', n / blob.size));
-    for (let i = 0; i < chunks; i++) sender.add(i, blob.slice(i * chunkSize, Math.min(blob.size, (i + 1) * chunkSize)));
-    await sender.drain();
-    const { video } = await api.post(`/api/videos/${id}/complete`, meta ? { meta } : {});
-    return video;
-  } catch (err) {
-    api.del(`/api/videos/${id}`).catch(() => {}); // place libérée ; « Réessayer » repart proprement
-    throw err;
-  }
-}
-
-// Envoi au fil de l'eau : chaque mégaoctet produit part aussitôt, trois à la fois. La taille finale
-// n'est connue qu'à la fin (place réservée d'après l'estimation, vérifiée par le serveur).
-function streamUpload({ mime, info, estimate, onTail }) {
-  const opened = openUpload({ mime, info, streaming: true, estimate: Math.min(MAX_BYTES, estimate) });
-  let produced = 0;
-  let finishing = false;
-  let pending = [];
-  let pendingSize = 0;
-  let index = 0;
-  const sender = chunkSender(opened, (sent) => finishing && onTail?.(Math.min(1, sent / produced)));
-  const cut = (final) => {
-    while (pendingSize >= CHUNK_UP || (final && pendingSize > 0)) {
-      const all = new Blob(pending);
-      const part = all.slice(0, CHUNK_UP);
-      sender.add(index++, part);
-      const rest = all.slice(part.size);
-      pending = rest.size ? [rest] : [];
-      pendingSize = rest.size;
-    }
-  };
-  return {
-    opened,
-    // Envoi abandonné : la place réservée sur le serveur est libérée
-    drop: () => opened.then(({ id }) => api.del(`/api/videos/${id}`)).catch(() => {}),
-    get produced() {
-      return produced;
-    },
-    get failed() {
-      return sender.failed;
-    },
-    push(data) {
-      const n = data.size ?? data.byteLength;
-      produced += n;
-      pending.push(data);
-      pendingSize += n;
-      cut(false);
-    },
-    async finish(size, meta = null) {
-      if (sender.failed) throw sender.failed;
-      finishing = true;
-      cut(true);
-      await sender.drain();
-      const { id } = await opened;
-      const { video } = await api.post(`/api/videos/${id}/complete`, { size, ...(meta ? { meta } : {}) });
-      return video;
-    },
-  };
-}
-
-// Prépare la vidéo (1080p) et l'envoie EN MÊME TEMPS : chaque mégaoctet enregistré part aussitôt.
-// memo garde la vidéo préparée : si le réseau coupe, « Réessayer » renvoie sans tout refaire.
-// Renvoie la vidéo à joindre à la publication.
+// Publie la vidéo D'ORIGINE, octet pour octet : aucune recompression, donc la qualité exacte du
+// tournage. Elle part en morceaux de 1 Mo, quatre à la fois. L'envoi est reprenable : memo garde
+// l'envoi ouvert sur le serveur et les morceaux déjà reçus ; après une coupure, seuls les morceaux
+// manquants repartent. Renvoie la vidéo à joindre à la publication.
 export async function uploadVideo(file, info, onStep, memo = {}) {
+  if (file.size > maxVideoBytes()) throw new Error(tooBig(file.size));
   const t0 = Date.now();
+  const mime = fileMime(file);
   // Fiche technique (diagnostic de la Direction si une vidéo lit mal) : rien de personnel
   const meta = memo.meta || (memo.meta = {
+    methode: 'originale',
     appareil: navigator.userAgent.slice(0, 180),
-    source: { type: file.type || fileMime(file), mo: +(file.size / 1048576).toFixed(1), largeur: info.width, hauteur: info.height, duree: +(info.duration || 0).toFixed(1), hevc: Boolean(info.hevc), rapidePossible: Boolean(info.fast) },
+    source: { type: file.type || mime, mo: +(file.size / 1048576).toFixed(1), largeur: info.width, hauteur: info.height, duree: +(info.duration || 0).toFixed(1) },
   });
-  const done = (method, out, extra = {}) => Object.assign(meta, { methode: method, sortie: out ? { type: out.type, mo: +(out.size / 1048576).toFixed(1) } : null, secondes: Math.round((Date.now() - t0) / 100) / 10, ...extra });
-  if (memo.blob) return sendBlob(memo.blob, memo.mime, info, onStep, done(`${meta.methode || 'préparée'} (renvoi)`, memo.blob));
-  const mime = fileMime(file);
-  const target = encodeSize(info.width, info.height);
-  const guess = ((target.bps + 128_000) * (info.duration || 30)) / 8; // poids probable une fois préparée
-  // Un MP4 déjà léger (pas plus lourd que sa version préparée) et pas plus grand que 1080p part tel
-  // quel : aucune perte de qualité, aucune attente
-  const light = mime === 'video/mp4' && !info.hevc && file.size <= MAX_BYTES && file.size <= guess * 1.1 && Math.max(info.width || 0, info.height || 0) <= MAX_SIDE;
-  const heavy = !light && (file.size > KEEP_AS_IS || mime !== 'video/mp4' || info.hevc);
-  // Original meilleur que le résultat (vide, ou plus lourd qu'un MP4 lisible partout)
-  const keepOriginal = (out) => out.size < 1000 || (mime === 'video/mp4' && !info.hevc && out.size >= file.size && file.size <= MAX_BYTES);
-
-  // 1. Préparation rapide (circuits vidéo du téléphone), envoyée pendant qu'elle se fait
-  if (heavy && info.fast && !memo.slow) {
-    const fastGuess = ((fastBitrate(target.width, target.height) + 160_000) * (info.duration || 30)) / 8;
-    const tail = (step, r) => onStep?.('upload', 0.85 + 0.15 * r);
-    const up = streamUpload({ mime: 'video/mp4', info, estimate: fastGuess * 1.25, onTail: (r) => tail('upload', r) });
-    const ctl = new AbortController();
-    let refused = null;
-    up.opened.catch((err) => {
-      refused = err; // envoi refusé d'entrée (espace plein, trop de vidéos…) : on arrête tout
-      ctl.abort(err);
-    });
-    let inOrder = true;
-    let out;
+  for (let fresh = false; ; fresh = true) {
+    if (!memo.upload) {
+      onStep?.('prepare', 0);
+      const { id, chunkSize, chunks } = await openUpload({ mime, size: file.size, info });
+      memo.upload = { id, chunkSize, chunks, sent: new Set() };
+    }
+    const up = memo.upload;
+    const left = [];
+    let done = 0;
+    for (let i = 0; i < up.chunks; i++) {
+      const part = file.slice(i * up.chunkSize, Math.min(file.size, (i + 1) * up.chunkSize));
+      if (up.sent.has(i)) done += part.size;
+      else left.push({ i, part });
+    }
+    onStep?.('upload', done / file.size);
     try {
-      out = await fastPrepare(file, info, (p) => onStep?.('stream', p * 0.8), (data, position) => {
-        if (!inOrder) return;
-        if (position !== up.produced) inOrder = false; // écriture hors séquence : envoi du fichier entier à la fin
-        else up.push(data);
-      }, ctl.signal);
+      await sendChunks(up.id, left, (i, n) => {
+        up.sent.add(i);
+        done += n;
+        onStep?.('upload', done / file.size);
+      });
+      meta.secondes = Math.round((Date.now() - t0) / 100) / 10;
+      if (memo.resumed) meta.reprises = memo.resumed;
+      const { video } = await api.post(`/api/videos/${up.id}/complete`, { meta });
+      memo.upload = null;
+      return video;
     } catch (err) {
-      up.drop();
-      if (refused) throw refused;
-      // Préparation rapide interrompue : on réessaie avec la méthode habituelle (toucher la pastille)
-      memo.slow = true;
-      meta.rapide = `interrompue : ${String(err?.message || err).slice(0, 120)}`;
-      throw new Error('Préparation interrompue.');
-    }
-    if (keepOriginal(out)) {
-      up.drop();
-      return sendBlob(file, mime, info, tail, done('originale (plus légère)', file));
-    }
-    // Contrôle sur le téléphone : une vidéo abîmée par la conversion n'est jamais publiée
-    onStep?.('stream', 0.82);
-    let check;
-    try {
-      check = await checkPrepared(file, out);
-    } catch (err) {
-      check = { ok: true, why: `contrôle impossible : ${String(err?.message || err).slice(0, 80)}` };
-    }
-    if (!check.ok) {
-      up.drop();
-      // Original envoyé tel quel s'il n'est pas trop lourd ; sinon, méthode habituelle (toucher la pastille)
-      if (file.size <= MAX_BYTES) return sendBlob(file, mime, info, tail, done('originale (conversion écartée)', file, { controle: check }));
-      memo.slow = true;
-      meta.controle = check;
-      throw new Error('Préparation à refaire.');
-    }
-    memo.blob = out; // « Réessayer » après une coupure ne refait que l'envoi
-    memo.mime = 'video/mp4';
-    done('rapide', out, { controle: check });
-    if (!inOrder || up.produced !== out.size) {
-      up.drop();
-      return sendBlob(out, 'video/mp4', info, tail, meta);
-    }
-    try {
-      return await up.finish(out.size, meta);
-    } catch (err) {
-      up.drop();
+      if (!fresh && err.status === 404) {
+        memo.upload = null; // envoi effacé du serveur entre-temps (plus de 6 h) : on en ouvre un neuf
+        continue;
+      }
+      if (!fresh && err.status === 409) {
+        up.sent.clear(); // un morceau manque au serveur : tout est renvoyé dans le même envoi
+        continue;
+      }
+      if (err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429) {
+        api.del(`/api/videos/${up.id}`).catch(() => {}); // refus définitif : la place est libérée
+        memo.upload = null;
+      } else {
+        memo.resumed = (memo.resumed || 0) + 1; // coupure : la reprise n'enverra que la suite
+      }
       throw err;
     }
-  }
-
-  // 2. Méthode habituelle : la vidéo est rejouée en temps réel et réenregistrée, envoyée au fil de l'eau
-  const plan = heavy ? encodePlan(file) : null;
-  if (!plan) return sendBlob(file, mime, info, onStep, done(light ? 'originale (déjà légère)' : 'originale', file));
-  const up = streamUpload({ mime: plan.mime, info, estimate: guess * 1.25, onTail: (r) => onStep?.('upload', 0.9 + 0.1 * r) });
-  const job = compress(file, info, plan, (p) => onStep?.('stream', Math.min(p, 1) * 0.9), (data) => {
-    if (up.produced + data.size > MAX_BYTES) return job?.cancel(new Error('Vidéo trop lourde : 40 Mo maximum. Raccourcissez-la un peu.'));
-    up.push(data);
-  });
-  // Envoi refusé d'entrée (espace plein, trop de vidéos…) : la préparation s'arrête aussitôt
-  up.opened.catch((err) => job.cancel(err));
-  let out;
-  try {
-    out = await job;
-  } catch (err) {
-    up.drop();
-    if (err instanceof ApiError) throw err; // refus du serveur : message clair
-    // Préparation impossible sur ce téléphone : la vidéo d'origine part telle quelle
-    return sendBlob(file, mime, info, onStep, done('originale (temps réel impossible)', file));
-  }
-  if (keepOriginal(out)) {
-    up.drop();
-    return sendBlob(file, mime, info, onStep, done('originale (plus légère)', file));
-  }
-  // La vidéo préparée est gardée : si le réseau coupe, « Réessayer » ne refait que l'envoi
-  memo.blob = out;
-  memo.mime = out.type || plan.mime;
-  done('temps réel', out);
-  try {
-    onStep?.('upload', 0.9);
-    return await up.finish(out.size, meta);
-  } catch (err) {
-    up.drop();
-    throw err;
   }
 }
 
@@ -979,11 +467,16 @@ export function openReels({ postId = null, url = null, video = null } = {}) {
 // - lecture progressive (comme TikTok) : la vidéo démarre dès son premier morceau et la suite
 //   arrive pendant qu'elle joue (MediaSource) ; sinon, la vidéo est lue une fois entière sur
 //   le téléphone, ou en ligne ;
-// - au plus 6 vidéos gardées en mémoire ; rien d'avance en mode économie de données.
+// - au plus 6 vidéos gardées en mémoire ; rien d'avance en mode économie de données ;
+// - une vidéo lourde (publiée en qualité d'origine) n'est jamais téléchargée en entier d'avance :
+//   seul son début l'est (et sa fin si sa description y est), la suite arrive pendant la lecture.
 // ---------------------------------------------------------------------------
 const CHUNK = 1024 * 1024;
 const PREFIX = 2; // morceaux du début téléchargés d'avance
 const MAX_KEPT = 6;
+const FULL_MAX = 25 * CHUNK; // au-delà, pas de téléchargement complet d'avance (sauf « Garder »)
+const KEPT_BYTES = 160 * CHUNK; // place prise en mémoire par les vidéos téléchargées
+const small = (v) => v.size <= FULL_MAX;
 const PARALLEL = 4; // morceaux en cours en même temps (2 au plus par vidéo)
 const PER_VIDEO = 2;
 export const PRIO = { now: 0, next: 1, later: 2, warm: 3 };
@@ -1045,14 +538,18 @@ function nextChunk(urgent) {
     if (e.state === 'ready' || e.state === 'failed' || e.flying.size >= (e.have ? PER_VIDEO : 1)) continue;
     if (held && e.prio !== PRIO.now) continue;
     const limit = e.all ? e.n : Math.min(e.n, PREFIX);
-    for (let i = 0; i < limit; i++) {
-      if (e.parts[i] || e.flying.has(i)) continue;
-      const key = rank(e, i) * 1e9 + e.seq * 1e3 + i;
-      if (key < bestKey) {
-        bestKey = key;
-        best = [e, i];
-      }
-      break;
+    let i = 0;
+    while (i < limit && (e.parts[i] || e.flying.has(i))) i++;
+    if (i >= limit) {
+      // Début déjà là : la fin aussi si la description de la vidéo s'y trouve (lecture immédiate)
+      const t = e.n - 1;
+      if (e.all || !e.info?.tail || t < limit || e.parts[t] || e.flying.has(t)) continue;
+      i = t;
+    }
+    const key = rank(e, i === e.n - 1 && !e.all ? 0 : i) * 1e9 + e.seq * 1e3 + i;
+    if (key < bestKey) {
+      bestKey = key;
+      best = [e, i];
     }
   }
   return best;
@@ -1153,13 +650,15 @@ function part(e, i) {
   });
 }
 
+// Mémoire du téléphone : au plus 6 vidéos, et 160 Mo de vidéos téléchargées
+const heldBytes = () => [...entries.values()].reduce((n, e) => n + (e.all || e.blob ? e.size : 0), 0);
 function trim(keep) {
-  if (entries.size <= MAX_KEPT) return;
+  if (entries.size <= MAX_KEPT && heldBytes() <= KEPT_BYTES) return;
   const inUse = new Set([...document.querySelectorAll('video')].map((el) => el.dataset.v || el.getAttribute('src')));
   const old = [...entries.values()]
     .filter((e) => e.key !== keep && !e.keep && e.prio !== PRIO.now && !e.flying.size && !inUse.has(e.key) && !inUse.has(e.url))
     .sort((a, b) => a.at - b.at);
-  while (entries.size > MAX_KEPT && old.length) {
+  while ((entries.size > MAX_KEPT || heldBytes() > KEPT_BYTES) && old.length) {
     const e = old.shift();
     if (e.url) URL.revokeObjectURL(e.url);
     fail(e); // prévient aussi ceux qui attendaient un morceau (rien ne reste suspendu)
@@ -1180,7 +679,10 @@ function want(v, prio, all) {
   // Une seule vidéo « à l'écran » : celle d'avant repasse derrière les suivantes
   if (prio === PRIO.now) for (const o of entries.values()) if (o !== e && o.prio === PRIO.now) o.prio = PRIO.later;
   if (prio < e.prio) e.prio = prio;
-  if (all) e.all = true;
+  if (all && !e.all) {
+    e.all = true;
+    trim(e.key);
+  }
   e.at = Date.now();
   pump();
   return e;
@@ -1191,6 +693,11 @@ export function preloadVideo(v, { force = false, prio = PRIO.later, keep = false
   // force : demande explicite, même en mode économie de données ; keep : « Garder » (téléchargée
   // jusqu'au bout, même si l'on passe à une autre vidéo)
   if (!v?.url || !v.size || (!force && saveData())) return null;
+  // Vidéo lourde : son début seulement (elle se lit en ligne, la suite arrive pendant la lecture)
+  if (!keep && !small(v)) {
+    want(v, force ? PRIO.now : prio, false);
+    return null;
+  }
   const e = want(v, force ? PRIO.now : prio, true);
   if (keep) e.keep = true;
   return e.promise;
@@ -1222,7 +729,7 @@ export function relaxPreload(v) {
   if (e.prio === PRIO.now) e.prio = PRIO.later;
 }
 export function resumePreload(v) {
-  if (v?.url && v.size) want(v, PRIO.now, true);
+  if (v?.url && v.size) want(v, PRIO.now, true); // lecture progressive : la suite est nécessaire
 }
 
 // Octets déjà reçus pour une vidéo (pour savoir si son téléchargement avance encore)
@@ -1244,19 +751,53 @@ export const videoBlob = (v) => (v?.url && entries.get(v.url)?.blob) || null;
 // Adresse locale si la vidéo est déjà téléchargée, sinon null
 export const localVideo = (v) => (v?.url && entries.get(v.url)?.url) || null;
 
+// Lecture en ligne : assemblée par le téléphone (sw.js) à partir des morceaux gardés par le réseau
+// de Vercel. Si un appareil coince sur ce chemin, la vidéo repart aussitôt par le serveur
+// (« ?direct=1 »), et ce téléphone garde ce choix trois jours.
+const DIRECT = 'aurum:video-direct';
+let direct = (() => {
+  try {
+    return Number(localStorage.getItem(DIRECT) || 0) > Date.now();
+  } catch {
+    return false;
+  }
+})();
+function directFallback(ev) {
+  const el = ev.currentTarget;
+  const url = el.dataset.v;
+  if (el.dataset.mode !== 'en-ligne' || !url || el.getAttribute('src') !== url || !navigator.serviceWorker?.controller) return;
+  if (el.error?.code === 3) return; // image illisible par cet appareil : le chemin n'y est pour rien
+  direct = true;
+  try {
+    localStorage.setItem(DIRECT, String(Date.now() + 3 * 24 * 3600 * 1000));
+  } catch {
+    /* pour cette visite seulement */
+  }
+  reportVideoIssue('lecture en ligne par le téléphone abandonnée', { url }, { err: el.error?.code || null });
+  const at = el.currentTime;
+  el.src = `${url}?direct=1`;
+  if (at > 0.5) el.addEventListener('loadedmetadata', () => (el.currentTime = at), { once: true });
+  el.play().catch(() => {});
+}
+
 // Source d'un lecteur : on note quelle vidéo il lit (quelle que soit la forme de l'adresse)
 export function setSource(el, v, src) {
   el.dataset.v = v?.url || '';
+  const online = Boolean(v) && src === v.url;
   // Mode de lecture (utile pour comprendre un souci) : téléphone, progressive ou en ligne
-  el.dataset.mode = !v ? '' : src === v.url ? 'en-ligne' : src === localVideo(v) ? 'telephone' : 'progressive';
-  el.src = src;
+  el.dataset.mode = !v ? '' : online ? 'en-ligne' : src === localVideo(v) ? 'telephone' : 'progressive';
+  if (!el.__direct) {
+    el.__direct = true;
+    el.addEventListener('error', directFallback);
+  }
+  el.src = online && direct ? `${src}?direct=1` : src;
 }
 // La même vidéo, qu'elle soit lue en ligne, depuis le téléphone ou progressivement ?
 export const sameVideo = (el, v) => Boolean(el.getAttribute('src') && el.dataset.v && el.dataset.v === v?.url);
 
 // ---------------------------------------------------------------------------
 // Lecture progressive (MediaSource ; ManagedMediaSource sur iPhone, iOS 17.1 et plus).
-// Possible pour les vidéos préparées par l'application (format « fragmenté »). En cas de
+// Possible pour les vidéos au format « fragmenté » (enregistrées par un navigateur). En cas de
 // souci sur un téléphone, elle est coupée pour quelques jours et la lecture classique reprend.
 // ---------------------------------------------------------------------------
 const MS = typeof window !== 'undefined' ? window.ManagedMediaSource || window.MediaSource : null;
@@ -1368,7 +909,8 @@ function mp4Info(b, type) {
   };
   walk(0, b.length, 0);
   const ok = moov && fragmented && codecs.length && codecs.every((c) => /^(avc[13]\.|vp09\.|mp4a\.|opus$)/.test(c));
-  return ok ? { progressive: true, mime: `${type}; codecs="${codecs.join(',')}"` } : { progressive: false };
+  // tail : description (« moov ») placée en fin de fichier, comme souvent dans une vidéo d'origine
+  return ok ? { progressive: true, mime: `${type}; codecs="${codecs.join(',')}"` } : { progressive: false, tail: !moov };
 }
 
 // Appareils Apple (iPhone, iPad, Safari) : lecteur natif, le plus fiable chez eux. La lecture
@@ -1395,7 +937,7 @@ export function progressiveReady(v) {
 // par sécurité ; téléchargement impossible : lecture en ligne)
 export async function progressiveCheck(v, ms = 8000) {
   if (!canProgressive() || !v?.url || !v.size) return false;
-  const e = want(v, PRIO.now, true);
+  const e = want(v, PRIO.now, small(v)); // vidéo lourde : rien de plus que son début pour l'instant
   if (!e.info) await Promise.race([part(e, 0), sleep(ms)]);
   return progressiveReady(v) === true;
 }
