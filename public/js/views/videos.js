@@ -734,7 +734,7 @@ export async function videosView(ctx) {
         { class: 'reels-empty' },
         following
           ? emptyState('video', 'Rien de neuf chez vos abonnements', 'Les vidéos des membres que vous suivez apparaîtront ici.', h('button', { type: 'button', class: 'btn btn-primary', onclick: () => switchScope('all') }, 'Voir « Pour toi »'))
-          : emptyState('video', 'Aucune vidéo pour l’instant', 'Une minute au plus, en 1080p. Lancez le coin Vidéos !', h('button', { type: 'button', class: 'btn btn-primary', onclick: () => document.dispatchEvent(new CustomEvent('aurum:create')) }, 'Publier une vidéo')),
+          : emptyState('video', 'Aucune vidéo pour l’instant', 'Une minute au plus, en qualité d’origine. Lancez le coin Vidéos !', h('button', { type: 'button', class: 'btn btn-primary', onclick: () => document.dispatchEvent(new CustomEvent('aurum:create')) }, 'Publier une vidéo')),
       ),
     );
   }

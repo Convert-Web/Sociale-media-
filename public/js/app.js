@@ -128,7 +128,7 @@ function openCreate() {
     'div',
     { class: 'create-list' },
     choice('pen', 'Publication', 'Un texte, jusqu’à 6 photos', () => openComposer()),
-    choice('video', 'Vidéo', store.config?.videoTtlHours ? `Une minute au plus · visible ${store.config.videoTtlHours} h` : 'Une minute au plus · en 1080p', () => openComposer('video')),
+    choice('video', 'Vidéo', store.config?.videoTtlHours ? `Une minute au plus · visible ${store.config.videoTtlHours} h` : 'Une minute au plus · qualité d’origine', () => openComposer('video')),
     choice('sparkles', 'Story', 'Photo ou vidéo · disparaît après 24 h', () => newStory()),
   );
   openSheet({ title: 'Créer', body: list });

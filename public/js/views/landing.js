@@ -141,9 +141,9 @@ export async function landingView(ctx) {
         tile(
           'tile-wide tile-pop',
           h('p', { class: 'tile-kicker' }, 'Vidéos'),
-          h('p', { class: 'tile-figure' }, '1080p'),
-          h('h3', null, 'En plein écran. D’un geste.'),
-          h('p', null, 'Vidéos et stories se regardent d’un geste et se glissent l’une après l’autre. Vos vidéos restent sur votre profil ; les stories s’effacent après 24 heures. Un coup de cœur ? Gardez-la sur votre téléphone.'),
+          h('p', { class: 'tile-figure' }, '4K'),
+          h('h3', null, 'En qualité d’origine.'),
+          h('p', null, 'Vos vidéos sont publiées telles que filmées, sans aucune recompression, jusqu’en 4K. Elles se regardent en plein écran et se glissent l’une après l’autre ; elles restent sur votre profil, les stories s’effacent après 24 heures. Un coup de cœur ? Gardez-la sur votre téléphone.'),
         ),
         tile('', icon('mail', 'icon-lg'), h('h3', null, 'Messagerie privée.'), h('p', null, 'Des conversations en temps réel, entre membres uniquement.')),
         tile('', icon('clock', 'icon-lg'), h('h3', null, 'Un fil chronologique.'), h('p', null, 'Ce que vous suivez, dans l’ordre. Aucun algorithme ne décide pour vous.')),
