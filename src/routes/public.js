@@ -16,7 +16,7 @@ module.exports = function publicRoutes(ctx) {
   // Informations légales de l'éditeur (pages publiques)
   r.get('/legal', async (_req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=60');
-    res.json({ legal: await getLegal(ctx), videoTtlHours: config.videoTtlHours, founderLimit: config.founderLimit, priceCents: config.priceCents, currency: config.currency });
+    res.json({ legal: await getLegal(ctx), appName: config.appName, currency: config.currency });
   });
 
   // Mesure d'audience anonyme (sans cookie) : une page vue
@@ -38,24 +38,6 @@ module.exports = function publicRoutes(ctx) {
       await db.run('DELETE FROM client_errors WHERE id <= (SELECT MAX(id) FROM client_errors) - 500');
     }
     res.status(204).end();
-  });
-
-  r.get('/public/stats', async (_req, res) => {
-    const { members, lastNumber, cities } = await db.get(
-      `SELECT (SELECT COUNT(*) FROM users WHERE paid_at IS NOT NULL AND is_bot = 0) AS members,
-              (SELECT COALESCE(MAX(number), 0) FROM member_numbers) AS lastNumber,
-              (SELECT COUNT(DISTINCT LOWER(city)) FROM users WHERE paid_at IS NOT NULL AND is_bot = 0 AND city != '') AS cities`,
-    );
-    res.json({
-      members,
-      cities,
-      founderSpotsLeft: config.paidEntry ? 0 : Math.max(0, config.founderLimit - lastNumber),
-      founderLimit: config.founderLimit,
-      // Gratuit pour les Fondateurs, payant ensuite
-      paidEntry: config.paidEntry || lastNumber >= config.founderLimit,
-      priceCents: config.priceCents,
-      currency: config.currency,
-    });
   });
 
   return r;

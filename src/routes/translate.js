@@ -1,11 +1,11 @@
 'use strict';
 const express = require('express');
-const { requireAuth, requireMember } = require('../auth');
+const { requireAuth } = require('../auth');
 const { fail } = require('../http');
 const { selfUser } = require('../social');
 const { LANGS, translateTexts } = require('../translate');
 
-// Garde-fou : au plus 120 demandes de traduction par membre et par heure (par serveur)
+// Garde-fou : au plus 120 demandes de traduction par compte et par heure (par serveur)
 const usage = new Map();
 function allow(userId) {
   const hour = Math.floor(Date.now() / 3600000);
@@ -19,8 +19,8 @@ function allow(userId) {
 module.exports = function translateRoutes(ctx) {
   const r = express.Router();
 
-  // Traduire un ou plusieurs textes dans la langue du membre
-  r.post('/translate', requireMember, async (req, res) => {
+  // Traduire un ou plusieurs textes dans la langue du compte
+  r.post('/translate', requireAuth, async (req, res) => {
     const texts = req.body?.texts;
     const to = req.body?.to;
     if (!Array.isArray(texts) || !texts.length || texts.length > 10 || texts.some((t) => typeof t !== 'string' || !t.trim())) fail(400, 'Textes à traduire invalides.');

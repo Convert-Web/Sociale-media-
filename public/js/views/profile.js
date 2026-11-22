@@ -1,74 +1,18 @@
+// Profil : photo (anneau LIVE), compteurs, Suivre / Message, bio et lien, onglets Vidéos,
+// Republications, Favoris (privés) et J'aime ; modification du profil ; listes d'abonnés.
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, memberChip, monthYear, richText, num, emptyState, modal, spinner, clear, toast, lightbox, popMenu, confirmDialog, verifiedMark, botChip, remaining } from '../dom.js';
-import { openReels } from '../components/video.js';
-import { postList, backHead } from './feed.js';
+import { h, icon, avatar, short, toast, emptyState, modal, closeModal, verifiedMark, shareLink, confirmDialog, debounce, spinner, shrinkImage } from '../dom.js';
+import { openSheet, closeSheet } from '../components/sheet.js';
+import { videoGrid } from '../components/grid.js';
+import { follow, needLogin } from '../components/actions.js';
+import { followLabel, userRow } from '../components/userlist.js';
 import { reportDialog } from '../components/report.js';
-import { friendButton } from './friends.js';
+import { cropImage } from '../components/cropper.js';
+import { logout } from './auth.js';
 
-export function userRow(u, { follow = true } = {}) {
-  const btn = follow && !u.isMe ? followButton(u, 'btn-sm') : null;
-  return h(
-    'div',
-    { class: 'user-row' },
-    h('a', { href: `/@${u.username}` }, avatar(u)),
-    h(
-      'a',
-      { href: `/@${u.username}`, class: 'meta' },
-      h('span', { class: 'name-line' }, h('b', null, u.displayName), u.verified ? verifiedMark() : null, u.bot ? botChip() : null),
-      h('small', null, memberChip(u), h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, `@${u.username}${u.profession ? ` · ${u.profession}` : ''}`)),
-      u.bio ? h('span', { class: 'bio' }, u.bio) : null,
-    ),
-    btn,
-  );
-}
-
-export function followButton(u, size = '') {
-  const btn = h('button', { class: `btn ${size}` });
-  const paint = () => {
-    btn.className = `btn ${size} ${u.isFollowing ? 'btn-ghost' : 'btn-secondary'}`;
-    btn.textContent = u.isFollowing ? 'Suivi' : 'Suivre';
-  };
-  btn.addEventListener('mouseenter', () => {
-    if (u.isFollowing) btn.textContent = 'Ne plus suivre';
-  });
-  btn.addEventListener('mouseleave', paint);
-  btn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const was = u.isFollowing;
-    u.isFollowing = !was;
-    paint();
-    try {
-      if (was) await api.del(`/api/users/${enc(u.username)}/follow`);
-      else await api.post(`/api/users/${enc(u.username)}/follow`);
-      store.emit('follow:changed', { username: u.username, following: !was });
-    } catch (err) {
-      u.isFollowing = was;
-      paint();
-      toast(err.message, 'error');
-    }
-  });
-  paint();
-  return btn;
-}
-
-function relationModal(username, relation) {
-  const body = h('div', { class: 'modal-body', style: { padding: '8px' } }, spinner());
-  modal({ followers: 'Abonnés', following: 'Abonnements', friends: 'Amis' }[relation], body);
-  api
-    .get(`/api/users/${enc(username)}/${relation}`)
-    .then(({ users }) => {
-      clear(body);
-      if (!users.length) body.append(emptyState('users', 'Personne pour l’instant', null));
-      for (const u of users) body.append(userRow(u, { follow: relation !== 'friends' }));
-    })
-    .catch((err) => {
-      clear(body);
-      body.append(h('p', { class: 'muted', style: { padding: '16px' } }, err.message));
-    });
-}
+const backBtn = () => h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => (history.length > 1 ? history.back() : navigate('/')) }, icon('back'));
 
 export async function profileView(ctx) {
   const username = ctx.params.username;
@@ -76,306 +20,293 @@ export async function profileView(ctx) {
   try {
     ({ user } = await api.get(`/api/users/${enc(username)}`));
   } catch (err) {
-    return h('div', null, backHead('Profil'), emptyState('user', 'Membre introuvable', err.message, h('a', { href: '/explorer', class: 'btn btn-ghost' }, 'Explorer le cercle')));
+    ctx.title = 'Compte introuvable — Vibz';
+    return h('div', { class: 'page' }, h('header', { class: 'page-head' }, backBtn()), emptyState('user', 'Ce compte est introuvable', err.status === 404 ? 'Vérifie le nom d’utilisateur, ou ce compte a été supprimé.' : err.message));
   }
-  ctx.title = `${user.displayName} (@${user.username}) — AURUM`;
+  // Adresse avec l'ancienne casse ou un ancien nom : la bonne adresse
+  if (user.username !== username) history.replaceState(history.state, '', `/@${user.username}${location.search}`);
+  ctx.title = `${user.displayName} (@${user.username}) — Vibz`;
+  ctx.description = user.bio || `Les vidéos de ${user.displayName} sur Vibz.`;
+  const me = user.me;
+  const root = h('div', { class: 'page profile' });
+  let grid = null;
+  ctx.onCleanup(() => grid?.destroy());
 
-  const followersEl = h('b', null, num(user.stats.followers));
-  const friendsEl = h('b', null, num(user.stats.friends || 0));
-  const moreBtn = h('button', { class: 'btn btn-ghost btn-icon', 'aria-label': 'Plus d’options', title: 'Options' }, icon('more'));
-  moreBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const items = [{ icon: 'link', label: 'Copier le lien du profil', action: () => navigator.clipboard?.writeText(`${location.origin}/@${user.username}`).then(() => toast('Lien copié.'), () => {}) }];
-    if (store.user.isAdmin) {
-      items.push({
-        icon: 'verified',
-        label: user.verified ? 'Retirer le badge vérifié' : 'Certifier ce membre',
-        action: async () => {
-          try {
-            await api.post(`/api/admin/users/${user.id}/verify`, { verified: !user.verified });
-            toast(user.verified ? 'Badge retiré.' : `${user.displayName} est désormais « Membre vérifié ».`);
-            navigate(`/@${user.username}`, { replace: true });
-          } catch (err) {
-            toast(err.message, 'error');
-          }
-        },
-      });
-    }
-    if (!user.isMe && !user.blocked) {
-      items.unshift({
-        icon: user.isFollowing ? 'x' : 'plus',
-        label: user.isFollowing ? 'Ne plus suivre' : 'Suivre ses publications',
-        action: async () => {
-          const was = user.isFollowing;
-          try {
-            if (was) await api.del(`/api/users/${enc(user.username)}/follow`);
-            else await api.post(`/api/users/${enc(user.username)}/follow`);
-            user.isFollowing = !was;
-            store.emit('follow:changed', { username: user.username, following: !was });
-            toast(was ? 'Vous ne suivez plus ce membre.' : 'Vous suivez désormais ses publications.');
-          } catch (err) {
-            toast(err.message, 'error');
-          }
-        },
-      });
-    }
-    if (!user.isMe) {
-      items.push({ icon: 'flag', label: 'Signaler ce membre', action: () => reportDialog('user', user.id, 'Signaler ce membre') });
-      items.push(
-        user.blocked
-          ? { icon: 'ban', label: 'Débloquer', action: () => toggleBlock(false) }
-          : { icon: 'ban', label: `Bloquer ${user.displayName.split(/\s+/)[0]}`, danger: true, action: () => toggleBlock(true) },
-      );
-    }
-    popMenu(moreBtn, items);
-  });
+  // En-tête
+  const menuBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': me ? 'Menu' : 'Options' }, icon(me ? 'menu' : 'moreH'));
+  menuBtn.addEventListener('click', () => (me ? ownMenu() : otherMenu()));
+  const head = h('header', { class: 'page-head profile-top' }, me ? h('a', { href: '/amis', class: 'icon-btn', 'aria-label': 'Trouver des amis' }, icon('userPlus')) : backBtn(), h('b', { class: 'profile-handle' }, `@${user.username}`, user.private ? icon('lock', 'icon-xs') : null), menuBtn);
 
-  async function toggleBlock(block) {
-    if (block) {
-      const ok = await confirmDialog(
-        `Bloquer ${user.displayName} ?`,
-        'Vous ne verrez plus ses publications et il ou elle ne pourra plus vous écrire ni voir votre profil. Vos abonnements mutuels seront retirés.',
-        'Bloquer',
+  // Photo, nom, compteurs
+  const pic = user.live
+    ? h('a', { href: `/live/${enc(user.username)}`, class: 'profile-pic is-live', 'aria-label': 'Regarder le LIVE' }, avatar(user, 'xxl', { live: true }))
+    : h('span', { class: 'profile-pic' }, avatar(user, 'xxl'));
+  const stat = (n, label, onclick) => h(onclick ? 'button' : 'span', { type: onclick ? 'button' : null, class: 'stat', onclick }, h('b', null, short(n)), h('small', null, label));
+  const counts = h(
+    'div',
+    { class: 'stats' },
+    stat(user.counts.following, 'Abonnements', user.locked ? null : () => followLists(user, 'following')),
+    stat(user.counts.followers, user.counts.followers > 1 ? 'Abonnés' : 'Abonné', user.locked ? null : () => followLists(user, 'followers')),
+    stat(user.counts.likes, 'J’aime'),
+  );
+
+  // Boutons
+  const actions = h('div', { class: 'profile-actions' });
+  const paintActions = () => {
+    if (me) {
+      actions.replaceChildren(
+        h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => editProfile(user, (u) => { Object.assign(user, u); render(); }) }, 'Modifier le profil'),
+        h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => shareLink(`${user.displayName} sur Vibz`, `/@${user.username}`) }, 'Partager le profil'),
+        h('a', { href: '/studio', class: 'btn btn-ghost btn-icon', 'aria-label': 'Studio créateur' }, icon('creator')),
       );
-      if (!ok) return;
+      return;
     }
+    if (user.blocked) {
+      actions.replaceChildren(h('button', { type: 'button', class: 'btn btn-primary', onclick: () => toggleBlock(false) }, 'Débloquer'));
+      return;
+    }
+    const on = user.isFollowing || user.requested;
+    const fbtn = h('button', { type: 'button', class: `btn ${on ? 'btn-ghost' : 'btn-primary'} grow` }, on ? (user.friend ? 'Amis' : user.requested ? 'Demandé' : 'Abonné·e') : followLabel(user));
+    fbtn.addEventListener('click', async () => {
+      if (on && user.isFollowing && !(await confirmDialog(`Ne plus suivre ${user.displayName} ?`, user.private ? 'Ce compte est privé : tu devras redemander à le suivre.' : 'Ses vidéos n’apparaîtront plus dans « Abonnements ».', 'Ne plus suivre'))) return;
+      fbtn.disabled = true;
+      const next = await follow(user.username, !on);
+      fbtn.disabled = false;
+      if (next) {
+        Object.assign(user, next);
+        render();
+      }
+    });
+    const msg = h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => !needLogin('Connecte-toi pour envoyer un message.') && navigate(`/messages/${enc(user.username)}`) }, 'Message');
+    const more = h('button', { type: 'button', class: 'btn btn-ghost btn-icon', 'aria-label': 'Comptes similaires', onclick: () => similar.toggleAttribute('hidden') }, icon('chevronDown'));
+    actions.replaceChildren(fbtn, msg, more);
+  };
+  const similar = h('div', { class: 'similar', hidden: true });
+  if (!me) {
+    api.get('/api/suggestions?limit=10').then(({ users }) => {
+      const list = users.filter((u) => u.id !== user.id).slice(0, 8);
+      if (list.length) similar.replaceChildren(h('h3', null, 'Comptes suggérés'), h('div', { class: 'similar-list' }, list.map((u) => h('a', { href: `/@${enc(u.username)}`, class: 'similar-card' }, avatar(u, 'lg'), h('b', null, u.displayName), h('small', null, u.reason)))));
+    }).catch(() => {});
+  }
+
+  async function toggleBlock(on) {
+    if (needLogin('Connecte-toi pour bloquer un compte.')) return;
+    if (on && !(await confirmDialog(`Bloquer ${user.displayName} ?`, 'Ce compte ne pourra plus voir tes vidéos, te suivre, te commenter ni t’écrire. Il ne sera pas prévenu.', 'Bloquer'))) return;
     try {
-      if (block) await api.post(`/api/users/${enc(user.username)}/block`);
-      else await api.del(`/api/users/${enc(user.username)}/block`);
-      toast(block ? 'Membre bloqué.' : 'Membre débloqué.');
-      navigate(`/@${user.username}`, { replace: true });
+      const r = on ? await api.post(`/api/users/${enc(user.username)}/block`) : await api.del(`/api/users/${enc(user.username)}/block`);
+      Object.assign(user, r.user);
+      toast(on ? 'Compte bloqué' : 'Compte débloqué');
+      render();
     } catch (err) {
       toast(err.message, 'error');
     }
   }
 
-  const actions = user.isMe
-    ? [
-        store.user.isAdmin ? moreBtn : null,
-        h('a', { href: '/reglages', class: 'btn btn-secondary' }, 'Modifier le profil'),
-        h('a', { href: '/invitations', class: 'btn btn-secondary' }, 'Inviter'),
-      ]
-    : user.bot
-      ? [moreBtn]
-      : user.blocked
-      ? [moreBtn, h('button', { class: 'btn btn-secondary', onclick: () => toggleBlock(false) }, 'Débloquer')]
-      : [
-          moreBtn,
-          h('a', { href: `/messages/${user.username}`, class: 'btn btn-ghost btn-icon', 'aria-label': 'Envoyer un message', title: 'Message' }, icon('mail')),
-          friendButton(user, {
-            onChange: (s, prev) => {
-              user.stats.friends = Math.max(0, (user.stats.friends || 0) + (s === 'friends') - (prev === 'friends'));
-              friendsEl.textContent = num(user.stats.friends);
-              if (s === 'friends' && !user.isFollowing) {
-                user.isFollowing = true;
-                store.emit('follow:changed', { username: user.username, following: true });
-              }
-            },
-          }),
-        ];
-  ctx.onCleanup(
-    store.on('follow:changed', ({ username: un, following }) => {
-      if (un.toLowerCase() !== user.username.toLowerCase()) return;
-      user.stats.followers += following ? 1 : -1;
-      followersEl.textContent = num(user.stats.followers);
-    }),
-  );
-
-  const meta = [];
-  if (user.profession) meta.push(h('span', null, icon('briefcase'), user.profession));
-  if (user.city) meta.push(h('span', null, icon('pin'), user.city));
-  if (user.website) {
-    meta.push(h('a', { href: user.website, target: '_blank', rel: 'noopener noreferrer nofollow' }, icon('link'), user.website.replace(/^https?:\/\/(www\.)?/, '')));
-  }
-  meta.push(h('span', null, icon('calendar'), `Membre depuis ${monthYear(user.joinedAt)}`));
-  if (user.invitedBy) meta.push(h('span', null, icon('ticket'), 'Invité par\u00a0', h('a', { href: `/@${user.invitedBy.username}` }, user.invitedBy.displayName)));
-  if (user.invitedCount) meta.push(h('span', null, icon('users'), `A fait entrer ${user.invitedCount} membre${user.invitedCount > 1 ? 's' : ''}`));
-
-  // Onglets : publications / vidéos / photos
-  const content = h('div');
-  const tabPosts = h('button', { class: 'tab active' }, icon('list', 'icon-sm'), 'Publications');
-  const tabVideos = h('button', { class: 'tab' }, icon('video', 'icon-sm'), 'Vidéos');
-  const tabPhotos = h('button', { class: 'tab' }, icon('grid', 'icon-sm'), 'Photos');
-  const select = (tab) => {
-    for (const t of [tabPosts, tabVideos, tabPhotos]) t.classList.toggle('active', t === tab);
-  };
-  let stopList = () => {};
-  const showPosts = () => {
-    select(tabPosts);
-    stopList();
-    const list = postList((before) => api.get(`/api/users/${enc(user.username)}/posts${before ? `?before=${before}` : ''}`), {
-      empty: () =>
-        emptyState('pen', user.isMe ? 'Votre première publication' : 'Aucune publication', user.isMe ? 'Présentez-vous au cercle : le Salon vous écoute.' : `${user.displayName} n'a encore rien publié.`, user.isMe ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => document.dispatchEvent(new CustomEvent('aurum:create')) }, 'Publier') : null),
+  function otherMenu() {
+    const item = (ic, label, fn, danger) => h('button', { type: 'button', class: `opt-item${danger ? ' danger' : ''}`, onclick: () => { closeSheet(); fn(); } }, h('span', { class: 'opt-ic' }, icon(ic)), label);
+    openSheet({
+      title: `@${user.username}`,
+      body: h(
+        'div',
+        { class: 'opt-list' },
+        item('share', 'Partager le profil', () => shareLink(`${user.displayName} sur Vibz`, `/@${user.username}`)),
+        item('send', 'Envoyer un message', () => !needLogin('Connecte-toi pour envoyer un message.') && navigate(`/messages/${enc(user.username)}`)),
+        user.followsYou ? item('userMinus', 'Retirer cet abonné', async () => {
+          if (!(await confirmDialog('Retirer cet abonné ?', `${user.displayName} ne te suivra plus. Il ne sera pas prévenu.`, 'Retirer'))) return;
+          const r = await api.del(`/api/users/${enc(user.username)}/follower`);
+          Object.assign(user, r.user);
+          render();
+        }) : null,
+        item('ban', user.blocked ? 'Débloquer' : 'Bloquer', () => toggleBlock(!user.blocked), true),
+        item('flag', 'Signaler', () => !needLogin('Connecte-toi pour signaler.') && reportDialog('user', user.id, 'Signaler ce compte'), true),
+      ),
     });
-    content.replaceChildren(list.el);
-    stopList = list.start();
-  };
-  // Vidéos en grille (aperçu et nombre de vues), comme sur TikTok ; un toucher ouvre le plein écran
-  const showVideos = async () => {
-    select(tabVideos);
-    stopList();
-    stopList = () => {};
-    content.replaceChildren(spinner());
-    try {
-      const { posts } = await api.get(`/api/users/${enc(user.username)}/videos`);
-      content.replaceChildren(
-        posts.length
-          ? h(
-              'div',
-              { class: 'video-grid' },
-              posts.map((p) =>
-                h(
-                  'a',
-                  {
-                    href: `/videos?p=${p.id}`,
-                    class: 'video-cell',
-                    onclick: (e) => {
-                      e.preventDefault();
-                      openReels({ postId: p.id, video: p.video }); // dans le toucher : la vidéo démarre avec le son
-                    },
-                  },
-                  p.video.poster ? h('img', { src: p.video.poster, alt: `Vidéo de ${user.displayName}`, loading: 'lazy', decoding: 'async' }) : null,
-                  h('span', { class: 'video-cell-views' }, icon('play', 'icon-xs'), num(p.video.views || 0)),
-                  p.video.expiresAt ? h('span', { class: 'video-cell-time' }, icon('clock', 'icon-xs'), remaining(p.video.expiresAt)) : null,
-                ),
-              ),
-            )
-          : emptyState('video', 'Aucune vidéo', user.isMe ? 'Vos vidéos apparaîtront ici, avec leurs vues.' : 'Aucune vidéo en ce moment.'),
-      );
-    } catch (err) {
-      content.replaceChildren(h('p', { class: 'muted', style: { padding: '20px' } }, err.message));
-    }
-  };
-  const showPhotos = async () => {
-    select(tabPhotos);
-    stopList();
-    stopList = () => {};
-    content.replaceChildren(spinner());
-    try {
-      const { photos } = await api.get(`/api/users/${enc(user.username)}/photos`);
-      content.replaceChildren(
-        photos.length
-          ? h('div', { class: 'photo-grid' }, photos.map((ph) => h('a', { href: `/p/${ph.postId}`, class: 'photo-cell' }, h('img', { src: ph.url, alt: `Photo de ${user.displayName}`, loading: 'lazy', decoding: 'async' }))))
-          : emptyState('image', 'Aucune photo', user.isMe ? 'Vos photos publiées apparaîtront ici.' : 'Aucune photo publiée pour le moment.'),
-      );
-    } catch (err) {
-      content.replaceChildren(h('p', { class: 'muted', style: { padding: '20px' } }, err.message));
-    }
-  };
-  tabPosts.addEventListener('click', showPosts);
-  tabVideos.addEventListener('click', showVideos);
-  tabPhotos.addEventListener('click', showPhotos);
-  ctx.onCleanup(() => stopList());
-  if (user.blocked) {
-    content.replaceChildren(emptyState('ban', 'Membre bloqué', 'Vous ne voyez plus ses publications. Débloquez ce membre pour les afficher à nouveau.'));
-  } else {
-    showPosts();
-  }
-  if (user.isMe) ctx.onCleanup(store.on('post:created', () => tabPosts.classList.contains('active') && showPosts()));
-
-  const coverEl = h('div', { class: 'cover' }, user.cover ? h('img', { src: user.cover, alt: `Photo de couverture de ${user.displayName}`, style: { cursor: 'zoom-in' }, onclick: () => lightbox(user.cover) }) : null);
-  const avatarEl = avatar(user, 'xl', { presence: !user.isMe });
-  if (user.avatar) {
-    avatarEl.style.cursor = 'zoom-in';
-    avatarEl.addEventListener('click', () => lightbox(user.avatar));
   }
 
-  // Chiffres façon Instagram : publications, abonnés, suivis
-  const stat = (value, label, onclick) => h(onclick ? 'button' : 'div', { class: 'ig-stat', type: onclick ? 'button' : undefined, onclick }, value, h('small', null, label));
-  const stats = h(
-    'div',
-    { class: 'ig-stats' },
-    stat(h('b', null, num(user.stats.posts)), user.stats.posts > 1 ? 'publications' : 'publication'),
-    stat(followersEl, user.stats.followers > 1 ? 'abonnés' : 'abonné', () => relationModal(user.username, 'followers')),
-    stat(h('b', null, num(user.stats.following)), user.stats.following > 1 ? 'suivis' : 'suivi', () => relationModal(user.username, 'following')),
-  );
-  // Son propre profil : nom d'utilisateur et menu (≡), comme sur Instagram
-  const head = user.isMe
-    ? h(
-        'header',
-        { class: 'page-head' },
-        h('div', { class: 'grow' }, h('h1', { class: 'me-handle' }, user.username)),
-        h('button', { class: 'icon-btn', 'aria-label': 'Menu : amis, groupes, réglages', onclick: () => document.dispatchEvent(new CustomEvent('aurum:menu')) }, icon('menu')),
-      )
-    : backHead(user.displayName, `${num(user.stats.posts)} publication${user.stats.posts > 1 ? 's' : ''}`);
+  function ownMenu() {
+    const item = (ic, label, href) => h('a', { href, class: 'opt-item', onclick: () => closeSheet() }, h('span', { class: 'opt-ic' }, icon(ic)), label);
+    openSheet({
+      title: user.displayName,
+      body: h(
+        'div',
+        { class: 'opt-list' },
+        item('creator', 'Studio créateur', '/studio'),
+        item('wallet', 'Portefeuille', '/portefeuille'),
+        item('settings', 'Réglages et confidentialité', '/reglages'),
+        store.user?.isAdmin ? item('shield', 'Administration', '/admin') : null,
+        item('help', 'Aide', '/aide'),
+        h('button', { type: 'button', class: 'opt-item danger', onclick: () => { closeSheet(); logout(); } }, h('span', { class: 'opt-ic' }, icon('logout')), 'Se déconnecter'),
+      ),
+    });
+  }
 
-  return h(
-    'div',
-    null,
-    head,
-    coverEl,
-    h(
-      'section',
-      { class: 'profile-top' },
-      h('div', { class: 'profile-row' }, avatarEl, stats),
-      h('div', { class: 'profile-name' }, h('h1', null, user.displayName), user.verified ? verifiedMark() : null),
-      h(
-        'div',
-        { class: 'profile-handle' },
-        h('span', null, `@${user.username}`),
-        memberChip(user),
-        user.friendStatus === 'friends' ? h('span', { class: 'tag tag-gold' }, 'Ami') : user.followsYou ? h('span', { class: 'tag' }, 'Vous suit') : null,
-        user.blocked ? h('span', { class: 'tag' }, 'Bloqué') : null,
-      ),
-      user.bot ? h('p', { class: 'bot-notice' }, icon('info', 'icon-sm'), 'Compte automatique géré par AURUM : ses publications sont générées automatiquement, ce n’est pas un membre.') : null,
-      user.bio ? h('p', { class: 'profile-bio' }, richText(user.bio)) : null,
-      h('div', { class: 'profile-meta' }, meta),
-      h(
-        'div',
-        { class: 'profile-stats' },
-        h('button', { onclick: () => relationModal(user.username, 'friends') }, friendsEl, (user.stats.friends || 0) > 1 ? 'amis' : 'ami'),
-        h('span', null, h('b', null, num(user.stats.likes)), user.stats.likes > 1 ? 'réactions reçues' : 'réaction reçue'),
-      ),
-      h('div', { class: 'profile-actions' }, actions),
-    ),
-    user.blocked ? null : h('div', { class: 'tabs profile-tabs' }, tabPosts, tabVideos, tabPhotos),
-    content,
-  );
+  // Onglets
+  const TAB_DEFS = [
+    { key: 'videos', ic: 'grid', label: 'Vidéos' },
+    { key: 'reposts', ic: 'repost', label: 'Republications' },
+    me ? { key: 'favorites', ic: 'bookmark', label: 'Favoris', lock: true } : null,
+    user.showLiked ? { key: 'liked', ic: 'heart', label: 'J’aime', lock: me && !store.user?.settings?.showLiked } : null,
+  ].filter(Boolean);
+  let current = TAB_DEFS.some((t) => t.key === ctx.query.get('onglet')) ? ctx.query.get('onglet') : 'videos';
+  const tabs = h('nav', { class: 'profile-tabs', role: 'tablist' });
+  const content = h('div', { class: 'profile-content' });
+  function paintTabs() {
+    tabs.replaceChildren(...TAB_DEFS.map((t) => h('button', { type: 'button', role: 'tab', class: `ptab${t.key === current ? ' on' : ''}`, 'aria-label': t.label, 'aria-selected': String(t.key === current), onclick: () => { current = t.key; history.replaceState(history.state, '', `/@${user.username}${t.key === 'videos' ? '' : `?onglet=${t.key}`}`); paintTabs(); mountGrid(); } }, icon(t.ic), t.lock ? icon('lock', 'icon-xs') : null)));
+  }
+  function mountGrid() {
+    grid?.destroy();
+    if (user.blocked) {
+      content.replaceChildren(emptyState('ban', 'Tu as bloqué ce compte', 'Débloque-le pour voir ses vidéos.'));
+      return;
+    }
+    if (user.locked) {
+      content.replaceChildren(emptyState('lock', 'Ce compte est privé', user.requested ? 'Ta demande est en attente.' : 'Suis ce compte pour voir ses vidéos et ses J’aime.'));
+      return;
+    }
+    const url = {
+      videos: `/api/users/${enc(user.username)}/posts`,
+      reposts: `/api/users/${enc(user.username)}/reposts`,
+      favorites: '/api/me/favorites',
+      liked: `/api/users/${enc(user.username)}/liked`,
+    }[current];
+    const empties = {
+      videos: me ? emptyState('video', 'Publie ta première vidéo', 'Tes vidéos apparaîtront ici.', h('a', { href: '/creer', class: 'btn btn-primary' }, 'Créer')) : emptyState('video', 'Aucune vidéo', 'Ce compte n’a encore rien publié.'),
+      reposts: emptyState('repost', 'Aucune republication', me ? 'Les vidéos que tu republies apparaîtront ici.' : 'Les vidéos republiées apparaîtront ici.'),
+      favorites: emptyState('bookmark', 'Aucun favori', 'Garde des vidéos avec le signet : elles restent visibles de toi seul.'),
+      liked: emptyState('heart', 'Aucune vidéo aimée', me ? 'Les vidéos que tu aimes apparaîtront ici (visibles de toi seul, sauf réglage contraire).' : null),
+    };
+    grid = videoGrid({ fetchPage: (cursor) => api.get(`${url}${cursor ? `?cursor=${cursor}` : ''}`), empty: empties[current], showLikes: current === 'liked' });
+    content.replaceChildren(grid.el);
+  }
+
+  function render() {
+    paintActions();
+    const info = h(
+      'div',
+      { class: 'profile-info' },
+      pic,
+      h('h1', { class: 'profile-name' }, user.displayName, user.verified ? verifiedMark() : null),
+      user.demo ? h('span', { class: 'demo-chip' }, 'Compte de démonstration') : null,
+      counts,
+      actions,
+      similar,
+      user.bio ? h('p', { class: 'profile-bio' }, user.bio) : me ? h('button', { type: 'button', class: 'link-btn', onclick: () => editProfile(user, (u) => { Object.assign(user, u); render(); }) }, '+ Ajouter une bio') : null,
+      user.website ? h('a', { href: user.website, class: 'profile-link', target: '_blank', rel: 'noopener noreferrer nofollow' }, icon('link', 'icon-xs'), user.website.replace(/^https?:\/\/(www\.)?/, '')) : null,
+    );
+    paintTabs();
+    root.replaceChildren(head, info, tabs, content);
+    mountGrid();
+  }
+  render();
+  return root;
 }
 
-// Utilisé par la messagerie pour démarrer une conversation
-export function pickMember(title, onPick) {
-  const input = h('input', { class: 'input', placeholder: 'Rechercher un membre…', autocomplete: 'off' });
-  const results = h('div', { style: { marginTop: '8px' } });
-  const m = modal(title, h('div', { class: 'modal-body' }, input, results));
-  let t;
-  const search = async () => {
-    const q = input.value.trim();
-    let users;
-    if (q) ({ users } = await api.get(`/api/search?q=${enc(q)}`));
-    else {
-      // Recherche vide : les membres que l'on suit, puis quelques suggestions
-      const [mine, sugg] = await Promise.all([
-        api.get(`/api/users/${enc(store.user.username)}/following`).catch(() => ({ users: [] })),
-        api.get('/api/suggestions?limit=8').catch(() => ({ users: [] })),
-      ]);
-      const ids = new Set();
-      users = [...mine.users, ...sugg.users].filter((u) => !ids.has(u.id) && ids.add(u.id));
+// Listes : Abonnements / Abonnés / Amis
+function followLists(user, start) {
+  const tabsDef = [['following', 'Abonnements'], ['followers', 'Abonnés'], ...(user.me ? [['friends', 'Amis']] : [])];
+  const list = h('div', { class: 'follow-list' });
+  const tabs = h('nav', { class: 'tabs' });
+  let kind = start;
+  let cursor = null;
+  let loading = false;
+  const sentinel = h('div', { class: 'grid-sentinel' });
+  const load = async (reset) => {
+    if (loading || (!reset && cursor === false)) return;
+    loading = true;
+    if (reset) {
+      cursor = null;
+      list.replaceChildren(spinner());
     }
-    if (q !== input.value.trim()) return; // une frappe plus récente a pris le relais
-    clear(results);
-    const list = users.filter((u) => !u.isMe);
-    if (!list.length) results.append(h('p', { class: 'muted small', style: { padding: '12px' } }, q ? 'Aucun membre ne correspond à cette recherche.' : 'Suivez des membres pour leur écrire en un toucher.'));
-    for (const u of list) {
-      const row = userRow(u, { follow: false });
-      row.addEventListener(
-        'click',
-        (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          m.close();
-          onPick(u);
-        },
-        true,
-      );
-      row.style.cursor = 'pointer';
-      results.append(row);
+    try {
+      const d = await api.get(`/api/users/${enc(user.username)}/${kind}${cursor ? `?cursor=${cursor}` : ''}`);
+      if (reset) list.replaceChildren();
+      for (const u of d.users) list.append(userRow(u));
+      if (reset && !d.users.length) list.append(emptyState('friends', kind === 'followers' ? 'Aucun abonné pour l’instant' : kind === 'friends' ? 'Aucun ami pour l’instant' : 'Aucun abonnement', kind === 'friends' ? 'Vous devenez amis quand vous vous suivez mutuellement.' : null));
+      cursor = d.cursor || false;
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      loading = false;
     }
   };
-  input.addEventListener('input', () => {
-    clearTimeout(t);
-    t = setTimeout(search, 250);
+  const paint = () => tabs.replaceChildren(...tabsDef.map(([k, label]) => h('button', { type: 'button', class: `tab-link${k === kind ? ' on' : ''}`, onclick: () => { kind = k; paint(); load(true); } }, label)));
+  paint();
+  load(true);
+  const io = new IntersectionObserver((e) => e.some((x) => x.isIntersecting) && load(false));
+  io.observe(sentinel);
+  modal(`@${user.username}`, h('div', { class: 'modal-body follow-modal' }, tabs, list, sentinel), { onClose: () => io.disconnect() });
+}
+
+// Modifier le profil
+function editProfile(user, onSaved) {
+  const me = store.user;
+  const pic = h('span', { class: 'edit-pic' }, avatar(me, 'xxl'));
+  const file = h('input', { type: 'file', accept: 'image/*', hidden: true });
+  const name = h('input', { class: 'input', maxlength: 30, value: me.displayName, required: true });
+  const username = h('input', { class: 'input', maxlength: 24, value: me.username, autocapitalize: 'none', spellcheck: 'false', required: true });
+  const userHint = h('small', { class: 'field-hint' }, `vibz.app/@${me.username} · modifiable une fois tous les 30 jours`);
+  const bio = h('textarea', { class: 'textarea', rows: 3, maxlength: 80, placeholder: 'Présente-toi en quelques mots' }, me.bio);
+  bio.value = me.bio || '';
+  const bioCount = h('small', { class: 'field-hint right' }, `${bio.value.length}/80`);
+  bio.addEventListener('input', () => (bioCount.textContent = `${bio.value.length}/80`));
+  const website = h('input', { class: 'input', type: 'url', maxlength: 200, value: me.website || '', placeholder: 'https://…' });
+  const save = h('button', { type: 'submit', class: 'btn btn-primary btn-block' }, 'Enregistrer');
+  username.addEventListener('input', debounce(async () => {
+    const v = username.value.trim().replace(/^@/, '');
+    if (v === me.username) return (userHint.textContent = `@${v}`);
+    const r = await api.get(`/api/auth/username?u=${enc(v)}`).catch(() => null);
+    if (!r) return;
+    userHint.textContent = r.ok ? `@${v} est disponible` : r.reason;
+    userHint.classList.toggle('bad', !r.ok);
+    userHint.classList.toggle('ok', r.ok);
+  }, 300));
+  file.addEventListener('change', async () => {
+    const f = file.files[0];
+    file.value = '';
+    if (!f) return;
+    try {
+      const cropped = await cropImage(f, { aspect: 1, round: true, outWidth: 600, title: 'Photo de profil' });
+      if (!cropped) return;
+      const fd = new FormData();
+      fd.append('image', await shrinkImage(cropped, 800, 0.88), 'avatar.jpg');
+      const r = await api.post('/api/me/avatar', fd);
+      store.setUser(r.user);
+      pic.replaceChildren(avatar(r.user, 'xxl'));
+      onSaved?.(r.user);
+      toast('Photo mise à jour');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   });
-  search().catch(() => {});
+  const m = modal(
+    'Modifier le profil',
+    h(
+      'form',
+      {
+        class: 'modal-body form-stack edit-profile',
+        onsubmit: async (e) => {
+          e.preventDefault();
+          save.disabled = true;
+          try {
+            const r = await api.patch('/api/me', { displayName: name.value, username: username.value.trim(), bio: bio.value, website: website.value });
+            store.setUser(r.user);
+            m.close();
+            toast('Profil mis à jour');
+            if (r.user.username !== user.username) navigate(`/@${r.user.username}`, { replace: true });
+            else onSaved?.(r.user);
+          } catch (err) {
+            save.disabled = false;
+            toast(err.message, 'error');
+          }
+        },
+      },
+      h('div', { class: 'edit-pic-row' }, pic, h('button', { type: 'button', class: 'link-btn', onclick: () => file.click() }, 'Changer de photo'), me.avatar ? h('button', { type: 'button', class: 'link-btn muted', onclick: async () => { const r = await api.del('/api/me/avatar'); store.setUser(r.user); pic.replaceChildren(avatar(r.user, 'xxl')); onSaved?.(r.user); } }, 'Retirer') : null, file),
+      h('label', { class: 'field' }, h('span', null, 'Nom'), name),
+      h('label', { class: 'field' }, h('span', null, 'Nom d’utilisateur'), username, userHint),
+      h('label', { class: 'field' }, h('span', null, 'Bio'), bio, bioCount),
+      h('label', { class: 'field' }, h('span', null, 'Lien'), website),
+      save,
+    ),
+  );
+  void closeModal;
 }
-

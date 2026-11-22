@@ -1,593 +1,190 @@
-import { api } from '../api.js';
-import { store } from '../store.js';
-import { h, icon, avatar, nameLine, memberChip, money, num, timeAgo, toast, confirmDialog, emptyState } from '../dom.js';
-import { backHead } from './feed.js';
+// Administration : vue d'ensemble, signalements, comptes, publications, audience, informations
+// légales, contenu de démonstration, erreurs.
+import { api, enc } from '../api.js';
+import { navigate } from '../router.js';
+import { h, icon, avatar, short, num, money, timeAgo, toast, confirmDialog, emptyState, spinner, debounce } from '../dom.js';
+import { tile } from '../components/grid.js';
+import { openViewer } from '../components/feed.js';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-function svg(tag, attrs, ...kids) {
-  const el = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
-  for (const k of kids) el.append(k);
-  return el;
-}
+const TABS = [
+  ['apercu', 'Vue d’ensemble'],
+  ['signalements', 'Signalements'],
+  ['comptes', 'Comptes'],
+  ['publications', 'Publications'],
+  ['audience', 'Audience'],
+  ['legal', 'Légal'],
+  ['demo', 'Démo'],
+  ['erreurs', 'Erreurs'],
+];
 
-function signupChart(days, label = 'Nouveaux membres sur 14 jours') {
-  // Largeur proche de celle d'un téléphone : les chiffres restent lisibles une fois réduits
-  const W = 400;
-  const H = 170;
-  const pad = { t: 16, b: 26, l: 4, r: 4 };
-  const max = Math.max(1, ...days.map((d) => d.count));
-  const bw = (W - pad.l - pad.r) / days.length;
-  const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': label });
-  root.append(svg('line', { x1: pad.l, x2: W - pad.r, y1: H - pad.b, y2: H - pad.b, class: 'chart-axis' }));
-  days.forEach((d, i) => {
-    const hgt = ((H - pad.t - pad.b) * d.count) / max;
-    const x = pad.l + i * bw + bw * 0.18;
-    const w = bw * 0.64;
-    const y = H - pad.b - hgt;
-    const g = svg('g', {});
-    g.append(svg('title', {}, `${new Date(d.date).toLocaleDateString('fr-FR')} : ${d.count}`));
-    g.append(svg('rect', { x, y: d.count ? y : H - pad.b - 2, width: w, height: d.count ? hgt : 2, rx: 4, class: d.count ? 'chart-bar' : 'chart-bar-empty' }));
-    if (d.count) {
-      const t = svg('text', { x: x + w / 2, y: y - 5, 'text-anchor': 'middle', class: 'chart-value', 'font-size': '13' });
-      t.textContent = d.count;
-      g.append(t);
-    }
-    if ((days.length - 1 - i) % 3 === 0) {
-      const lbl = svg('text', { x: x + w / 2, y: H - 8, 'text-anchor': 'middle', class: 'chart-label', 'font-size': '12' });
-      lbl.textContent = new Date(d.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
-      g.append(lbl);
-    }
-    root.append(g);
-  });
-  return root;
-}
+const kpi = (label, value, sub = null) => h('div', { class: 'kpi' }, h('small', null, label), h('b', null, value), sub ? h('span', null, sub) : null);
 
-// File des signalements
-async function reportsSection() {
-  const host = h('div', { class: 'reports' });
-  const { reports } = await api.get('/api/admin/reports');
-  if (!reports.length) {
-    host.append(h('div', { class: 'reports-empty' }, icon('shield', 'icon-sm'), 'Aucun signalement à traiter.'));
-    return host;
-  }
-  const LABEL = { post: 'Publication', comment: 'Commentaire', user: 'Membre', message: 'Message privé' };
-  const REMOVE = { post: 'Supprimer la publication', comment: 'Supprimer le commentaire', user: 'Exclure le membre', message: 'Supprimer le message' };
-  for (const r of reports) {
-    const resolve = async (action) => {
-      if (action === 'remove' && !(await confirmDialog(`${REMOVE[r.type]} ?`, 'Cette action est définitive.', REMOVE[r.type]))) return;
-      try {
-        await api.post(`/api/admin/reports/${r.id}/resolve`, { action });
-        card.remove();
-        toast(action === 'remove' ? 'Contenu retiré.' : 'Signalement classé.');
-      } catch (err) {
-        toast(err.message, 'error');
-      }
-    };
-    const card = h(
-      'article',
-      { class: 'report-card' },
-      h(
-        'div',
-        { class: 'report-head' },
-        h('span', { class: 'tag' }, LABEL[r.type] || r.type),
-        h('b', null, r.reason),
-        r.total > 1 ? h('span', { class: 'report-count' }, `${r.total} signalements`) : null,
-        h('span', { class: 'muted small' }, timeAgo(r.createdAt)),
-      ),
-      r.target
-        ? h(
-            r.target.link ? 'a' : 'div',
-            { href: r.target.link || undefined, class: 'report-target' },
-            h('small', null, `${r.target.authorName} · @${r.target.author}${r.target.to ? ` → @${r.target.to}` : ''}`),
-            r.target.text ? h('p', null, r.target.text.slice(0, 220)) : null,
-            r.target.image ? h('img', { src: r.target.image, alt: '' }) : null,
-          )
-        : h('p', { class: 'muted small' }, 'Le contenu a déjà été supprimé.'),
-      r.details ? h('p', { class: 'report-details' }, r.automatic ? `Détecté : ${r.details}` : `« ${r.details} »`) : null,
-      h('p', { class: 'muted small' }, r.automatic ? 'Détecté par le filtre automatique' : `Signalé par @${r.reporter || 'membre supprimé'}`),
-      h(
-        'div',
-        { class: 'row-end' },
-        h('button', { class: 'btn btn-ghost btn-sm', onclick: () => resolve('dismiss') }, 'Classer sans suite'),
-        r.target ? h('button', { class: 'btn btn-danger btn-sm', onclick: () => resolve('remove') }, REMOVE[r.type]) : null,
-      ),
-    );
-    host.append(card);
-  }
-  return host;
-}
-
-// Informations légales de l'éditeur : affichées dans les mentions légales, CGU, CGV et RGPD.
-// Elles sont gardées dans la base (jamais dans le code publié).
-async function legalSection() {
-  const host = h('div', { class: 'card emails-card legal-card' });
-  let d;
-  try {
-    d = await api.get('/api/admin/legal');
-  } catch (err) {
-    host.append(h('p', { class: 'muted' }, err.message));
-    return host;
-  }
-  const status = h('div', { class: 'push-status' });
-  const paint = (missing) => {
-    status.className = `push-status${missing.length ? '' : ' on'}`;
-    status.replaceChildren(h('span', { class: 'push-dot' }), missing.length ? `${missing.length} information${missing.length > 1 ? 's' : ''} obligatoire${missing.length > 1 ? 's' : ''} à compléter` : 'Pages légales complètes');
-  };
-  paint(d.missing);
-  const inputs = {};
-  const save = h('button', { class: 'btn btn-primary btn-sm', type: 'submit' }, 'Enregistrer');
-  const form = h(
-    'form',
-    {
-      class: 'legal-form',
-      onsubmit: async (e) => {
-        e.preventDefault();
-        save.disabled = true;
-        try {
-          const body = Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.value]));
-          const r = await api.put('/api/admin/legal', body);
-          paint(r.missing);
-          toast('Informations légales enregistrées.');
-        } catch (err) {
-          toast(err.message, 'error');
-        }
-        save.disabled = false;
-      },
-    },
-    d.fields.map((f) => {
-      const type = f.key === 'email' ? 'email' : f.key === 'mediatorUrl' ? 'url' : 'text';
-      const el = h('input', { class: 'input', type, maxlength: f.max, value: d.legal[f.key] || '', placeholder: PLACEHOLDERS[f.key] || '', autocomplete: 'off' });
-      inputs[f.key] = el;
-      return h('label', { class: 'field' }, h('span', null, f.label, f.required ? null : h('small', { class: 'muted' }, ' — facultatif')), el);
-    }),
-    h('div', { class: 'legal-form-foot' }, h('a', { href: '/mentions-legales', target: '_blank', class: 'small' }, 'Voir les pages légales'), save),
-  );
-  host.append(status, h('p', { class: 'small muted' }, 'Ces informations apparaissent dans les mentions légales, les CGU, les CGV et la politique de confidentialité. Elles sont obligatoires pour un service payant.'), form);
-  return host;
-}
-const PLACEHOLDERS = {
-  editorName: 'Ex. : Prénom Nom, ou AURUM SAS',
-  legalForm: 'Ex. : Entrepreneur individuel (micro-entreprise)',
-  capital: 'Ex. : 1 000 € (sociétés uniquement)',
-  address: 'Numéro, rue, code postal, ville',
-  siren: '9 chiffres (SIREN) ou 14 (SIRET)',
-  registry: 'Ex. : RCS Paris, ou Registre national des entreprises',
-  vat: 'Ex. : TVA non applicable, art. 293 B du CGI',
-  director: 'Prénom Nom',
-  email: 'contact@…',
-  phone: 'Facultatif',
-  mediatorName: 'Ex. : CM2C, Medicys…',
-  mediatorUrl: 'https://…',
-};
-
-const kpi = (label, value, gold, sub) => h('div', { class: `kpi${gold ? ' gold' : ''}` }, h('small', null, label), h('b', { class: gold ? 'accent' : '', dataset: { kpi: label } }, value), sub ? h('span', { class: 'muted small' }, sub) : null);
-// Après une admission : les compteurs du haut se mettent à jour sans recharger la page
-async function refreshKpis() {
-  try {
-    const { totals, config } = await api.get('/api/admin/overview');
-    const set = (label, v) => { const el = document.querySelector(`[data-kpi="${label}"]`); if (el) el.textContent = v; };
-    set('Membres', num(totals.members));
-    if (!config.paidEntry) set('Places de Fondateur', num(config.foundersLeft));
-  } catch {
-    /* les compteurs se mettront à jour au prochain affichage */
-  }
-}
-
-// Audience : mesure anonyme, sans cookie, faite par AURUM
-const PAGE_NAMES = {
-  '/': 'Accueil', '/inscription': 'Inscription', '/connexion': 'Connexion', '/rejoindre': 'Droit d’entrée', '/bienvenue': 'Bienvenue',
-  '/salon': 'Salon', '/videos': 'Vidéos', '/explorer': 'Explorer', '/journal': 'Journal', '/journal/:id': 'Articles du Journal',
-  '/messages': 'Messages', '/messages/:username': 'Conversations', '/@:username': 'Profils', '/p/:id': 'Publications',
-  '/notifications': 'Activité', '/agenda': 'Agenda', '/agenda/:id': 'Événements', '/carnet': 'Carnet', '/carnet/:id': 'Adresses',
-  '/groupes': 'Groupes', '/groupes/:id': 'Groupe', '/amis': 'Amis', '/invitations': 'Invitations', '/invitation/:code': 'Liens d’invitation',
-  '/reglages': 'Réglages', '/cgu': 'CGU', '/cgv': 'CGV', '/confidentialite': 'Confidentialité', '/rgpd': 'RGPD', '/mentions-legales': 'Mentions légales', '404': 'Page introuvable',
-};
-const DEVICE_NAMES = { mobile: 'Téléphone', ordinateur: 'Ordinateur', tablette: 'Tablette' };
-async function audienceSection() {
-  let a;
-  try {
-    a = await api.get('/api/admin/analytics');
-  } catch (err) {
-    return h('p', { class: 'muted', style: { margin: '0 var(--gutter)' } }, err.message);
-  }
-  const list = (title, rows, name = (k) => k, empty = 'Rien pour l’instant') =>
-    h(
-      'div',
-      { class: 'card stat-list' },
-      h('b', null, title),
-      rows.length
-        ? h('ol', null, rows.map((r) => h('li', null, h('span', null, name(r.key)), h('small', null, num(r.n)))))
-        : h('p', { class: 'small muted' }, empty),
-    );
+async function overview() {
+  const d = await api.get('/api/admin/overview');
+  const t = d.totals;
+  const used = Math.round((d.storage.usedBytes / Math.max(1, d.storage.maxBytes)) * 100);
   return h(
     'div',
     null,
-    h('div', { class: 'kpis' }, kpi('Visites', num(a.visits), true, '30 derniers jours'), kpi('Pages vues', num(a.views), false, '30 derniers jours'), kpi('Aujourd’hui', num(a.today), false, 'visites')),
-    h('div', { class: 'chart' }, signupChart(a.daily, 'Visites sur 14 jours')),
-    h(
-      'div',
-      { class: 'stat-grid' },
-      list('Provenance', a.sources, (k) => (k === 'direct' ? 'Accès direct ou application' : k)),
-      list('Campagnes (utm_source)', a.campaigns, (k) => k, 'Ajoutez ?utm_source=tiktok à vos liens pour les suivre'),
-      list('Pages les plus vues', a.pages, (k) => PAGE_NAMES[k] || k),
-      list('Appareils', a.devices, (k) => DEVICE_NAMES[k] || k),
+    d.legalMissing.length ? h('p', { class: 'notice warn' }, icon('alert', 'icon-sm'), `Informations légales à compléter : ${d.legalMissing.join(', ')}.`) : null,
+    h('div', { class: 'kpis' },
+      kpi('Comptes', short(t.users), `+${t.usersToday} en 24 h`),
+      kpi('Vidéos', short(t.videos), `${short(t.posts)} publications`),
+      kpi('Vues', short(t.views)),
+      kpi('J’aime', short(t.likes), `${short(t.comments)} commentaires`),
+      kpi('Messages', short(t.messages)),
+      kpi('LIVE', String(t.livesNow), `${short(t.lives)} au total`),
+      kpi('Signalements ouverts', String(t.openReports)),
+      kpi('Ventes de pièces', money(t.revenue, 'eur'), `${short(t.coinsSold)} pièces · ${short(t.coinsSpent)} dépensées`),
+      kpi('Espace vidéo', `${used} %`, `${Math.round(d.storage.usedBytes / 1048576)} / ${Math.round(d.storage.maxBytes / 1048576)} Mo`),
     ),
-    h('p', { class: 'small muted', style: { margin: '10px var(--gutter-r) 0 var(--gutter)' } }, 'Mesure anonyme, sans cookie et sans service extérieur. Vos propres visites (Direction) ne sont pas comptées.'),
+    h('h3', { class: 'section-title' }, 'Inscriptions (14 jours)'),
+    h('div', { class: 'mini-bars', role: 'img', 'aria-label': 'Inscriptions par jour' }, d.signups.map((s) => {
+      const max = Math.max(1, ...d.signups.map((x) => x.count));
+      return h('span', { class: 'mini-bar', title: `${s.day} : ${s.count}`, style: { '--v': String(s.count / max) } }, h('i'), h('small', null, s.count ? String(s.count) : ''));
+    })),
+    h('div', { class: 'set-card' },
+      h('div', { class: 'tx' }, h('span', { class: 'tx-text' }, 'Paiements', h('small', null, d.payments.stripe ? `Stripe actif${d.payments.webhook ? ' · webhook configuré' : ' · webhook absent'}` : d.payments.demo ? 'Mode démonstration (aucun encaissement)' : 'Désactivés (STRIPE_SECRET_KEY)'))),
+      h('div', { class: 'tx' }, h('span', { class: 'tx-text' }, 'Courriels', h('small', null, d.mail.provider ? `Envoi par ${d.mail.provider}` : 'Affichés dans la console (BREVO_API_KEY ou SMTP_URL)')), h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: async () => { try { const r = await api.post('/api/admin/email-test'); toast(`Courriel d’essai envoyé (${r.provider})`); } catch (err) { toast(err.message, 'error'); } } }, 'M’envoyer un essai')),
+    ),
   );
 }
 
-// Erreurs survenues chez les visiteurs : rien à faire tant que tout va bien
-async function errorsSection() {
-  let d;
-  try {
-    d = await api.get('/api/admin/errors');
-  } catch {
-    return null;
-  }
-  const host = h('div', { class: 'card emails-card' });
-  host.append(
-    h('div', { class: `push-status${d.count ? '' : ' on'}` }, h('span', { class: 'push-dot' }), d.count ? `${num(d.count)} erreur${d.count > 1 ? 's' : ''} sur 24 h` : 'Aucune erreur sur 24 h'),
-  );
-  if (d.top.length) {
-    host.append(
-      h(
-        'ol',
-        { class: 'error-list' },
-        d.top.map((e) => h('li', null, h('b', null, e.message), h('small', null, `${num(e.n)} fois · ${e.path} · ${e.device} · ${timeAgo(e.last)}`))),
-      ),
+async function reports() {
+  const { reports: list } = await api.get('/api/admin/reports');
+  if (!list.length) return emptyState('shield', 'Aucun signalement ouvert', 'Tout est calme.');
+  return h('div', { class: 'reports' }, list.map((r) => {
+    const box = h('div', { class: 'report' },
+      h('div', { class: 'report-head' }, h('b', null, r.reason), h('small', null, `${r.automatic ? 'Filtre automatique' : `par @${r.reporter || '?'}`} · ${timeAgo(r.createdAt)}${r.total > 1 ? ` · ${r.total} signalements` : ''}`)),
+      r.details ? h('p', { class: 'muted' }, r.details) : null,
+      r.target ? h('div', { class: 'report-target' }, r.target.image ? h('img', { src: r.target.image, alt: '' }) : null, h('div', null, h('b', null, `${r.type === 'user' ? 'Compte' : r.type === 'post' ? 'Publication' : r.type === 'comment' ? 'Commentaire' : r.type === 'live' ? 'LIVE' : 'Message'} de ${r.target.authorName} (@${r.target.author})`), r.target.text ? h('p', null, r.target.text.slice(0, 300)) : null, r.target.link ? h('a', { href: r.target.link }, 'Ouvrir') : null)) : h('p', { class: 'muted' }, 'Contenu déjà supprimé.'),
+      h('div', { class: 'row-end' },
+        h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: () => resolve('dismiss') }, 'Classer'),
+        h('button', { type: 'button', class: 'btn btn-danger btn-sm', onclick: () => resolve('remove') }, r.type === 'user' ? 'Suspendre le compte' : r.type === 'live' ? 'Arrêter le LIVE' : 'Supprimer')),
     );
-  }
-  return host;
-}
-
-// Dernières vidéos : fiche technique de chacune (envoi d'origine ou ancienne préparation, format), à copier
-// pour un diagnostic quand une vidéo lit mal
-async function videosSection() {
-  let d;
-  try {
-    d = await api.get('/api/admin/videos');
-  } catch {
-    return null;
-  }
-  if (!d.videos.length) return null;
-  const line = (v) => {
-    const m = v.meta || {};
-    const sent = m.secondes ? ` · envoyée en ${m.secondes} s${m.reprises ? ` (${m.reprises} reprise(s))` : ''}` : '';
-    const how = m.methode === 'originale' ? `originale, sans recompression${sent}` : m.methode ? `préparée : ${m.methode}${sent}` : 'préparation inconnue (ancienne version)';
-    const check = m.controle?.ok === false ? ` · contrôle : ${m.controle.why}` : '';
-    return `${(v.size / 1048576).toFixed(1)} Mo · ${Math.round(v.duration)} s · ${v.width || '?'}×${v.height || '?'} · ${how}${check}`;
-  };
-  const report = () =>
-    [`Diagnostic vidéos AURUM — ${new Date().toLocaleString('fr-FR')}`, `Site : ${location.origin}`, '']
-      .concat(
-        d.videos.map((v) =>
-          [
-            `• @${v.author} · ${new Date(v.createdAt).toLocaleString('fr-FR')} · ${v.postId ? `publication ${v.postId}` : v.storyId ? `story ${v.storyId}` : v.complete ? 'non publiée' : 'envoi inachevé'}`,
-            `  ${line(v)} · ${v.mime} · ${v.chunks} morceau(x)`,
-            `  Morceaux : ${location.origin}${v.url.replace(/\.(mp4|webm)$/, '')}/0.bin … /${Math.max(0, v.chunks - 1)}.bin`,
-            `  Fiche : ${JSON.stringify(v.meta || {})}`,
-          ].join('\n'),
-        ),
-      )
-      .join('\n');
-  const copyBtn = h('button', { type: 'button', class: 'btn btn-secondary btn-sm' }, icon('copy', 'icon-sm'), 'Copier le diagnostic');
-  copyBtn.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(report());
-      toast('Diagnostic copié : collez-le dans votre message.');
-    } catch {
-      toast('Copie impossible sur cet appareil.', 'error');
-    }
-  });
-  return h(
-    'div',
-    { class: 'card emails-card' },
-    h('p', { class: 'muted small' }, 'Une vidéo lit mal ? Copiez ce diagnostic (aucune donnée personnelle, seulement la fiche technique) et envoyez-le.'),
-    h(
-      'ol',
-      { class: 'error-list' },
-      d.videos.slice(0, 6).map((v) => h('li', null, h('b', null, `@${v.author} · ${timeAgo(v.createdAt)}`), h('small', null, line(v)))),
-    ),
-    copyBtn,
-  );
-}
-
-// Courriels : état de l'envoi, essais et Lettre du cercle
-async function emailsSection() {
-  const host = h('div', { class: 'card emails-card' });
-  let d;
-  try {
-    d = await api.get('/api/admin/emails');
-  } catch (err) {
-    host.append(h('p', { class: 'muted' }, err.message));
-    return host;
-  }
-  const status = d.enabled
-    ? h('div', { class: 'push-status on' }, h('span', { class: 'push-dot' }), `Envoi actif${d.provider === 'brevo' ? ' via Brevo' : ''}${d.from ? ` — expéditeur : ${d.from}` : ''}`)
-    : h('div', { class: 'push-status' }, h('span', { class: 'push-dot' }), 'Envoi non configuré');
-  const action = (label, fn, cls = 'btn-secondary') => {
-    const b = h('button', { class: `btn ${cls} btn-sm`, type: 'button' }, label);
-    b.addEventListener('click', async () => {
-      b.disabled = true;
+    async function resolve(action) {
+      if (action === 'remove' && !(await confirmDialog('Confirmer ?', r.type === 'user' ? 'Le compte ne pourra plus se connecter et disparaîtra du site.' : 'Le contenu sera supprimé définitivement.', 'Confirmer'))) return;
       try {
-        await fn();
+        await api.post(`/api/admin/reports/${r.id}/resolve`, { action });
+        box.remove();
+        toast(action === 'remove' ? 'Fait' : 'Signalement classé');
       } catch (err) {
         toast(err.message, 'error');
       }
-      b.disabled = false;
-    });
-    return b;
-  };
-  host.append(
-    status,
-    d.enabled
-      ? null
-      : h('p', { class: 'small muted' }, 'Ajoutez la clé Brevo (BREVO_API_KEY) et l’expéditeur (MAIL_FROM) dans les réglages Vercel du projet, puis redéployez : la marche à suivre est dans le README.'),
-    h(
-      'p',
-      { class: 'small muted' },
-      `La Lettre du cercle part chaque dimanche matin à ${d.subscribers} membre${d.subscribers > 1 ? 's' : ''} abonné${d.subscribers > 1 ? 's' : ''}.`,
-      d.lastSentAt ? ` Dernier envoi : ${timeAgo(d.lastSentAt)} (${d.lastCount} destinataire${d.lastCount > 1 ? 's' : ''}).` : '',
-    ),
-    h(
-      'div',
-      { class: 'row-start' },
-      h('a', { class: 'btn btn-ghost btn-sm', href: '/api/admin/lettre/apercu', target: '_blank', rel: 'noopener' }, 'Aperçu de la Lettre'),
-      d.enabled ? action('M’envoyer un test', async () => toast(`Courriel de test envoyé à ${(await api.post('/api/admin/emails/test')).to}.`)) : null,
-      d.enabled ? action('M’envoyer la Lettre', async () => (await api.post('/api/admin/lettre/send', { test: true }), toast('La Lettre vous a été envoyée.'))) : null,
-      d.enabled
-        ? action(
-            'Envoyer la Lettre à tous',
-            async () => {
-              if (!(await confirmDialog('Envoyer la Lettre maintenant ?', `Elle partira à ${d.subscribers} membre${d.subscribers > 1 ? 's' : ''}. L’envoi automatique de dimanche sera alors sauté cette semaine.`, 'Envoyer', false))) return;
-              const r = await api.post('/api/admin/lettre/send');
-              toast(r.skipped || `Lettre envoyée à ${r.sent} membre${r.sent > 1 ? 's' : ''}.`, r.skipped ? 'error' : 'ok');
-            },
-            'btn-primary',
-          )
-        : null,
-    ),
-  );
-  return host;
+    }
+    return box;
+  }));
 }
 
-// Comptes automatiques (AURUM, Le Concierge)
-let botsState = { enabled: false, available: false };
-function botsSwitch() {
-  const sw = h('input', { type: 'checkbox', class: 'switch', checked: botsState.enabled, disabled: !botsState.available, 'aria-label': 'Comptes automatiques' });
-  const sub = h('small', { class: 'muted' });
-  const paint = () => {
-    sub.textContent = !botsState.available
-      ? 'Désactivés par la configuration du serveur (BOTS=off).'
-      : botsState.enabled
-        ? 'AURUM et Le Concierge animent le Salon : Journal, question du jour, événements, bienvenue.'
-        : 'Aucune publication automatique.';
-  };
-  paint();
-  sw.addEventListener('change', async () => {
+function users() {
+  const input = h('input', { class: 'input', type: 'search', placeholder: 'Nom, @utilisateur ou e-mail' });
+  const list = h('div', { class: 'admin-users' }, spinner());
+  const load = async () => {
     try {
-      const { enabled } = await api.post('/api/admin/bots', { enabled: sw.checked });
-      botsState.enabled = enabled;
-      paint();
-      toast(enabled ? 'Comptes automatiques activés.' : 'Comptes automatiques désactivés.');
+      const { users: rows } = await api.get(`/api/admin/users?q=${enc(input.value.trim())}`);
+      list.replaceChildren(...rows.map((u) => {
+        const act = (a, label, cls = 'btn-ghost') => h('button', { type: 'button', class: `btn ${cls} btn-sm`, onclick: async () => {
+          if ((a === 'ban' || a === 'delete') && !(await confirmDialog(a === 'ban' ? `Suspendre @${u.username} ?` : `Supprimer @${u.username} ?`, a === 'ban' ? 'Le compte ne pourra plus se connecter.' : 'Toutes ses données seront effacées définitivement.', 'Confirmer'))) return;
+          try {
+            if (a === 'delete') await api.del(`/api/admin/users/${u.id}`);
+            else await api.post(`/api/admin/users/${u.id}/${a}`);
+            toast('Fait');
+            load();
+          } catch (err) {
+            toast(err.message, 'error');
+          }
+        } }, label);
+        return h('div', { class: 'admin-user' },
+          h('a', { href: `/@${enc(u.username)}`, class: 'user-row-main' }, avatar(u, 'sm'), h('span', { class: 'user-row-text' }, h('b', null, u.displayName, u.isAdmin ? ' · admin' : '', u.banned ? ' · suspendu' : '', u.demo ? ' · démo' : ''), h('small', null, `@${u.username} · ${u.email} · ${short(u.counts.followers)} abonnés · ${timeAgo(u.createdAt)}`))),
+          h('div', { class: 'admin-actions' }, u.verified ? act('unverify', 'Retirer le badge') : act('verify', 'Vérifier'), u.banned ? act('unban', 'Rétablir') : act('ban', 'Suspendre'), u.isAdmin ? act('demote', 'Retirer admin') : act('promote', 'Admin'), act('delete', 'Supprimer', 'btn-danger')));
+      }));
     } catch (err) {
-      sw.checked = !sw.checked;
-      toast(err.message, 'error');
+      list.replaceChildren(emptyState('alert', 'Erreur', err.message));
     }
-  });
-  return h('label', { class: 'admission-mode' }, h('span', { class: 'grow' }, h('b', null, 'Comptes automatiques'), sub), sw);
+  };
+  input.addEventListener('input', debounce(load, 250));
+  load();
+  return h('div', null, input, list);
 }
 
-// Demandes d'admission et mode d'entrée (libre / sur invitation)
-async function admissionsSection(mode) {
-  const host = h('div', { class: 'admissions' });
-  const { admissions } = await api.get('/api/admin/admissions');
-  let current = mode;
-  const sw = h('input', { type: 'checkbox', class: 'switch', checked: current === 'invitation', 'aria-label': 'Entrée sur invitation' });
-  const status = h('small', { class: 'muted' });
-  const paintMode = () => {
-    status.textContent =
-      current === 'invitation'
-        ? 'Sans invitation, chaque inscription arrive ici pour validation.'
-        : 'Entrée libre : toute inscription devient membre immédiatement.';
-  };
-  paintMode();
-  sw.addEventListener('change', async () => {
-    try {
-      ({ admission: current } = await api.post('/api/admin/settings', { admission: sw.checked ? 'invitation' : 'open' }));
-      paintMode();
-      toast(current === 'invitation' ? 'Entrée sur invitation activée.' : 'Entrée libre activée.');
-    } catch (err) {
-      sw.checked = !sw.checked;
-      toast(err.message, 'error');
-    }
-  });
-  host.append(h('label', { class: 'admission-mode' }, h('span', { class: 'grow' }, h('b', null, 'Entrée sur invitation'), status), sw));
-  host.append(botsSwitch());
+async function posts() {
+  const { posts: list } = await api.get('/api/admin/posts');
+  if (!list.length) return emptyState('video', 'Aucune publication', null);
+  return h('div', { class: 'grid cols-4' }, list.map((p) => tile(p, { showAuthor: true, onOpen: (post) => openViewer(list, { startId: post.id }) })));
+}
 
-  const pending = admissions.filter((a) => !a.declined && !a.approved);
-  const declined = admissions.filter((a) => a.declined);
-  const awaiting = admissions.filter((a) => a.approved && !a.declined);
-  const row = (a) => {
-    const act = async (action) => {
+async function audience() {
+  const a = await api.get('/api/admin/analytics');
+  const row = (label, items) => h('section', { class: 'set-group' }, h('h3', null, label), h('div', { class: 'set-card' }, items.length ? items.map((x) => h('div', { class: 'tx' }, h('span', { class: 'tx-text' }, x.key), h('b', null, num(x.n)))) : h('p', { class: 'muted small pad' }, 'Pas encore de données.')));
+  return h('div', null,
+    h('div', { class: 'kpis' }, kpi('Visites (30 j)', short(a.visits)), kpi('Pages vues', short(a.views)), kpi('Aujourd’hui', short(a.today))),
+    h('div', { class: 'mini-bars', role: 'img', 'aria-label': 'Visites par jour' }, a.daily.map((d) => {
+      const max = Math.max(1, ...a.daily.map((x) => x.count));
+      return h('span', { class: 'mini-bar', title: `${d.date.slice(0, 10)} : ${d.count}`, style: { '--v': String(d.count / max) } }, h('i'), h('small', null, d.count ? String(d.count) : ''));
+    })),
+    row('Pages', a.pages), row('Provenance', a.sources), row('Campagnes', a.campaigns), row('Appareils', a.devices),
+    h('p', { class: 'muted small' }, 'Mesure sans cookie ni identifiant : seuls des totaux par jour sont gardés.'));
+}
+
+async function legal() {
+  const { legal: data, fields } = await api.get('/api/admin/legal');
+  const inputs = {};
+  const save = h('button', { type: 'submit', class: 'btn btn-primary' }, 'Enregistrer');
+  return h('form', {
+    class: 'form-stack',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      save.disabled = true;
       try {
-        const res = await api.post(`/api/admin/admissions/${a.id}/${action}`);
-        toast(
-          action !== 'approve'
-            ? 'Demande refusée.'
-            : res.member
-              ? `${a.displayName} est désormais membre.`
-              : `Admission acceptée : ${a.displayName} a reçu le lien pour régler son droit d’entrée.`,
-        );
-        card.remove();
-        refreshKpis();
+        await api.put('/api/admin/legal', Object.fromEntries(Object.entries(inputs).map(([k, el]) => [k, el.value])));
+        toast('Informations légales enregistrées');
       } catch (err) {
         toast(err.message, 'error');
+      } finally {
+        save.disabled = false;
       }
-    };
-    const card = h(
-      'div',
-      { class: 'admission-card' },
-      h('div', { class: 'admission-head' }, avatar(a, 'sm'), h('div', { class: 'grow' }, h('b', null, a.displayName), h('small', { class: 'muted' }, `@${a.username} · ${a.email} · ${timeAgo(a.createdAt)}`))),
-      a.note ? h('p', { class: 'admission-text' }, `« ${a.note} »`) : h('p', { class: 'muted small' }, 'Aucune présentation.'),
-      h(
-        'div',
-        { class: 'row-start' },
-        a.approved && !a.declined
-          ? h('span', { class: 'tag' }, 'Acceptée · droit d’entrée en attente')
-          : h('button', { class: 'btn btn-primary btn-sm', onclick: () => act('approve') }, icon('check', 'icon-sm'), 'Admettre'),
-        a.declined ? h('span', { class: 'tag' }, 'Refusée') : h('button', { class: 'btn btn-ghost btn-sm', onclick: () => act('decline') }, 'Refuser'),
-      ),
-    );
-    return card;
+    },
+  }, h('p', { class: 'muted small' }, 'Elles apparaissent dans les mentions légales, les CGU, les CGV et la politique de confidentialité. Elles restent dans la base, jamais dans le code.'),
+  Object.entries(fields).map(([k, f]) => {
+    inputs[k] = h('input', { class: 'input', value: data[k] || '', maxlength: f.max, required: f.required, type: f.email ? 'email' : f.url ? 'url' : 'text' });
+    return h('label', { class: 'field' }, h('span', null, f.label, f.required ? ' *' : ''), inputs[k]);
+  }), save);
+}
+
+function demo() {
+  const out = h('p', { class: 'muted small' });
+  const run = async (action) => {
+    if (action === 'remove' && !(await confirmDialog('Retirer la démo ?', 'Les comptes de démonstration et leurs vidéos seront supprimés.', 'Retirer'))) return;
+    out.textContent = 'En cours…';
+    try {
+      const r = await api.post('/api/admin/demo', { action });
+      out.textContent = action === 'remove' ? `${r.removed} comptes de démonstration retirés.` : r.added ? `${r.users} comptes et ${r.posts} vidéos ajoutés.` : 'La démo est déjà présente.';
+    } catch (err) {
+      out.textContent = err.message;
+    }
   };
-  if (!pending.length) host.append(h('div', { class: 'reports-empty' }, icon('ticket', 'icon-sm'), 'Aucune demande en attente.'));
-  for (const a of pending) host.append(row(a));
-  if (awaiting.length) {
-    host.append(h('details', { class: 'admissions-declined' }, h('summary', null, `Acceptées, droit d’entrée en attente (${awaiting.length})`), awaiting.map(row)));
-  }
-  if (declined.length) {
-    const more = h('details', { class: 'admissions-declined' }, h('summary', null, `Demandes refusées (${declined.length})`), declined.map(row));
-    host.append(more);
-  }
-  return host;
+  return h('div', { class: 'form-stack' },
+    h('p', null, 'Ajoute 12 comptes de démonstration (signalés comme tels sur leur profil) et 14 vidéos originales générées par calcul — visuels mathématiques, textes et musiques synthétisées — avec des sons réutilisés, des abonnements, des J’aime et des commentaires. Pratique pour présenter Vibz ; à retirer avant d’ouvrir au public.'),
+    h('div', { class: 'row-end' }, h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => run('remove') }, 'Retirer la démo'), h('button', { type: 'button', class: 'btn btn-primary', onclick: () => run('add') }, 'Ajouter la démo')),
+    out);
+}
+
+async function errors() {
+  const { errors: list } = await api.get('/api/admin/errors');
+  if (!list.length) return emptyState('check', 'Aucune erreur', 'Les erreurs survenues dans les navigateurs apparaîtront ici.');
+  return h('div', { class: 'set-card' }, list.map((e) => h('div', { class: 'tx' }, h('span', { class: 'tx-text' }, e.message, h('small', null, `${e.path} · ${e.device} · ${timeAgo(e.at)}`)))));
 }
 
 export async function adminView(ctx) {
-  const data = await api.get('/api/admin/overview');
-  botsState = { enabled: Boolean(data.config.bots), available: Boolean(data.config.botsAvailable) };
-  const admissions = await admissionsSection(data.config.admission);
-  const [emails, legal, audience, errors, videos] = await Promise.all([emailsSection(), legalSection(), audienceSection(), errorsSection(), videosSection()]);
-  const reports = await reportsSection();
-  const t = data.totals;
-  const c = data.config;
-  const price = money(c.priceCents, c.currency);
-  // Entrée : gratuite pour les Fondateurs, puis droit d'entrée (Stripe)
-  const entry = h(
-    'div',
-    { class: 'admissions' },
-    h(
-      'div',
-      { class: 'admission-mode' },
-      h(
-        'span',
-        { class: 'grow' },
-        h('b', null, c.paidEntry ? `Entrée payante · ${price}` : `Entrée gratuite · ${num(c.foundersLeft)} place${c.foundersLeft > 1 ? 's' : ''} de Fondateur sur ${num(c.founderLimit)}`),
-        h(
-          'small',
-          { class: 'muted' },
-          c.paidEntry
-            ? `Les ${num(c.founderLimit)} places gratuites sont attribuées. Après invitation ou votre accord, chaque nouveau membre règle un droit d’entrée unique.`
-            : `Ensuite, l’entrée deviendra payante automatiquement : droit d’entrée unique de ${price}, après invitation ou votre accord.`,
-        ),
-      ),
-    ),
-    c.stripeEnabled
-      ? h('div', { class: 'form-ok' }, 'Stripe est branché : les paiements arrivent directement sur votre compte Stripe.')
-      : h(
-          'div',
-          { class: 'form-error' },
-          c.paidEntry
-            ? 'Stripe n’est pas encore branché : les nouveaux membres ne peuvent pas régler leur droit d’entrée. '
-            : 'À brancher avant la dernière place de Fondateur : ',
-          'créez un compte Stripe (gratuit, sans abonnement), puis ajoutez STRIPE_SECRET_KEY et STRIPE_WEBHOOK_SECRET dans les réglages Vercel.',
-        ),
-  );
-
-
-  const memberRows = data.recentMembers.map((m) => {
-    const row = h(
-      'tr',
-      null,
-      h('td', null, h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center' } }, avatar(m, 'xs'), h('div', null, nameLine(m), h('div', { class: 'muted small' }, m.email)))),
-      h('td', null, m.memberNumber ? memberChip(m) : h('span', { class: 'tag' }, 'En attente')),
-      h('td', { class: 'muted small' }, timeAgo(m.createdAt)),
-      h(
-        'td',
-        { style: { textAlign: 'right' } },
-        m.id === store.user.id
-          ? h('span', { class: 'muted small' }, 'Vous')
-          : h(
-          'button',
-          {
-            class: 'btn btn-danger btn-sm',
-            onclick: async () => {
-              if (!(await confirmDialog(`Exclure ${m.displayName} ?`, 'Le compte et tout son contenu seront supprimés définitivement.', 'Exclure'))) return;
-              try {
-                await api.del(`/api/admin/users/${m.id}`);
-                row.remove();
-                toast('Membre exclu.');
-              } catch (err) {
-                toast(err.message, 'error');
-              }
-            },
-          },
-          'Exclure',
-        ),
-      ),
-    );
-    return row;
-  });
-
-  const paymentRows = data.recentPayments.map((p) =>
-    h(
-      'tr',
-      null,
-      h('td', null, p.username ? `@${p.username}` : h('span', { class: 'muted' }, 'compte supprimé')),
-      h('td', null, money(p.amount_cents, p.currency)),
-      h('td', null, h('span', { class: 'tag' }, p.provider === 'demo' ? 'Simulé' : 'Stripe')),
-      h('td', { class: 'muted small' }, timeAgo(p.created_at)),
-    ),
-  );
-
-  ctx.title = 'Direction — AURUM';
-  return h(
-    'div',
-    null,
-    backHead(
-      'Direction du cercle',
-      !c.paidEntry ? 'Entrée gratuite — Fondateurs' : c.stripeEnabled ? 'Entrée payante · Stripe actif' : 'Entrée payante · Stripe à brancher',
-    ),
-    h(
-      'div',
-      { class: 'kpis' },
-      kpi('Membres', num(t.members), true),
-      c.paidEntry
-        ? kpi("Droits d'entrée encaissés", money(t.revenue), true, t.demoRevenue ? `+ ${money(t.demoRevenue)} simulés` : null)
-        : kpi('Places de Fondateur', num(c.foundersLeft), true, `restantes sur ${num(c.founderLimit)}`),
-      kpi('Signalements à traiter', num(t.openReports || 0), Boolean(t.openReports), t.autoReports ? `dont ${num(t.autoReports)} par le filtre automatique` : null),
-      c.paidEntry ? kpi('En attente de paiement', num(t.awaitingPayment || 0)) : kpi('Réactions', num(t.likes)),
-      kpi('Publications', num(t.posts)),
-      kpi('Commentaires', num(t.comments)),
-      kpi('Messages privés', num(t.messages)),
-      kpi('Vidéos', num(t.videos || 0), false, `${num(Math.round((t.videoBytes || 0) / 1048576))} Mo sur ${num(Math.round(c.videoStorageBytes / 1048576))} Mo`),
-    ),
-    h('div', { class: 'section-title' }, 'Audience — 30 jours'),
-    audience,
-    h('div', { class: 'section-title' }, 'Entrée dans le cercle'),
-    entry,
-    errors ? h('div', { class: 'section-title' }, 'Santé de l’application') : null,
-    errors ? h('div', { class: 'admissions' }, errors) : null,
-    videos ? h('div', { class: 'section-title' }, 'Vidéos : diagnostic') : null,
-    videos ? h('div', { class: 'admissions' }, videos) : null,
-    h('div', { class: 'section-title' }, 'Courriels'),
-    h('div', { class: 'admissions' }, emails),
-    h('div', { class: 'section-title' }, 'Informations légales'),
-    h('div', { class: 'admissions' }, legal),
-    admissions ? h('div', { class: 'section-title' }, `Demandes d’admission${data.totals.admissions ? ` · ${data.totals.admissions}` : ''}`) : null,
-    admissions,
-    h('div', { class: 'section-title' }, 'Signalements'),
-    reports,
-    h('div', { class: 'section-title' }, 'Nouveaux membres — 14 jours'),
-    h('div', { class: 'chart' }, signupChart(data.signups)),
-    h('div', { class: 'section-title' }, 'Derniers inscrits'),
-    memberRows.length
-      ? h('div', { class: 'table-wrap' }, h('table', { class: 'table' }, h('thead', null, h('tr', null, h('th', null, 'Membre'), h('th', null, 'Statut'), h('th', null, 'Inscription'), h('th'))), h('tbody', null, memberRows)))
-      : emptyState('users', 'Aucun inscrit', null),
-    h('div', { class: 'section-title' }, 'Derniers paiements'),
-    paymentRows.length
-      ? h('div', { class: 'table-wrap' }, h('table', { class: 'table' }, h('thead', null, h('tr', null, h('th', null, 'Membre'), h('th', null, 'Montant'), h('th', null, 'Moyen'), h('th', null, 'Date'))), h('tbody', null, paymentRows)))
-      : emptyState('euro', 'Aucun paiement', null),
-  );
+  ctx.title = 'Administration — Vibz';
+  const tab = TABS.some(([k]) => k === ctx.query.get('onglet')) ? ctx.query.get('onglet') : 'apercu';
+  const nav = h('nav', { class: 'tabs scroll-x' }, TABS.map(([k, label]) => h('a', { href: `/admin?onglet=${k}`, class: `tab-link${k === tab ? ' on' : ''}` }, label)));
+  const body = h('div', { class: 'admin-body' }, spinner());
+  const views = { apercu: overview, signalements: reports, comptes: users, publications: posts, audience, legal, demo, erreurs: errors };
+  try {
+    body.replaceChildren(await views[tab]());
+  } catch (err) {
+    body.replaceChildren(emptyState('alert', 'Erreur', err.message));
+  }
+  return h('div', { class: 'page admin' }, h('header', { class: 'page-head' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => navigate('/reglages') }, icon('back')), h('h1', null, 'Administration'), h('span', { class: 'icon-btn' })), nav, body);
 }

@@ -1,4 +1,4 @@
-/* AURUM — service worker : notifications push, et ouverture instantanée.
+/* Vibz — service worker : notifications push, et ouverture instantanée.
    Les fichiers de l'application (pages, scripts, styles, polices, icônes) sont gardés sur
    le téléphone : l'application s'ouvre sans attendre le réseau. Les données (/api) et les
    photos/vidéos ne passent jamais par ce cache (les vidéos lues en ligne sont seulement
@@ -9,8 +9,11 @@
    nouvelle version complète, jamais un mélange. Le message « check-version » ci-dessous fait la
    même chose d'office : il sert aux anciennes versions de l'application, et de filet de sécurité
    si l'application gardée ne démarre pas (js/boot.js). */
-const CACHE = 'aurum-app';
+const CACHE = 'vibz-app';
 const STATIC = /^\/(js|css|fonts|img)\//;
+
+// Ancien cache de l'application précédente (AURUM) : effacé
+self.addEventListener('activate', (event) => event.waitUntil(caches.delete('aurum-app')));
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
@@ -152,7 +155,7 @@ self.addEventListener('push', (event) => {
   } catch {
     data = { body: event.data ? event.data.text() : '' };
   }
-  const title = data.title || 'AURUM';
+  const title = data.title || 'Vibz';
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || '',
@@ -160,14 +163,14 @@ self.addEventListener('push', (event) => {
       badge: '/img/badge-96.png',
       tag: data.tag || undefined,
       renotify: Boolean(data.tag),
-      data: { url: data.url || '/salon' },
+      data: { url: data.url || '/activite' },
     }),
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = new URL((event.notification.data && event.notification.data.url) || '/salon', self.location.origin).href;
+  const url = new URL((event.notification.data && event.notification.data.url) || '/activite', self.location.origin).href;
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

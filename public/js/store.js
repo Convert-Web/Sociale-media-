@@ -1,4 +1,4 @@
-// État global + bus d'événements + connexion temps réel (SSE).
+// État global + bus d'événements + connexion temps réel (SSE, ou rafraîchissement régulier sur Vercel).
 import { api, fromResponse } from './api.js';
 
 const listeners = new Map();
@@ -25,8 +25,8 @@ export const store = {
 
   async refresh() {
     // Première fois : la session demandée par boot.js dès l'ouverture de la page
-    const early = window.__aurumSession;
-    window.__aurumSession = null;
+    const early = window.__vibzSession;
+    window.__vibzSession = null;
     const data = early ? await fromResponse(early).catch(() => api.get('/api/session')) : await api.get('/api/session');
     this.user = data.user;
     this.config = data.config;
@@ -45,8 +45,8 @@ export const store = {
     this.emit('counters', this.counters);
   },
 
-  get isMember() {
-    return Boolean(this.user?.isMember);
+  get loggedIn() {
+    return Boolean(this.user);
   },
 };
 
@@ -54,12 +54,12 @@ let source = null;
 let retryTimer = null;
 let pollTimer = null;
 
-// Mode « rafraîchissement régulier » (hébergeurs serverless) : les compteurs sont
-// relus toutes les 20 s et un signal « rt:tick » permet aux pages de se mettre à jour.
+// Mode « rafraîchissement régulier » (hébergeurs serverless) : compteurs relus régulièrement et
+// signal « rt:tick » pour que les pages ouvertes se mettent à jour.
 export const isPolling = () => store.config?.realtime === 'poll';
 
 async function poll() {
-  if (document.hidden || !store.isMember) return;
+  if (document.hidden || !store.user) return;
   try {
     store.setCounters(await api.get('/api/counters'));
   } catch {
@@ -72,8 +72,7 @@ function onVisible() {
   if (!document.hidden) poll();
 }
 
-// Rythme adaptatif : toutes les 20 s quand on utilise l'application, toutes les 60 s au repos
-// (moins d'appels au serveur : l'hébergement gratuit le supporte même avec beaucoup de membres)
+// Rythme adaptatif : toutes les 15 s quand on utilise l'application, toutes les 60 s au repos
 let lastActive = Date.now();
 for (const ev of ['pointerdown', 'keydown', 'scroll']) addEventListener(ev, () => (lastActive = Date.now()), { passive: true });
 function schedule() {
@@ -82,11 +81,11 @@ function schedule() {
   pollTimer = setTimeout(async () => {
     await poll();
     if (pollTimer) schedule();
-  }, idle ? 60000 : 20000);
+  }, idle ? 60000 : 15000);
 }
 
 export function connectRealtime() {
-  if (!store.isMember) return;
+  if (!store.user) return;
   if (isPolling()) {
     if (pollTimer) return;
     schedule();
@@ -101,7 +100,7 @@ export function connectRealtime() {
       if (name === 'counters') store.setCounters(data);
       store.emit(`rt:${name}`, data);
     });
-  ['counters', 'notification', 'message', 'read', 'post'].forEach(relay);
+  ['counters', 'notification', 'message', 'read', 'typing', 'comment'].forEach(relay);
   source.onerror = () => {
     if (source?.readyState === EventSource.CLOSED) {
       source = null;

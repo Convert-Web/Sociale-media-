@@ -94,7 +94,7 @@ function tap(j) {
   } else if (j.state === 'error') {
     run(j); // reprise là où l'envoi s'était arrêté
   } else {
-    toast('Gardez AURUM ouvert : la vidéo part en qualité d’origine. En cas de coupure, l’envoi reprend là où il s’était arrêté.');
+    toast('Garde Vibz ouvert : la vidéo part en qualité d’origine. En cas de coupure, l’envoi reprend là où il s’était arrêté.');
   }
 }
 
@@ -138,9 +138,9 @@ function run(j) {
       const res = await j.finish(video);
       j.state = 'done';
       j.href = res?.href || null;
-      forgetReels(); // la nouvelle vidéo apparaît tout de suite dans le coin Vidéos
+      forgetReels(); // la liste « Pour toi » gardée d'avance est rechargée
       paint();
-      toast(res?.message || 'Votre vidéo est en ligne.');
+      toast(res?.message || 'Ta vidéo est en ligne !');
       setTimeout(() => jobs.has(j) && j.state === 'done' && remove(j), 8000);
     })
     .catch((err) => {
@@ -152,7 +152,7 @@ function run(j) {
         resumeLater(j);
         if (j.tries === 1) toast('Connexion perdue : l’envoi reprendra tout seul, là où il s’est arrêté.');
       } else {
-        toast(`${err.message || 'Envoi interrompu.'} Touchez la pastille pour réessayer.`, 'error');
+        toast(`${err.message || 'Envoi interrompu.'} Touche la pastille pour réessayer.`, 'error');
       }
     });
   return p;

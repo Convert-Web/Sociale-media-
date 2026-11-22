@@ -1,6 +1,6 @@
 'use strict';
 const express = require('express');
-const { requireMember } = require('../auth');
+const { requireAuth } = require('../auth');
 const { fail, text, intParam } = require('../http');
 const { throttle } = require('../antispam');
 const { assertClean } = require('../contentFilter');
@@ -14,7 +14,7 @@ const DAY = 24 * 3600 * 1000;
 module.exports = function storyRoutes(ctx) {
   const r = express.Router();
   const { db } = ctx;
-  r.use('/stories', requireMember);
+  r.use('/stories', requireAuth);
 
   // Suppression des stories expirées (au plus une fois toutes les 10 minutes)
   let lastCleanup = 0;
@@ -38,26 +38,31 @@ module.exports = function storyRoutes(ctx) {
     return story;
   };
 
-  // Stories actives, regroupées par membre : les vôtres, puis les non vues, puis les vues.
+  // Stories actives : les siennes et celles des comptes suivis (?user=nom : celles d'un seul compte),
+  // regroupées par compte : les siennes, puis les non vues, puis les vues.
   r.get('/stories', async (req, res) => {
     await cleanup();
     const me = req.user.id;
+    const one = typeof req.query.user === 'string' ? await db.get('SELECT id, private_account FROM users WHERE username = ?', req.query.user) : null;
+    const scope = one
+      ? 's.user_id = ? AND (s.user_id = ? OR u.private_account = 0 OR EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = ? AND f.followee_id = s.user_id))'
+      : '(s.user_id = ? OR s.user_id IN (SELECT followee_id FROM follows WHERE follower_id = ?)) AND ? IS NOT NULL';
     const rows = await db.all(
       `SELECT s.id, s.user_id, s.media, s.caption, s.created_at, s.video_id,
               vid.mime AS v_mime, vid.duration AS v_duration, vid.width AS v_width, vid.height AS v_height, vid.size AS v_size,
-              u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
+              u.username, u.display_name, u.avatar, u.verified_at,
               EXISTS(SELECT 1 FROM story_views sv WHERE sv.story_id = s.id AND sv.user_id = ?) AS viewed,
               (SELECT COUNT(*) FROM story_views sv WHERE sv.story_id = s.id) AS views
        FROM stories s JOIN users u ON u.id = s.user_id
        LEFT JOIN videos vid ON vid.id = s.video_id
-       WHERE s.expires_at > ? AND u.paid_at IS NOT NULL
+       WHERE s.expires_at > ? AND u.banned_at IS NULL AND ${scope}
          AND s.user_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)
        ORDER BY s.id ASC`,
-      me, Date.now(), me, me,
+      me, Date.now(), one ? one.id : me, me, me, me, me,
     );
     const groups = new Map();
     for (const row of rows) {
-      if (!groups.has(row.user_id)) groups.set(row.user_id, { user: authorOf(ctx, row), mine: row.user_id === me, stories: [] });
+      if (!groups.has(row.user_id)) groups.set(row.user_id, { user: authorOf(row), mine: row.user_id === me, stories: [] });
       groups.get(row.user_id).stories.push({
         id: row.id,
         media: row.media,
@@ -83,7 +88,7 @@ module.exports = function storyRoutes(ctx) {
   r.post('/stories', single('image'), async (req, res) => {
     await throttle(ctx, req.user, 'story');
     const video = await attachVideo(ctx, req.user, req.body?.video);
-    if (!req.file && !video) fail(400, 'Ajoutez une photo ou une vidéo à votre story.');
+    if (!req.file && !video) fail(400, 'Ajoute une photo ou une vidéo à ta story.');
     const caption = text(req.body?.caption, { field: 'Légende', max: 200 });
     assertClean('Légende', caption);
     const media = video ? video.poster || '' : await saveImage(ctx, req.file);
@@ -117,12 +122,12 @@ module.exports = function storyRoutes(ctx) {
     const story = await loadStory(req.params.id);
     if (story.user_id !== req.user.id) fail(403, 'Seul l’auteur voit qui a regardé sa story.');
     const rows = await db.all(
-      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot, sv.viewed_at
+      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.verified_at, sv.viewed_at
        FROM story_views sv JOIN users u ON u.id = sv.user_id
        WHERE sv.story_id = ? ORDER BY sv.viewed_at DESC LIMIT 500`,
       story.id,
     );
-    res.json({ users: rows.map((row) => ({ ...authorOf(ctx, row), viewedAt: row.viewed_at })) });
+    res.json({ users: rows.map((row) => ({ ...authorOf(row), viewedAt: row.viewed_at })) });
   });
 
   r.delete('/stories/:id', async (req, res) => {

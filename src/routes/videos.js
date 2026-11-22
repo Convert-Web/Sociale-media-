@@ -1,71 +1,24 @@
 'use strict';
 // Envoi d'une vidéo en plusieurs morceaux : ouverture, morceaux de 1 Mo, finalisation.
 const express = require('express');
-const { requireMember } = require('../auth');
-const { fail, intParam } = require('../http');
+const { requireAuth } = require('../auth');
+const { fail } = require('../http');
 const { single, saveImage } = require('../uploads');
 const V = require('../videos');
-const { POST_SELECT, NOT_BLOCKED, VISIBLE_POST, serializePost } = require('../social');
 
 module.exports = function videoRoutes(ctx) {
   const r = express.Router();
   const { db, config } = ctx;
-  r.use('/videos', requireMember);
+  r.use('/videos', requireAuth);
 
-  // Espace vidéo du cercle plein : la Direction est prévenue, l'envoi est refusé
+  // Espace vidéo plein : l'administration est prévenue, l'envoi est refusé
   async function storageFull() {
     const { sendPush } = require('../push');
-    for (const a of await db.all('SELECT id FROM users WHERE is_admin = 1 AND paid_at IS NOT NULL')) {
-      sendPush(ctx, a.id, { title: 'Espace vidéo plein', body: 'Supprimez d’anciennes vidéos ou augmentez VIDEO_STORAGE_MB.', url: '/admin', tag: 'video-storage' }).catch(() => {});
+    for (const a of await db.all('SELECT id FROM users WHERE is_admin = 1')) {
+      sendPush(ctx, a.id, { title: 'Espace vidéo plein', body: 'Supprime d’anciennes vidéos ou augmente VIDEO_STORAGE_MB.', url: '/admin', tag: 'video-storage' }).catch(() => {});
     }
-    fail(409, 'L’espace vidéo du cercle est plein pour le moment. La Direction a été prévenue.', 'VIDEO_STORAGE_FULL');
+    fail(409, 'L’espace vidéo est plein pour le moment. L’administration a été prévenue.', 'VIDEO_STORAGE_FULL');
   }
-
-  // Fil des vidéos (lecture plein écran, glisser pour la suivante)
-  // « Pour toi » : d'abord les vidéos pas encore vues (les plus récentes en tête), puis celles déjà
-  // vues et les siennes — on ne retombe pas sur la même vidéo tant qu'il en reste de nouvelles.
-  // Pas d'algorithme d'influence : l'ordre reste chronologique dans chaque partie.
-  // « Abonnements » : seulement les membres suivis (et soi-même), du plus récent au plus ancien.
-  // Suite : ?cursor=u123 (vidéos non vues avant 123) ou s123 (déjà vues avant 123) ; ?before=123 (ancien).
-  r.get('/videos/feed', async (req, res) => {
-    const limit = 8;
-    const since = V.liveSince(ctx);
-    const base = `${POST_SELECT} WHERE p.video_id IS NOT NULL AND p.created_at > ? AND (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${VISIBLE_POST}`;
-    const page = async (extra, before, n) =>
-      (await db.all(`${base} ${extra} ORDER BY p.id DESC LIMIT ?`, req.user.id, since, before, before, n));
-    const send = (rows, cursor, hasMore) =>
-      res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)), hasMore, cursor: hasMore ? cursor : null });
-    const legacy = intParam(req.query.before);
-    const m = /^([us])(\d{1,12})?$/.exec(String(req.query.cursor || ''));
-    if (!legacy && !m) await V.purgeExpired(ctx);
-
-    if (req.query.scope === 'following' || (legacy && !m)) {
-      const following = req.query.scope === 'following'
-        ? 'AND (p.user_id = v.id OR p.user_id IN (SELECT followee_id FROM follows WHERE follower_id = v.id))'
-        : '';
-      const rows = await page(following, legacy || (m?.[2] ? Number(m[2]) : null), limit);
-      const last = rows[rows.length - 1]?.id;
-      return send(rows, `u${last}`, rows.length === limit);
-    }
-
-    const SEEN = 'EXISTS (SELECT 1 FROM video_views vv WHERE vv.post_id = p.id AND vv.user_id = v.id)';
-    const unseen = `AND p.user_id != v.id AND NOT ${SEEN}`;
-    const seen = `AND (p.user_id = v.id OR ${SEEN})`;
-    const phase = m?.[1] || 'u';
-    const before = m?.[2] ? Number(m[2]) : null;
-    if (phase === 'u') {
-      const rows = await page(unseen, before, limit);
-      if (rows.length < limit) {
-        // Plus de nouveautés : on enchaîne avec les vidéos déjà vues
-        const want = limit - rows.length;
-        const more = await page(seen, null, want);
-        return send(rows.concat(more), `s${more[more.length - 1]?.id}`, more.length === want);
-      }
-      return send(rows, `u${rows[rows.length - 1].id}`, true);
-    }
-    const rows = await page(seen, before, limit);
-    return send(rows, `s${rows[rows.length - 1]?.id}`, rows.length === limit);
-  });
 
   // 1. Ouverture : taille, durée, format, et image d'aperçu
   r.post('/videos', single('poster'), async (req, res) => {
@@ -83,10 +36,10 @@ module.exports = function videoRoutes(ctx) {
     if (!Number.isSafeInteger(size) || size < 1000) fail(400, 'Vidéo invalide.');
     if (size > max) fail(413, `Vidéo trop lourde : ${Math.round(max / 1048576)} Mo maximum.`);
     if (!Number.isFinite(duration) || duration <= 0) fail(400, 'Durée de la vidéo illisible.');
-    if (duration > V.MAX_SECONDS) fail(400, 'Vidéo trop longue : une minute au maximum.');
+    if (duration > config.videoMaxSeconds + 1) fail(400, `Vidéo trop longue : ${Math.round(config.videoMaxSeconds / 60)} min au maximum.`);
     await V.cleanup(ctx);
     const { n } = await db.get('SELECT COUNT(*) AS n FROM videos WHERE owner_id = ? AND created_at > ?', req.user.id, Date.now() - 24 * 3600 * 1000);
-    if (n >= V.PER_DAY) fail(429, 'Vous avez envoyé beaucoup de vidéos aujourd’hui. Réessayez demain.');
+    if (n >= V.PER_DAY && !req.user.is_admin) fail(429, 'Tu as envoyé beaucoup de vidéos aujourd’hui. Réessaie demain.');
     if ((await V.storageUsed(ctx)) + size > config.videoStorageBytes) await storageFull();
     const poster = req.file ? await saveImage(ctx, req.file) : null;
     const id = V.newId();
@@ -112,10 +65,10 @@ module.exports = function videoRoutes(ctx) {
     const data = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     if (streaming) {
       // Taille vérifiée à la finalisation (tous les morceaux font 1 Mo, sauf le dernier)
-      if (data.length < 1 || data.length > V.CHUNK) fail(400, 'Morceau incomplet : renvoyez-le.');
+      if (data.length < 1 || data.length > V.CHUNK) fail(400, 'Morceau incomplet : renvoie-le.');
     } else {
       const expected = idx === v.chunks - 1 ? v.size - idx * V.CHUNK : V.CHUNK;
-      if (data.length !== expected) fail(400, 'Morceau incomplet : renvoyez-le.');
+      if (data.length !== expected) fail(400, 'Morceau incomplet : renvoie-le.');
     }
     if (idx === 0 && !V.looksLikeVideo(data)) fail(400, 'Ce fichier n’est pas une vidéo lisible.');
     await db.run('INSERT OR REPLACE INTO video_chunks (video_id, idx, data) VALUES (?, ?, ?)', v.id, idx, data);
@@ -179,6 +132,6 @@ module.exports.attachVideo = async function attachVideo(ctx, user, id) {
        AND id NOT IN (SELECT video_id FROM stories WHERE video_id IS NOT NULL)`,
     String(id), user.id,
   );
-  if (!v) fail(400, 'La vidéo n’a pas été entièrement envoyée. Réessayez.');
+  if (!v) fail(400, 'La vidéo n’a pas été entièrement envoyée. Réessaie.');
   return v;
 };

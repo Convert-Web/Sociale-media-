@@ -1,5 +1,5 @@
 'use strict';
-// Vidéos des membres, compatibles avec un hébergement gratuit :
+// Vidéos, compatibles avec un hébergement gratuit :
 // - Vercel refuse les requêtes et réponses de plus de 4,5 Mo : la vidéo (d'origine, jamais
 //   recompressée) est envoyée en morceaux de 1 Mo, et diffusée par morceaux (gardés par le CDN
 //   de Vercel) ou par plages d'octets (« Range »), comme le demandent Safari et Chrome ;
@@ -11,9 +11,8 @@ const CHUNK = 1024 * 1024; // 1 Mo par morceau stocké
 // Poids maximal d'une vidéo : config.videoMaxBytes (VIDEO_MAX_MB, 250 Mo par défaut). Les vidéos sont
 // publiées telles que filmées, en qualité d'origine (une minute en 4K à 30 i/s pèse ~170 Mo).
 const maxBytes = (ctx) => ctx.config.videoMaxBytes || 250 * 1024 * 1024;
-const MAX_SECONDS = 61;
 const RESPONSE_CAP = 3 * CHUNK; // 3 Mo par réponse au plus (limite de Vercel : 4,5 Mo)
-const PER_DAY = 15; // vidéos envoyées par membre et par 24 h
+const PER_DAY = 30; // vidéos envoyées par compte et par 24 h
 const TYPES = { 'video/mp4': 'mp4', 'video/quicktime': 'mp4', 'video/webm': 'webm' };
 
 const newId = () => crypto.randomBytes(16).toString('hex');
@@ -76,7 +75,7 @@ async function purgeExpired(ctx, { force = false } = {}) {
     'SELECT id, image, video_id FROM posts WHERE video_id IS NOT NULL AND created_at < ? LIMIT 25',
     now - ttlMs(ctx),
   );
-  const { deletePost } = require('./membership');
+  const { deletePost } = require('./accounts');
   const { deleteUpload } = require('./uploads');
   for (const p of rows) {
     const media = await deletePost(ctx, p.id);
@@ -204,4 +203,4 @@ function videoHandler(ctx) {
   };
 }
 
-module.exports = { purgeExpired, expiresAt, liveSince, CHUNK, maxBytes, MAX_SECONDS, PER_DAY, TYPES, newId, videoUrl, idFromUrl, looksLikeVideo, storageUsed, cleanup, removeVideo, videoHandler };
+module.exports = { purgeExpired, expiresAt, liveSince, CHUNK, maxBytes, PER_DAY, TYPES, newId, videoUrl, idFromUrl, looksLikeVideo, storageUsed, cleanup, removeVideo, videoHandler };

@@ -1,5 +1,5 @@
 'use strict';
-// Notifications push (Web Push) : messages, demandes d'ami, invitations de groupe.
+// Notifications push (Web Push) : messages, abonnements, commentaires, LIVE.
 // Les clés VAPID sont générées une seule fois puis conservées dans la base :
 // aucune configuration n'est nécessaire chez l'hébergeur.
 const webpush = require('web-push');
@@ -20,7 +20,7 @@ async function vapidKeys(ctx) {
 }
 
 function subject(config) {
-  return config.baseUrl.startsWith('https://') ? config.baseUrl : 'mailto:notifications@aurum.invalid';
+  return config.baseUrl.startsWith('https://') ? config.baseUrl : 'mailto:notifications@vibz.invalid';
 }
 
 // Envoie une notification à tous les appareils d'un membre (sans jamais faire échouer la requête).

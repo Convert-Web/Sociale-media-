@@ -1,371 +1,235 @@
-// Point d'entrée : routage, coquille de l'application et temps réel.
+// Point d'entrée : routage, coquille de l'application (barre du bas sur téléphone, barre latérale
+// sur ordinateur), connexion à la demande, temps réel.
 import { api, enc } from './api.js';
 import { store, connectRealtime, disconnectRealtime } from './store.js';
 import { navigate, setRenderer, compile } from './router.js';
-import { h, icon, avatar, memberCard, cardSince, spinner, emptyState, closeModal, closeMenu, modal, num, clear, toast, timeAgo, confirmDialog } from './dom.js';
-import { countDrafts, listDrafts, deleteDraft } from './drafts.js';
-import { composer } from './components/post.js';
+import { h, icon, avatar, spinner, emptyState, closeModal, closeMenu, toast, popMenu, logoMark } from './dom.js';
 import { openSheet, closeSheet } from './components/sheet.js';
-import { newStory } from './components/stories.js';
 import { installFormValidation } from './forms.js';
 import { trackPage, cookieBanner } from './components/cookies.js';
-import { landingView } from './views/landing.js';
-import { loginView, signupView, forgotView, resetView } from './views/auth.js';
-import { joinView, welcomeView, logout } from './views/join.js';
-import { feedView, postView, savedView } from './views/feed.js';
-import { profileView, userRow } from './views/profile.js';
+import { prefetchReels, unlockPlayer } from './components/video.js';
+import { startUpdateChecks } from './update.js';
+import { registerServiceWorker, syncPush } from './push.js';
+import { editPost } from './components/postedit.js';
+import { homeView, videoView, friendsView } from './views/home.js';
 import { exploreView } from './views/explore.js';
+import { searchView } from './views/search.js';
+import { profileView } from './views/profile.js';
+import { tagView, soundView } from './views/collections.js';
+import { inboxView, activityView } from './views/inbox.js';
 import { messagesView } from './views/messages.js';
-import { notificationsView } from './views/notifications.js';
+import { createView } from './views/create.js';
+import { liveListView, liveRoomView } from './views/live.js';
+import { walletView } from './views/wallet.js';
+import { studioView } from './views/studio.js';
 import { settingsView } from './views/settings.js';
 import { adminView } from './views/admin.js';
+import { loginView, signupView, forgotView, resetView, logout } from './views/auth.js';
+import { welcomeView } from './views/onboarding.js';
 import { legalView } from './views/legal.js';
-import { helpView } from './views/help.js';
-import { friendsView } from './views/friends.js';
-import { groupsView, groupView } from './views/groups.js';
-import { invitationLanding, invitationsView } from './views/invite.js';
-import { agendaView, eventView } from './views/events.js';
-import { carnetView, placeView } from './views/places.js';
-import { journalView, journalItemView } from './views/journal.js';
-import { videosView } from './views/videos.js';
-import { openReels, prefetchReels } from './components/video.js';
-import { startUpdateChecks } from './update.js';
-import { stop as stopPlayer } from './components/player.js';
-import { registerServiceWorker, syncPush } from './push.js';
-document.addEventListener('aurum:logout', () => stopPlayer());
-
-// Menu (≡) du profil et bouton « Publier » des pages
-document.addEventListener('aurum:menu', () => openMeMenu());
-document.addEventListener('aurum:compose', () => openComposer());
-document.addEventListener('aurum:create', () => openCreate());
+import { helpView, rulesView } from './views/help.js';
 
 // Pas de zoom (comme une application) : pincement et double toucher désactivés
 for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
-document.addEventListener(
-  'touchmove',
-  (e) => {
-    if (e.touches.length > 1 && !e.target.closest?.('.crop-stage')) e.preventDefault();
-  },
-  { passive: false },
-);
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length > 1 && !e.target.closest?.('.crop-stage')) e.preventDefault();
+}, { passive: false });
 
+// layout : « feed » (plein écran sombre), « app » (page avec navigation), « bare » (sans navigation)
+// access : « public » (tout le monde), « auth » (connecté), « guest » (non connecté), « admin »
 const ROUTES = [
-  { path: '/', view: landingView, access: 'public', home: true },
-  { path: '/connexion', view: loginView, access: 'guest' },
-  { path: '/inscription', view: signupView, access: 'guest' },
-  { path: '/mot-de-passe-oublie', view: forgotView, access: 'guest' },
-  { path: '/reinitialiser', view: resetView, access: 'public' },
-  { path: '/rejoindre', view: joinView, access: 'auth' },
-  { path: '/bienvenue', view: welcomeView, access: 'member' },
-  { path: '/salon', view: feedView, access: 'member', layout: 'app', nav: 'salon' },
-  { path: '/explorer', view: exploreView, access: 'member', layout: 'app', nav: 'explorer' },
-  { path: '/notifications', view: notificationsView, access: 'member', layout: 'app', nav: 'notifications' },
-  { path: '/messages', view: messagesView, access: 'member', layout: 'app', nav: 'messages', wide: true },
-  { path: '/messages/:username', view: messagesView, access: 'member', layout: 'app', nav: 'messages', wide: true },
-  { path: '/p/:id', view: postView, access: 'member', layout: 'app' },
-  { path: '/@:username', view: profileView, access: 'member', layout: 'app', nav: 'profil' },
-  { path: '/reglages', view: settingsView, access: 'member', layout: 'app', nav: 'reglages' },
-  { path: '/enregistres', view: savedView, access: 'member', layout: 'app', nav: 'enregistres' },
-  { path: '/amis', view: friendsView, access: 'member', layout: 'app', nav: 'amis' },
-  { path: '/groupes', view: groupsView, access: 'member', layout: 'app', nav: 'groupes' },
-  { path: '/groupes/:id', view: groupView, access: 'member', layout: 'app', nav: 'groupes' },
-  { path: '/videos', view: videosView, access: 'member' },
-  { path: '/journal', view: journalView, access: 'member', layout: 'app', nav: 'journal' },
-  { path: '/journal/:id', view: journalItemView, access: 'member', layout: 'app', nav: 'journal' },
-  { path: '/agenda', view: agendaView, access: 'member', layout: 'app', nav: 'agenda' },
-  { path: '/agenda/:id', view: eventView, access: 'member', layout: 'app', nav: 'agenda' },
-  { path: '/carnet', view: carnetView, access: 'member', layout: 'app', nav: 'carnet' },
-  { path: '/carnet/:id', view: placeView, access: 'member', layout: 'app', nav: 'carnet' },
-  { path: '/invitations', view: invitationsView, access: 'member', layout: 'app', nav: 'invitations' },
-  { path: '/invitation/:code', view: invitationLanding, access: 'public' },
-  { path: '/admin', view: adminView, access: 'admin', layout: 'app', nav: 'admin' },
-  { path: '/aide', view: helpView, access: 'public', layout: 'auto', nav: 'aide' },
-  { path: '/cgu', view: legalView, access: 'public', layout: 'auto', page: 'cgu' },
-  { path: '/cgv', view: legalView, access: 'public', layout: 'auto', page: 'cgv' },
-  { path: '/rgpd', view: legalView, access: 'public', layout: 'auto', page: 'confidentialite' },
-  { path: '/confidentialite', view: legalView, access: 'public', layout: 'auto', page: 'confidentialite' },
-  { path: '/mentions-legales', view: legalView, access: 'public', layout: 'auto', page: 'mentions-legales' },
-].map((r) => ({ ...r, ...compile(r.path) }));
+  { path: '/', view: homeView, layout: 'feed', nav: 'home' },
+  { path: '/abonnements', view: homeView, layout: 'feed', nav: 'following' },
+  { path: '/amis', view: friendsView, layout: 'feed', nav: 'friends' },
+  { path: '/@:username/video/:id', view: videoView, layout: 'feed' },
+  { path: '/p/:id', view: legacyPost, layout: 'bare' },
+  { path: '/salon', view: () => navigate('/', { replace: true }), layout: 'bare' },
+  { path: '/videos', view: () => navigate('/', { replace: true }), layout: 'bare' },
+  { path: '/explorer', view: exploreView, layout: 'app', nav: 'explore' },
+  { path: '/recherche', view: searchView, layout: 'app', nav: 'explore' },
+  { path: '/tag/:tag', view: tagView, layout: 'app', nav: 'explore' },
+  { path: '/son/:id', view: soundView, layout: 'app', nav: 'explore' },
+  { path: '/live', view: liveListView, layout: 'app', nav: 'live' },
+  { path: '/live/:username', view: liveRoomView, layout: 'bare' },
+  { path: '/@:username', view: profileView, layout: 'app', nav: 'profile' },
+  { path: '/boite', view: inboxView, layout: 'app', nav: 'inbox', access: 'auth' },
+  { path: '/activite', view: activityView, layout: 'app', nav: 'inbox', access: 'auth' },
+  { path: '/messages', view: messagesView, layout: 'app', nav: 'messages', access: 'auth', wide: true },
+  { path: '/messages/:username', view: messagesView, layout: 'app', nav: 'messages', access: 'auth', wide: true },
+  { path: '/creer', view: createView, layout: 'bare', access: 'auth' },
+  { path: '/portefeuille', view: walletView, layout: 'app', nav: 'more', access: 'auth' },
+  { path: '/studio', view: studioView, layout: 'app', nav: 'more', access: 'auth' },
+  { path: '/reglages', view: settingsView, layout: 'app', nav: 'more', access: 'auth' },
+  { path: '/reglages/:section', view: settingsView, layout: 'app', nav: 'more', access: 'auth' },
+  { path: '/admin', view: adminView, layout: 'app', nav: 'more', access: 'admin', wide: true },
+  { path: '/bienvenue', view: welcomeView, layout: 'bare', access: 'auth' },
+  { path: '/connexion', view: loginView, layout: 'bare', access: 'guest' },
+  { path: '/inscription', view: signupView, layout: 'bare', access: 'guest' },
+  { path: '/mot-de-passe-oublie', view: forgotView, layout: 'bare', access: 'guest' },
+  { path: '/reinitialiser', view: resetView, layout: 'bare' },
+  { path: '/aide', view: helpView, layout: 'auto', nav: 'more' },
+  { path: '/regles', view: rulesView, layout: 'auto', nav: 'more' },
+  { path: '/cgu', view: legalView, layout: 'auto', page: 'cgu' },
+  { path: '/cgv', view: legalView, layout: 'auto', page: 'cgv' },
+  { path: '/rgpd', view: legalView, layout: 'auto', page: 'confidentialite' },
+  { path: '/confidentialite', view: legalView, layout: 'auto', page: 'confidentialite' },
+  { path: '/mentions-legales', view: legalView, layout: 'auto', page: 'mentions-legales' },
+].map((r) => ({ access: 'public', ...r, ...compile(r.path) }));
+
+// Ancien lien de publication (/p/123) : redirigé vers l'adresse de la vidéo
+async function legacyPost(ctx) {
+  try {
+    const { post } = await api.get(`/api/posts/${Number(ctx.params.id)}`);
+    navigate(`/@${post.author.username}/video/${post.id}`, { replace: true });
+  } catch {
+    navigate('/', { replace: true });
+  }
+  return h('div', { class: 'boot' }, spinner());
+}
 
 const appEl = document.getElementById('app');
 
 // ---------------------------------------------------------------------------
 // Titre de l'onglet (avec compteur de non-lus)
 // ---------------------------------------------------------------------------
-let baseTitle = 'AURUM';
+let baseTitle = 'Vibz';
 function paintTitle() {
   const c = store.counters;
-  const n = store.user?.isMember ? (c.notifications || 0) + (c.messages || 0) + (c.requests || 0) : 0;
-  document.title = n ? `(${n}) ${baseTitle}` : baseTitle;
+  const n = store.user ? (c.notifications || 0) + (c.messages || 0) + (c.requests || 0) : 0;
+  document.title = n ? `(${n > 99 ? '99+' : n}) ${baseTitle}` : baseTitle;
 }
 store.on('counters', paintTitle);
 
 // ---------------------------------------------------------------------------
-// Coquille (navigation latérale, colonne de droite, barre d'onglets mobile)
+// Connexion demandée pour une action (J'aime, commenter, suivre…)
 // ---------------------------------------------------------------------------
-// Bouton « + » : trois choix clairs, en grand
-function openComposer(kind, draft = null) {
-  // La fenêtre ne se ferme que si elle est encore ouverte (une vidéo publiée plus tard,
-  // en arrière-plan, ne doit pas fermer une autre fenêtre ouverte entre-temps)
-  const c = composer({
-    draft,
-    onPosted: () => {
-      if (c.isConnected) closeModal();
-      document.dispatchEvent(new CustomEvent('aurum:posted'));
-    },
-    onQueued: () => c.isConnected && closeModal(),
-  });
-  modal(draft ? 'Brouillon' : kind === 'video' ? 'Nouvelle vidéo' : 'Nouvelle publication', c);
-  if (draft) return c;
-  if (kind === 'video') c.pickVideo();
-  else if (kind === 'photos') c.pickPhotos();
-  return c;
-}
-function openCreate() {
-  const choice = (ic, title, sub, run) =>
-    h('button', { type: 'button', class: 'create-choice', onclick: () => { closeSheet(); run(); } }, h('span', { class: 'create-icon' }, icon(ic)), h('span', { class: 'grow' }, h('b', null, title), h('small', null, sub)), icon('chevron', 'icon-sm'));
-  const list = h(
-    'div',
-    { class: 'create-list' },
-    choice('pen', 'Publication', 'Un texte, jusqu’à 6 photos', () => openComposer()),
-    choice('video', 'Vidéo', store.config?.videoTtlHours ? `Une minute au plus · visible ${store.config.videoTtlHours} h` : 'Une minute au plus · qualité d’origine', () => openComposer('video')),
-    choice('sparkles', 'Story', 'Photo ou vidéo · disparaît après 24 h', () => newStory()),
-  );
-  openSheet({ title: 'Créer', body: list });
-  // Brouillons gardés sur ce téléphone : proposés en dernier, s'il y en a
-  countDrafts().then((n) => {
-    if (n && list.isConnected) list.append(choice('pen', 'Brouillons', `${n} gardé${n > 1 ? 's' : ''} sur ce téléphone`, openDrafts));
-  });
-}
-
-// Brouillons : reprendre (fenêtre de publication remplie) ou supprimer
-async function openDrafts() {
-  const body = h('div', { class: 'drafts' }, spinner());
-  openSheet({ title: 'Brouillons', body, tall: true });
-  const paint = async () => {
-    const drafts = await listDrafts();
-    if (!drafts.length) return body.replaceChildren(emptyState('pen', 'Aucun brouillon', 'Dans la fenêtre de publication, « Brouillon » garde votre texte, vos photos et votre vidéo pour plus tard.'));
-    body.replaceChildren(
-      ...drafts.map((d) => {
-        const thumbBlob = d.video?.poster || d.photos?.[0]?.blob || null;
-        const thumb = thumbBlob ? h('img', { src: URL.createObjectURL(thumbBlob), alt: '' }) : h('span', { class: 'draft-ph' }, icon('pen'));
-        const kind = d.video ? `Vidéo · ${Math.round(d.video.duration || 0)} s` : d.photos?.length ? `${d.photos.length} photo${d.photos.length > 1 ? 's' : ''}` : 'Texte';
-        const open = () => {
-          closeSheet();
-          openComposer(d.video ? 'video' : null, d);
-        };
-        return h(
-          'div',
-          { class: 'draft-row' },
-          h('button', { type: 'button', class: 'draft-open', onclick: open }, h('span', { class: 'draft-thumb' }, thumb, d.video ? h('span', { class: 'draft-play' }, icon('play', 'icon-xs')) : null), h('span', { class: 'grow' }, h('b', null, (d.body || '').trim().slice(0, 80) || 'Sans texte'), h('small', null, `${kind} · ${timeAgo(d.updatedAt)}`))),
-          h('button', {
-            type: 'button',
-            class: 'icon-btn',
-            'aria-label': 'Supprimer le brouillon',
-            onclick: async () => {
-              if (!(await confirmDialog('Supprimer ce brouillon ?', 'Il sera effacé de ce téléphone.', 'Supprimer'))) return;
-              await deleteDraft(d.id);
-              paint();
-            },
-          }, icon('trash')),
-        );
-      }),
-    );
+function openLoginSheet(reason) {
+  const here = location.pathname + location.search;
+  const go = (path) => {
+    closeSheet();
+    closeModal();
+    navigate(`${path}?suite=${enc(here)}`);
   };
-  paint();
-}
-
-// Menu « moi » sur téléphone : profil, amis, groupes, réglages… (la barre d'onglets n'a que cinq places)
-function openMeMenu() {
-  const me = store.user;
-  const c = store.counters || {};
-  const go = () => closeModal();
-  const item = (href, ic, label, count) =>
-    h('a', { href, class: 'me-item', onclick: go }, h('span', { class: 'me-item-icon' }, icon(ic)), h('span', { class: 'grow' }, label), count ? h('span', { class: 'badge-dot' }, count > 99 ? '99+' : String(count)) : null, icon('chevron', 'icon-sm'));
-  const items = [
-    item('/journal', 'newspaper', 'Journal'),
-    item('/amis', 'users', 'Amis', c.requests),
-    item('/groupes', 'groups', 'Groupes'),
-    item('/agenda', 'calendar', 'Agenda'),
-    item('/carnet', 'book', 'Carnet d’adresses'),
-    item('/invitations', 'ticket', 'Inviter un proche'),
-    item('/enregistres', 'bookmark', 'Enregistrés'),
-    item('/reglages', 'settings', 'Réglages'),
-    item('/aide', 'help', 'Aide'),
-  ];
-  if (me.isAdmin) items.push(item('/admin', 'chart', 'Direction'));
-  modal(
-    'Menu',
-    h(
+  openSheet({
+    title: 'Connecte-toi à Vibz',
+    body: h(
       'div',
-      { class: 'modal-body me-menu' },
-      h('a', { href: `/@${me.username}`, class: 'me-profile', onclick: go }, avatar(me, 'lg'), h('span', { class: 'grow' }, h('b', null, me.displayName), h('small', null, 'Voir mon profil')), icon('chevron', 'icon-sm')),
-      h('nav', { class: 'me-list' }, items),
-      h('div', { class: 'me-list' }, h('button', { class: 'me-item danger', onclick: () => (closeModal(), logout()) }, h('span', { class: 'me-item-icon' }, icon('logout')), h('span', { class: 'grow' }, 'Se déconnecter'))),
+      { class: 'login-sheet' },
+      h('div', { class: 'login-logo' }, logoMark()),
+      h('p', null, reason || 'Connecte-toi pour continuer.'),
+      h('p', { class: 'muted small' }, 'Suis des créateurs, aime des vidéos, commente et crée les tiennes.'),
+      h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', onclick: () => go('/inscription') }, 'Créer un compte'),
+      h('button', { type: 'button', class: 'btn btn-ghost btn-lg btn-block', onclick: () => go('/connexion') }, 'J’ai déjà un compte'),
     ),
-  );
+  });
 }
+document.addEventListener('vibz:login', (e) => openLoginSheet(e.detail?.reason));
+document.addEventListener('vibz:edit-post', (e) => editPost(e.detail));
 
+const wordmark = () => h('a', { href: '/', class: 'brand', 'aria-label': 'Vibz, accueil' }, logoMark(34), h('span', { class: 'brand-name' }, 'vibz'));
+
+// ---------------------------------------------------------------------------
+// Coquille
+// ---------------------------------------------------------------------------
 function buildShell() {
-  const u = store.user;
   const unsub = [];
   const navEls = new Map();
-  const badges = { notifications: [], messages: [], requests: [], activity: [], any: [] };
-
+  const badges = { inbox: [], messages: [] };
   const register = (key, el) => {
     if (!navEls.has(key)) navEls.set(key, []);
     navEls.get(key).push(el);
     return el;
   };
-  const badge = (kind, dot = false) => {
-    const b = h('span', { class: dot ? 'badge-count badge-dot-only' : 'badge-count', hidden: true });
+  const badge = (kind) => {
+    const b = h('span', { class: 'badge-count', hidden: true });
     badges[kind].push(b);
     return b;
   };
+  const me = () => store.user;
+  const profileHref = () => (me() ? `/@${me().username}` : '/connexion');
+  const guard = (e, reason) => {
+    if (me()) return false;
+    e.preventDefault();
+    openLoginSheet(reason);
+    return true;
+  };
 
-  const links = [
-    { key: 'salon', href: '/salon', icon: 'home', label: 'Salon' },
-    { key: 'videos', href: '/videos', icon: 'video', label: 'Vidéos' },
-    { key: 'explorer', href: '/explorer', icon: 'compass', label: 'Explorer' },
-    { key: 'journal', href: '/journal', icon: 'newspaper', label: 'Journal' },
-    { key: 'notifications', href: '/notifications', icon: 'bell', label: 'Activité', badge: 'notifications' },
-    { key: 'messages', href: '/messages', icon: 'mail', label: 'Messages', badge: 'messages' },
-    { key: 'profil', href: `/@${u.username}`, icon: 'user', label: 'Profil' },
-    { key: 'amis', href: '/amis', icon: 'users', label: 'Amis', badge: 'requests' },
-    { key: 'groupes', href: '/groupes', icon: 'groups', label: 'Groupes' },
-    { key: 'agenda', href: '/agenda', icon: 'calendar', label: 'Agenda' },
-    { key: 'carnet', href: '/carnet', icon: 'book', label: 'Carnet' },
-    { key: 'invitations', href: '/invitations', icon: 'ticket', label: 'Invitations' },
-    { key: 'enregistres', href: '/enregistres', icon: 'bookmark', label: 'Enregistrés' },
-    { key: 'reglages', href: '/reglages', icon: 'settings', label: 'Réglages' },
-  ];
-  if (u.isAdmin) links.push({ key: 'admin', href: '/admin', icon: 'chart', label: 'Direction' });
+  // Barre latérale (ordinateur)
+  const search = h('input', { class: 'input', type: 'search', placeholder: 'Rechercher', 'aria-label': 'Rechercher' });
+  const searchForm = h('form', { class: 'side-search', onsubmit: (e) => { e.preventDefault(); const q = search.value.trim(); navigate(q ? `/recherche?q=${enc(q)}` : '/recherche'); search.value = ''; } }, icon('search'), search);
+  const side = (key, href, ic, icOn, label, extra = {}) => register(key, h('a', { href, class: 'side-link', onclick: extra.onclick }, h('span', { class: 'side-ic' }, h('span', { class: 'ic-off' }, icon(ic)), h('span', { class: 'ic-on' }, icon(icOn || ic)), extra.badge || null), h('span', { class: 'side-label' }, label)));
+  const sideAvatar = h('span', { class: 'side-ic side-avatar' });
+  const profileLink = register('profile', h('a', { href: profileHref(), class: 'side-link' }, sideAvatar, h('span', { class: 'side-label' }, 'Profil')));
+  const sideAccount = h('div', { class: 'side-account' });
+  const moreBtn = h('button', { type: 'button', class: 'side-link' }, h('span', { class: 'side-ic' }, icon('moreH')), h('span', { class: 'side-label' }, 'Plus'));
+  moreBtn.addEventListener('click', () => {
+    const items = [
+      me() && { icon: 'wallet', label: 'Portefeuille', action: () => navigate('/portefeuille') },
+      me() && { icon: 'creator', label: 'Studio créateur', action: () => navigate('/studio') },
+      me() && { icon: 'settings', label: 'Réglages et confidentialité', action: () => navigate('/reglages') },
+      me()?.isAdmin && { icon: 'shield', label: 'Administration', action: () => navigate('/admin') },
+      { icon: 'help', label: 'Aide', action: () => navigate('/aide') },
+      { icon: 'moon', label: 'Apparence', action: () => navigate(me() ? '/reglages/apparence' : '/aide#apparence') },
+      me() && { icon: 'logout', label: 'Se déconnecter', action: logout, danger: true },
+    ].filter(Boolean);
+    popMenu(moreBtn, items);
+  });
+  const sidebar = h(
+    'nav',
+    { class: 'sidebar', 'aria-label': 'Navigation principale' },
+    wordmark(),
+    searchForm,
+    side('home', '/', 'home', 'homeFill', 'Pour toi'),
+    side('explore', '/explorer', 'compass', 'compass', 'Explorer'),
+    side('following', '/abonnements', 'userCheck', 'userCheck', 'Abonnements', { onclick: (e) => guard(e, 'Connecte-toi pour voir les vidéos des comptes que tu suis.') }),
+    side('friends', '/amis', 'friends', 'friendsFill', 'Amis', { onclick: (e) => guard(e, 'Connecte-toi pour voir tes amis.') }),
+    side('live', '/live', 'live', 'live', 'LIVE'),
+    side('messages', '/messages', 'send', 'send', 'Messages', { badge: badge('messages'), onclick: (e) => guard(e, 'Connecte-toi pour envoyer des messages.') }),
+    side('inbox', '/activite', 'bell', 'bellRing', 'Activité', { badge: badge('inbox'), onclick: (e) => guard(e, 'Connecte-toi pour voir ton activité.') }),
+    side('create', '/creer', 'plus', 'plus', 'Créer', { onclick: (e) => guard(e, 'Connecte-toi pour publier une vidéo.') }),
+    profileLink,
+    moreBtn,
+    sideAccount,
+    h('footer', { class: 'side-foot' }, h('a', { href: '/aide' }, 'Aide'), h('a', { href: '/regles' }, 'Règles'), h('a', { href: '/cgu' }, 'CGU'), h('a', { href: '/confidentialite' }, 'Confidentialité'), h('a', { href: '/mentions-legales' }, 'Mentions légales'), h('span', null, `© ${new Date().getFullYear()} Vibz`)),
+  );
 
-  const meCard = h('div', { class: 'me-card' });
+  // Barre du bas (téléphone)
+  const tabAvatar = h('span', { class: 'tab-ic tab-avatar' });
+  const tab = (key, href, ic, icOn, label, extra = {}) =>
+    register(key, h('a', { href, class: 'tab', onclick: extra.onclick }, h('span', { class: 'tab-ic' }, h('span', { class: 'ic-off' }, icon(ic)), h('span', { class: 'ic-on' }, icon(icOn)), extra.badge || null), h('span', { class: 'tab-label' }, label)));
+  const tabbar = h(
+    'nav',
+    { class: 'tabbar', 'aria-label': 'Navigation' },
+    tab('home', '/', 'home', 'homeFill', 'Accueil', { onclick: () => unlockPlayer() }),
+    tab('friends', '/amis', 'friends', 'friendsFill', 'Amis'),
+    h('a', { href: '/creer', class: 'tab tab-create', 'aria-label': 'Créer', onclick: (e) => guard(e, 'Connecte-toi pour publier une vidéo.') }, h('span', { class: 'create-btn' }, icon('plus'))),
+    tab('inbox', '/boite', 'inbox', 'inboxFill', 'Boîte', { badge: badge('inbox'), onclick: (e) => guard(e, 'Connecte-toi pour voir tes messages et ton activité.') }),
+    register('profile', h('a', { href: profileHref(), class: 'tab tab-profile', onclick: (e) => guard(e, 'Connecte-toi pour voir ton profil.') }, tabAvatar, h('span', { class: 'tab-label' }, 'Profil'))),
+  );
+  // Un toucher sur l'onglet « Profil » quand on a déjà un compte : son profil
   const paintMe = () => {
-    const me = store.user;
-    if (!me) return;
-    meCard.replaceChildren(
-      h('a', { href: `/@${me.username}` }, avatar(me, 'sm'), h('span', { class: 'meta' }, h('b', null, me.displayName), h('small', null, `@${me.username}`))),
-      h('button', { class: 'icon-btn', title: 'Se déconnecter', 'aria-label': 'Se déconnecter', onclick: logout }, icon('logout')),
+    const u = me();
+    tabAvatar.replaceChildren(u ? avatar(u, 'xs') : icon('user'));
+    sideAvatar.replaceChildren(u ? avatar(u, 'xs') : icon('user'));
+    for (const el of navEls.get('profile')) el.setAttribute('href', profileHref());
+    sideAccount.replaceChildren(
+      u
+        ? h('a', { href: `/@${u.username}`, class: 'side-me' }, avatar(u, 'sm'), h('span', null, h('b', null, u.displayName), h('small', null, `@${u.username}`)))
+        : h('div', { class: 'side-login' }, h('p', null, 'Connecte-toi pour suivre des créateurs, aimer des vidéos et voir les commentaires.'), h('a', { href: '/connexion', class: 'btn btn-primary btn-block' }, 'Se connecter')),
     );
   };
   paintMe();
   unsub.push(store.on('user', paintMe));
 
-  // Onglet « Profil » : la photo du membre
-  const tabAvatar = h('span', { class: 'tab-icon tab-avatar' });
-  const paintTabAvatar = () => store.user && tabAvatar.replaceChildren(avatar(store.user, 'xs'));
-  paintTabAvatar();
-  unsub.push(store.on('user', paintTabAvatar));
-
-  // Bouton avatar placé en haut à droite des pages principales, sur téléphone
-  const meAvatar = h('span');
-  const meBtn = h('button', { class: 'me-btn mobile-only', type: 'button', 'aria-label': 'Menu : profil, amis, groupes, réglages', onclick: openMeMenu }, meAvatar, badge('requests'));
-  const paintMeBtn = () => store.user && meAvatar.replaceChildren(avatar(store.user, 'sm'));
-  paintMeBtn();
-  unsub.push(store.on('user', paintMeBtn));
-
-  const sidenav = h(
-    'nav',
-    { class: 'sidenav', 'aria-label': 'Navigation principale' },
-    h('a', { href: '/salon', class: 'logo' }, 'AURUM'),
-    links.map((l) =>
-      register(
-        l.key,
-        h('a', { href: l.href, class: 'nav-link' }, h('span', { class: 'icon-wrap' }, icon(l.icon), l.badge ? badge(l.badge) : null), h('span', { class: 'label' }, l.label)),
-      ),
-    ),
-    h('button', { class: 'btn btn-primary', onclick: () => openCreate(), title: 'Créer' }, icon('pen'), h('span', { class: 'label' }, 'Créer')),
-    meCard,
-  );
-
-  // Colonne de droite
-  const searchInput = h('input', { class: 'input', type: 'search', placeholder: 'Rechercher au cercle', 'aria-label': 'Rechercher' });
-  const search = h(
-    'form',
-    {
-      class: 'search-box',
-      onsubmit: (e) => {
-        e.preventDefault();
-        const q = searchInput.value.trim();
-        navigate(q ? `/explorer?q=${enc(q)}` : '/explorer');
-        searchInput.value = '';
-      },
-    },
-    icon('search'),
-    searchInput,
-  );
-  const cardHost = h('div');
-  const paintCard = () => {
-    const me = store.user;
-    if (!me) return;
-    cardHost.replaceChildren(memberCard({ name: me.displayName, number: me.memberNumber, since: cardSince(me.joinedAt), founder: me.founder }));
-  };
-  paintCard();
-  unsub.push(store.on('user', paintCard));
-
-  const suggestBody = h('div', { class: 'panel-body' }, spinner());
-  const trendBody = h('div', { class: 'panel-body' }, spinner());
-  const trendPanel = h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, 'Tendances'), trendBody);
-  api
-    .get('/api/suggestions?limit=4')
-    .then(({ users }) => {
-      clear(suggestBody);
-      if (!users.length) suggestBody.append(h('p', { class: 'muted small', style: { padding: '8px 10px' } }, 'Vous suivez déjà tout le cercle.'));
-      for (const x of users) suggestBody.append(userRow({ ...x, bio: '' }));
-    })
-    .catch(() => clear(suggestBody));
-  api
-    .get('/api/trending')
-    .then(({ tags }) => {
-      clear(trendBody);
-      if (!tags.length) return trendPanel.remove();
-      for (const t of tags.slice(0, 5)) {
-        trendBody.append(h('a', { class: 'trend', href: `/explorer?q=${enc(`#${t.tag}`)}` }, h('b', null, `#${t.tag}`), h('small', null, `${num(t.count)} publication${t.count > 1 ? 's' : ''}`)));
-      }
-    })
-    .catch(() => trendPanel.remove());
-
-  const rail = h(
-    'aside',
-    { class: 'rail', 'aria-label': 'Compléments' },
-    search,
-    h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, 'Votre carte', h('a', { href: '/reglages' }, 'Gérer')), h('div', { class: 'mcard-wrap', style: { padding: '14px 16px 18px' } }, cardHost)),
-    h('section', { class: 'panel' }, h('div', { class: 'panel-head' }, 'À découvrir', h('a', { href: '/explorer' }, 'Voir plus')), suggestBody),
-    trendPanel,
-    h(
-      'footer',
-      { class: 'rail-footer' },
-      h('a', { href: '/cgu' }, 'CGU'),
-      h('a', { href: '/cgv' }, 'CGV'),
-      h('a', { href: '/confidentialite' }, 'Confidentialité'),
-      h('a', { href: '/mentions-legales' }, 'Mentions légales'),
-      h('span', null, `© ${new Date().getFullYear()} AURUM`),
-    ),
-  );
-
-  const tabbar = h(
-    'nav',
-    { class: 'tabbar', 'aria-label': 'Navigation' },
-    register('salon', h('a', { href: '/salon' }, h('span', { class: 'tab-icon' }, icon('home'), badge('any', true)), 'Salon')),
-    // Les vidéos à un toucher (l'Explorer passe sur la loupe du Salon)
-    // Le toucher lance la première vidéo tout de suite, avec le son
-    h('a', { href: '/videos', class: 'tab-videos', onclick: (e) => { e.preventDefault(); openReels(); } }, icon('video'), 'Vidéos'),
-    h('a', { href: '#', 'aria-label': 'Créer : publication, vidéo ou story', onclick: (e) => (e.preventDefault(), openCreate()) }, h('span', { class: 'plus' }, icon('plus'))),
-    register('journal', h('a', { href: '/journal' }, icon('newspaper'), 'Journal')),
-    register('profil', h('a', { href: `/@${u.username}`, class: 'tab-me' }, tabAvatar, 'Profil')),
-  );
-
   const main = h('main', { class: 'main', id: 'main' });
-  const el = h('div', { class: 'shell' }, sidenav, main, rail, tabbar);
+  const el = h('div', { class: 'shell' }, sidebar, main, tabbar);
 
   const paintBadges = (c) => {
-    const values = { ...c, activity: (c.notifications || 0) + (c.requests || 0), any: (c.notifications || 0) + (c.requests || 0) + (c.messages || 0) };
+    const values = { inbox: (c.notifications || 0) + (c.requests || 0) + (c.messages || 0), messages: c.messages || 0 };
     for (const kind of Object.keys(badges)) {
-      const v = values[kind] || 0;
       for (const b of badges[kind]) {
-        b.hidden = !v;
+        const v = values[kind] || 0;
+        b.hidden = !v || !store.user;
         b.textContent = v > 99 ? '99+' : String(v);
       }
     }
@@ -376,8 +240,6 @@ function buildShell() {
   return {
     el,
     main,
-    meBtn,
-    userId: u.id,
     setActive(key) {
       for (const [k, els] of navEls) for (const x of els) x.classList.toggle('active', k === key);
     },
@@ -394,56 +256,20 @@ let shell = null;
 let renderToken = 0;
 let cleanups = [];
 let lastLocation = '';
-// Position de défilement de chaque page, rétablie au retour arrière
 const scrollPos = new Map();
 try {
   history.scrollRestoration = 'manual';
 } catch {
   /* navigateur ancien */
 }
-function restoreScroll(y) {
-  // Le contenu (images, vidéos) arrive par vagues : on réessaie pendant 1,5 s, sauf si l'on touche l'écran
-  const until = Date.now() + 1500;
-  let stop = false;
-  const cancel = () => (stop = true);
-  const evs = ['wheel', 'touchstart', 'keydown'];
-  evs.forEach((ev) => addEventListener(ev, cancel, { once: true, passive: true }));
-  const step = () => {
-    if (stop) return;
-    window.scrollTo(0, y);
-    if (Math.abs(window.scrollY - y) > 2 && Date.now() < until) requestAnimationFrame(step);
-    else evs.forEach((ev) => removeEventListener(ev, cancel));
-  };
-  step();
-}
 
 function errorView(err) {
-  return h(
-    'div',
-    { class: 'container' },
-    emptyState('alert', 'Un contretemps', err?.message || 'Une erreur est survenue.', h('button', { class: 'btn btn-ghost', onclick: () => location.reload() }, 'Recharger')),
-  );
+  return h('div', { class: 'page' }, emptyState('alert', 'Un contretemps', err?.message || 'Une erreur est survenue.', h('button', { class: 'btn btn-ghost', onclick: () => location.reload() }, 'Recharger')));
 }
 
-// Page 404 : le serveur répond aussi avec le statut 404 (moteurs de recherche)
 function notFoundView(ctx) {
-  ctx.title = 'Page introuvable — AURUM';
-  ctx.description = 'Cette page n’existe pas ou plus.';
-  const member = store.user?.isMember;
-  return h(
-    'section',
-    { class: `nf${member ? '' : ' nf-bare'}` },
-    member ? null : h('a', { href: '/', class: 'logo nf-logo', 'aria-label': 'AURUM, accueil' }, 'AURUM'),
-    h('div', { class: 'nf-code', 'aria-hidden': 'true' }, '404'),
-    h('h1', null, 'Cette page n’existe pas.'),
-    h('p', null, 'Le lien est peut-être incomplet, ou la page a été retirée.'),
-    h(
-      'div',
-      { class: 'nf-actions' },
-      h('a', { href: member ? '/salon' : '/', class: 'btn btn-primary btn-lg' }, member ? 'Retour au Salon' : 'Retour à l’accueil'),
-      history.length > 1 ? h('button', { type: 'button', class: 'btn btn-ghost btn-lg', onclick: () => history.back() }, 'Page précédente') : null,
-    ),
-  );
+  ctx.title = 'Page introuvable — Vibz';
+  return h('section', { class: 'nf' }, h('div', { class: 'nf-code', 'aria-hidden': 'true' }, '404'), h('h1', null, 'Cette page n’existe pas.'), h('p', null, 'Le lien est peut-être incomplet, ou la page a été retirée.'), h('a', { href: '/', class: 'btn btn-primary btn-lg' }, 'Retour à l’accueil'));
 }
 
 function match(pathname) {
@@ -464,22 +290,11 @@ function match(pathname) {
   return { route: null, params: {} };
 }
 
-// Pages secondaires (Activité, Messages, Amis, Agenda…) : une flèche retour sur téléphone,
-// indispensable dans l'application installée qui n'a pas de bouton « précédent »
-function addBackButton(el, path, u) {
-  const roots = ['/salon', '/journal', `/@${u.username}`.toLowerCase()];
-  if (roots.includes(decodeURIComponent(path).toLowerCase().replace(/\/$/, ''))) return;
-  const head = el?.querySelector?.('.page-head');
-  if (!head || head.querySelector('[aria-label="Retour"]')) return;
-  head.prepend(
-    h('button', { class: 'icon-btn mobile-only page-back', type: 'button', 'aria-label': 'Retour', onclick: () => (history.length > 1 ? history.back() : navigate('/salon')) }, icon('back')),
-  );
-}
-
 async function render(opts = {}) {
   const token = ++renderToken;
   closeModal();
   closeMenu();
+  closeSheet();
   for (const fn of cleanups.splice(0)) {
     try {
       fn();
@@ -497,38 +312,25 @@ async function render(opts = {}) {
   const here = url.pathname + url.search;
 
   if (route) {
-    if (route.access === 'guest' && u) return navigate(u.isMember ? '/salon' : '/rejoindre', { replace: true });
-    if (route.home && u?.isMember) return navigate('/salon', { replace: true });
-    const needsAuth = ['auth', 'member', 'admin'].includes(route.access);
-    if (needsAuth && !u) return navigate(`/connexion?suite=${enc(here)}`, { replace: true });
-    if ((route.access === 'member' || route.access === 'admin') && !u.isMember) return navigate('/rejoindre', { replace: true });
-    if (route.access === 'admin' && !u.isAdmin) return navigate('/salon', { replace: true });
+    if (route.access === 'guest' && u) return navigate(url.searchParams.get('suite') || '/', { replace: true });
+    if ((route.access === 'auth' || route.access === 'admin') && !u) return navigate(`/connexion?suite=${enc(here)}`, { replace: true });
+    if (route.access === 'admin' && !u.isAdmin) return navigate('/', { replace: true });
   }
 
-  const layout = !route ? (u?.isMember ? 'app' : 'bare') : route.layout === 'auto' ? (u?.isMember ? 'app' : 'bare') : route.layout || 'bare';
+  const layout = !route ? 'app' : route.layout === 'auto' ? 'app' : route.layout;
   const mine = [];
-  const ctx = {
-    params,
-    query: url.searchParams,
-    route,
-    title: null,
-    onCleanup: (fn) => {
-      if (typeof fn === 'function') mine.push(fn);
-    },
-  };
+  const ctx = { params, query: url.searchParams, route, title: null, description: null, onCleanup: (fn) => typeof fn === 'function' && mine.push(fn) };
 
   let container;
-  if (layout === 'app') {
-    if (!shell || shell.userId !== u.id) {
-      shell?.destroy();
-      shell = buildShell();
-    }
+  if (layout === 'app' || layout === 'feed') {
+    if (!shell) shell = buildShell();
     if (appEl.firstElementChild !== shell.el) appEl.replaceChildren(shell.el);
-    const nav = route?.nav === 'profil' && params.username?.toLowerCase() !== u.username.toLowerCase() ? null : route?.nav;
-    shell.setActive(nav);
+    const own = route?.nav === 'profile' && u && params.username?.toLowerCase() === u.username.toLowerCase();
+    shell.setActive(route?.nav === 'profile' && !own ? null : route?.nav);
+    shell.el.classList.toggle('is-feed', layout === 'feed');
     shell.el.classList.toggle('wide', Boolean(route?.wide));
     container = shell.main;
-    if (!opts.same) container.replaceChildren(spinner());
+    if (!opts.same) container.replaceChildren(h('div', { class: 'page-loading' }, spinner()));
   } else {
     shell?.destroy();
     shell = null;
@@ -547,59 +349,34 @@ async function render(opts = {}) {
     return;
   }
   cleanups = mine;
-  if (layout === 'app' && route) addBackButton(el, url.pathname, u);
+  if (!el) return;
   const back = opts.pop ? scrollPos.get(lastLocation) : undefined;
-  const swap = () => {
-    container.replaceChildren(el);
-    if (back) restoreScroll(back);
-    else if (location.hash) {
-      // Ancre (#cookies…) : une seconde fois quand polices et tableaux ont pris leur place
-      const go = () => document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
-      go();
-      setTimeout(go, 350);
-    }
-    else if (!opts.same) window.scrollTo(0, 0);
-  };
-  const smooth = !opts.same && !opts.pop && layout === 'app' && document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (smooth) document.startViewTransition(swap);
-  else swap();
-  baseTitle = ctx.title || 'AURUM';
+  container.replaceChildren(el);
+  if (back) requestAnimationFrame(() => window.scrollTo(0, back));
+  else if (location.hash) setTimeout(() => document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView(), 50);
+  else if (!opts.same) window.scrollTo(0, 0);
+  baseTitle = ctx.title || 'Vibz';
   paintTitle();
-  paintMeta(ctx, url);
-  // Mesure d'audience anonyme : le modèle de l'adresse (/@:username), jamais l'adresse réelle
+  const desc = document.querySelector('meta[name="description"]');
+  if (desc && ctx.description) desc.content = ctx.description;
   if (!opts.same) trackPage(route ? route.path : '404');
 }
 
-// Description et adresse canonique de la page (moteurs de recherche, partage de lien)
-const DEFAULT_DESC = document.querySelector('meta[name="description"]')?.content || '';
-function paintMeta(ctx, url) {
-  const desc = document.querySelector('meta[name="description"]');
-  if (desc) desc.content = ctx.description || DEFAULT_DESC;
-  let canon = document.querySelector('link[rel="canonical"]');
-  if (!canon) {
-    canon = document.createElement('link');
-    canon.rel = 'canonical';
-    document.head.append(canon);
-  }
-  canon.href = location.origin + (url.pathname === '/rgpd' ? '/confidentialite' : url.pathname);
-}
-
 // ---------------------------------------------------------------------------
-// Liens internes, historique, session, validation des formulaires
+// Liens internes, historique, session
 // ---------------------------------------------------------------------------
 installFormValidation();
 
-// Hors connexion : un bandeau discret, et un mot quand le réseau revient
-const offlineBar = h('div', { class: 'offline-bar', role: 'status', hidden: navigator.onLine !== false }, icon('wifiOff', 'icon-sm'), 'Hors connexion · tout reprendra au retour du réseau');
+const offlineBar = h('div', { class: 'offline-bar', role: 'status', hidden: navigator.onLine !== false }, icon('wifiOff', 'icon-sm'), 'Hors connexion');
 document.body.append(offlineBar);
 addEventListener('offline', () => (offlineBar.hidden = false));
 addEventListener('online', () => {
   if (offlineBar.hidden) return;
   offlineBar.hidden = true;
-  toast('Connexion rétablie.');
+  toast('Connexion rétablie');
 });
 
-// Erreurs JavaScript : signalées à la Direction (anonymes : message, modèle de page, appareil)
+// Erreurs JavaScript : signalées à l'administration (anonymes : message, modèle de page, appareil)
 {
   let sent = 0;
   const seen = new Set();
@@ -609,12 +386,12 @@ addEventListener('online', () => {
     seen.add(msg);
     sent++;
     const path = match(location.pathname).route?.path || '404';
-    fetch('/api/client-errors', { method: 'POST', headers: { 'x-aurum': '1', 'content-type': 'application/json' }, body: JSON.stringify({ message: msg, stack: String(stack || '').slice(0, 900), path, version: store.config?.version || '' }), keepalive: true }).catch(() => {});
+    fetch('/api/client-errors', { method: 'POST', headers: { 'x-vibz': '1', 'content-type': 'application/json' }, body: JSON.stringify({ message: msg, stack: String(stack || '').slice(0, 900), path, version: store.config?.version || '' }), keepalive: true }).catch(() => {});
   };
   addEventListener('error', (e) => report(e.message, e.error?.stack));
   addEventListener('unhandledrejection', (e) => {
     const r = e.reason;
-    if (r && typeof r === 'object' && 'status' in r) return; // erreur réseau ou refus du serveur : déjà affichée
+    if (r && typeof r === 'object' && 'status' in r) return;
     report(r?.message || String(r), r?.stack);
   });
 }
@@ -625,35 +402,45 @@ document.addEventListener('click', (e) => {
   if (!a || a.target || a.hasAttribute('download')) return;
   const url = new URL(a.href, location.href);
   if (url.origin !== location.origin) return;
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/')) return;
-  if (url.pathname === location.pathname && url.search === location.search && url.hash) return; // ancre dans la page
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/media/')) return;
+  if (url.pathname === location.pathname && url.search === location.search && url.hash) return;
   e.preventDefault();
+  unlockPlayer(); // le lecteur vidéo garde le son pour la suite de la visite
   navigate(url.pathname + url.search + url.hash);
 });
 
 window.addEventListener('popstate', () => {
-  if (location.pathname + location.search === lastLocation) return; // simple changement d'ancre
+  if (location.pathname + location.search === lastLocation) return;
   render({ pop: true });
 });
 
-window.addEventListener('aurum:auth', async (e) => {
-  const { status } = e.detail;
-  if (status === 401 && store.user) {
+// Session expirée pendant la visite : on repasse en visiteur, et on propose de se reconnecter
+window.addEventListener('vibz:auth', async (e) => {
+  if (e.detail?.status !== 401) return;
+  if (store.user) {
     disconnectRealtime();
-    store.setUser(null);
-    navigate('/connexion', { replace: true });
-  } else if (status === 402 && store.user?.isMember) {
-    disconnectRealtime();
-    await store.refresh().catch(() => {});
-    navigate('/rejoindre', { replace: true });
+    await store.refresh().catch(() => store.setUser(null));
+    if (!store.user) {
+      toast('Ta session a expiré. Reconnecte-toi.');
+      render({ same: true });
+    }
   }
 });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeMenu();
-    document.querySelector('.lightbox')?.remove();
     closeModal();
+  }
+});
+
+// Après connexion ou déconnexion : temps réel, notifications, fil
+store.on('user', (u) => {
+  if (u) {
+    connectRealtime();
+    syncPush();
+  } else {
+    disconnectRealtime();
   }
 });
 
@@ -666,17 +453,15 @@ setRenderer(render);
     appEl.replaceChildren(errorView(err));
     return;
   }
-  if (store.isMember) {
+  if (store.user) {
     connectRealtime();
     syncPush();
-    // Les vidéos sont prêtes avant qu'on touche l'onglet
-    setTimeout(() => prefetchReels(), 1200);
   }
+  // Les premières vidéos de « Pour toi » se préparent pendant le rendu
+  if (location.pathname === '/') prefetchReels();
   registerServiceWorker();
-  // Application démarrée : nouvelle version en ligne ? un bouton « Mettre à jour » la propose
-  window.__aurumStarted = true;
+  window.__vibzStarted = true;
   startUpdateChecks();
-  // Toucher une notification ouvre la bonne page
   navigator.serviceWorker?.addEventListener('message', (e) => {
     if (e.data?.type === 'navigate' && typeof e.data.url === 'string') {
       const url = new URL(e.data.url, location.origin);
@@ -684,6 +469,5 @@ setRenderer(render);
     }
   });
   render();
-  setTimeout(() => cookieBanner(), 1500);
+  setTimeout(() => cookieBanner(), 2500);
 })();
-

@@ -1,99 +1,85 @@
 <!doctype html>
 <html lang="fr">
-<!-- AURUM v13 : application gardée sur le téléphone (sw.js), version vérifiée à chaque ouverture -->
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>AURUM — Le cercle privé</title>
-  <meta name="description" content="AURUM, le réseau social privé : vidéos, stories et messages entre les personnes qui comptent. Sans publicité, sans algorithme, sans bruit.">
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <title>Vibz — Pour toi</title>
+  <meta name="description" content="Regarde des vidéos courtes qui te ressemblent, crée les tiennes, partage-les et passe en LIVE avec Vibz.">
+  <meta name="theme-color" content="#000000">
   <meta name="color-scheme" content="light dark">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <!-- Aperçu des liens partagés (WhatsApp, iMessage, Instagram, TikTok, X, LinkedIn…) -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Vibz">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="AURUM">
+  <meta property="og:site_name" content="Vibz">
   <meta property="og:locale" content="fr_FR">
-  <meta property="og:url" content="https://aurumcercle.vercel.app/">
-  <meta property="og:title" content="AURUM — Le cercle privé">
-  <meta property="og:description" content="Un cercle. Pas une foule. Le réseau social privé, sans publicité ni algorithme.">
-  <meta property="og:image" content="https://aurumcercle.vercel.app/img/og.jpg">
-  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:title" content="Vibz — des vidéos courtes, créées par toi">
+  <meta property="og:description" content="Fil « Pour toi », sons, Duo, Stitch, LIVE et messages.">
+  <meta property="og:image" content="/img/og.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Carte de membre AURUM et slogan « Un cercle. Pas une foule. »">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="AURUM — Le cercle privé">
-  <meta name="twitter:description" content="Un cercle. Pas une foule. Le réseau social privé, sans publicité ni algorithme.">
-  <meta name="twitter:image" content="https://aurumcercle.vercel.app/img/og.jpg">
   <link rel="icon" href="/favicon.ico" sizes="48x48">
   <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
-  <link rel="icon" href="/img/favicon-32.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <meta name="apple-mobile-web-app-title" content="AURUM">
-  <link rel="preload" href="/fonts/inter/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="/fonts/inter/inter-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/fonts/inter.css">
   <link rel="stylesheet" href="/css/app.css">
   <script src="/js/boot.js"></script>
   <!-- Tous les modules téléchargés en parallèle (au lieu d'une cascade d'imports) -->
-  <link rel="modulepreload" href="/js/app.js">
   <link rel="modulepreload" href="/js/api.js">
+  <link rel="modulepreload" href="/js/app.js">
+  <link rel="modulepreload" href="/js/components/actions.js">
+  <link rel="modulepreload" href="/js/components/comments.js">
+  <link rel="modulepreload" href="/js/components/compose.js">
+  <link rel="modulepreload" href="/js/components/cookies.js">
+  <link rel="modulepreload" href="/js/components/cropper.js">
+  <link rel="modulepreload" href="/js/components/feed.js">
+  <link rel="modulepreload" href="/js/components/fx.js">
+  <link rel="modulepreload" href="/js/components/grid.js">
+  <link rel="modulepreload" href="/js/components/mentions.js">
+  <link rel="modulepreload" href="/js/components/postedit.js">
+  <link rel="modulepreload" href="/js/components/report.js">
+  <link rel="modulepreload" href="/js/components/sensitive.js">
+  <link rel="modulepreload" href="/js/components/share.js">
+  <link rel="modulepreload" href="/js/components/sheet.js">
+  <link rel="modulepreload" href="/js/components/translate.js">
+  <link rel="modulepreload" href="/js/components/uploads.js">
+  <link rel="modulepreload" href="/js/components/userlist.js">
+  <link rel="modulepreload" href="/js/components/video.js">
   <link rel="modulepreload" href="/js/dom.js">
+  <link rel="modulepreload" href="/js/drafts.js">
   <link rel="modulepreload" href="/js/forms.js">
   <link rel="modulepreload" href="/js/icons.js">
   <link rel="modulepreload" href="/js/push.js">
   <link rel="modulepreload" href="/js/router.js">
-  <link rel="modulepreload" href="/js/saved.js">
-  <link rel="modulepreload" href="/js/drafts.js">
   <link rel="modulepreload" href="/js/store.js">
   <link rel="modulepreload" href="/js/update.js">
-  <link rel="modulepreload" href="/js/warm.js">
-  <link rel="modulepreload" href="/js/components/cookies.js">
-  <link rel="modulepreload" href="/js/components/cropper.js">
-  <link rel="modulepreload" href="/js/components/mentions.js">
-  <link rel="modulepreload" href="/js/components/player.js">
-  <link rel="modulepreload" href="/js/components/post.js">
-  <link rel="modulepreload" href="/js/components/pushcard.js">
-  <link rel="modulepreload" href="/js/components/report.js">
-  <link rel="modulepreload" href="/js/components/sensitive.js">
-  <link rel="modulepreload" href="/js/components/sheet.js">
-  <link rel="modulepreload" href="/js/components/stories.js">
-  <link rel="modulepreload" href="/js/components/tips.js">
-  <link rel="modulepreload" href="/js/components/translate.js">
-  <link rel="modulepreload" href="/js/components/uploads.js">
-  <link rel="modulepreload" href="/js/components/video.js">
   <link rel="modulepreload" href="/js/views/admin.js">
   <link rel="modulepreload" href="/js/views/auth.js">
-  <link rel="modulepreload" href="/js/views/events.js">
+  <link rel="modulepreload" href="/js/views/collections.js">
+  <link rel="modulepreload" href="/js/views/create.js">
   <link rel="modulepreload" href="/js/views/explore.js">
-  <link rel="modulepreload" href="/js/views/feed.js">
-  <link rel="modulepreload" href="/js/views/friends.js">
-  <link rel="modulepreload" href="/js/views/groups.js">
   <link rel="modulepreload" href="/js/views/help.js">
-  <link rel="modulepreload" href="/js/views/invite.js">
-  <link rel="modulepreload" href="/js/views/join.js">
-  <link rel="modulepreload" href="/js/views/journal.js">
-  <link rel="modulepreload" href="/js/views/landing.js">
+  <link rel="modulepreload" href="/js/views/home.js">
+  <link rel="modulepreload" href="/js/views/inbox.js">
   <link rel="modulepreload" href="/js/views/legal.js">
+  <link rel="modulepreload" href="/js/views/live.js">
   <link rel="modulepreload" href="/js/views/messages.js">
-  <link rel="modulepreload" href="/js/views/notifications.js">
-  <link rel="modulepreload" href="/js/views/places.js">
+  <link rel="modulepreload" href="/js/views/onboarding.js">
   <link rel="modulepreload" href="/js/views/profile.js">
+  <link rel="modulepreload" href="/js/views/search.js">
   <link rel="modulepreload" href="/js/views/settings.js">
-  <link rel="modulepreload" href="/js/views/videos.js">
-  <link rel="modulepreload" href="/js/views/welcome.js">
+  <link rel="modulepreload" href="/js/views/studio.js">
+  <link rel="modulepreload" href="/js/views/wallet.js">
+  <link rel="modulepreload" href="/js/warm.js">
   <script type="module" src="/js/app.js"></script>
 </head>
 <body>
   <div id="app">
-    <div class="boot">
-      <div class="boot-logo">AURUM</div>
-    </div>
+    <div class="boot"><div class="boot-logo">vibz</div></div>
   </div>
   <div id="toasts" aria-live="polite"></div>
-  <noscript>AURUM nécessite JavaScript pour fonctionner.</noscript>
+  <noscript>Vibz a besoin de JavaScript pour fonctionner.</noscript>
 </body>
 </html>

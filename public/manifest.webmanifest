@@ -1,17 +1,23 @@
 {
-  "name": "AURUM — Le cercle privé",
-  "short_name": "AURUM",
-  "description": "Le réseau social privé. Sans publicité, sans algorithme, sans bruit.",
+  "name": "Vibz",
+  "short_name": "Vibz",
+  "description": "Des vidéos courtes, créées par toi : fil Pour toi, sons, Duo, Stitch, LIVE et messages.",
   "lang": "fr",
-  "start_url": "/salon",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#000000",
   "theme_color": "#000000",
+  "categories": ["social", "entertainment", "video"],
   "icons": [
     { "src": "/img/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png" },
     { "src": "/img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Créer", "url": "/creer", "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Messages", "url": "/messages", "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192" }] },
+    { "name": "LIVE", "url": "/live", "icons": [{ "src": "/img/icon-192.png", "sizes": "192x192" }] }
   ]
 }

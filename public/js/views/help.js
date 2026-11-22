@@ -1,113 +1,57 @@
-// Aide : les questions qu'on se pose vraiment, en réponses courtes, avec une recherche.
-import { api } from '../api.js';
+// Aide (questions fréquentes) et règles de la communauté.
 import { store } from '../store.js';
+import { navigate } from '../router.js';
 import { h, icon } from '../dom.js';
-import { siteTopbar, siteFooter } from './landing.js';
-import { backHead } from './feed.js';
 
-const SECTIONS = [
-  {
-    title: 'Premiers pas',
-    icon: 'sparkles',
-    items: [
-      ['Comment publier ?', 'Touchez le bouton + en bas de l’écran, puis « Publication ». Écrivez quelques mots, ajoutez jusqu’à 6 photos si vous le souhaitez, et touchez « Publier ».'],
-      ['Comment publier une vidéo ?', 'Bouton + puis « Vidéo ». Choisissez une vidéo d’une minute au plus et touchez « Publier » : elle part telle quelle, en qualité d’origine (aucune recompression), et s’envoie en arrière-plan ; vous pouvez continuer à naviguer. En cas de coupure, l’envoi reprend là où il s’était arrêté. Sur iPhone, pour envoyer exactement le fichier filmé, touchez « Options » dans la fenêtre de choix et prenez le format « Actuel » s’il vous est proposé. Elle reste dans le cercle et sur votre profil tant que vous ne la supprimez pas.'],
-      ['Qu’est-ce qu’une story ?', 'Une photo ou une vidéo visible 24 heures en haut du Salon. Bouton + puis « Story », ou touchez votre photo avec le + en haut du Salon.'],
-      ['Mes vidéos restent-elles en ligne ?', 'Oui : elles restent dans le cercle et sur votre profil tant que vous ne les supprimez pas (menu « … » de la publication). Les stories, elles, sont effacées après 24 heures.'],
-      ['Comment publier plus tard ?', 'Dans la fenêtre de publication, touchez « Brouillon » : votre texte, vos photos et votre vidéo sont gardés sur ce téléphone. Retrouvez-les avec le bouton + puis « Brouillons ».'],
-      ['Comment garder une vidéo ?', 'Touchez « Garder » (le signet) sur la vidéo : elle est copiée sur votre téléphone et reste dans Enregistrés, même sans connexion. Elle ne quitte pas l’application et vous seul la voyez.'],
-      ['Comment fonctionne le Salon ?', 'Le Salon montre les publications du cercle dans l’ordre où elles sont publiées. Aucun algorithme, aucune publicité. « Mes abonnements » n’affiche que les membres que vous suivez.'],
-    ],
-  },
-  {
-    title: 'Vidéos',
-    icon: 'video',
-    items: [
-      ['Comment passer à la vidéo suivante ?', 'Glissez vers le haut. Pour revenir, glissez vers le bas.'],
-      ['Comment aimer une vidéo ?', 'Touchez deux fois la vidéo, ou touchez le cœur à droite.'],
-      ['Comment commenter sans quitter la vidéo ?', 'Touchez la bulle à droite : les commentaires s’ouvrent par-dessus la vidéo, qui continue. Glissez la feuille vers le bas pour la fermer.'],
-      ['Le son ne marche pas', 'Touchez l’icône du haut-parleur en haut à droite. Vérifiez aussi que votre téléphone n’est pas en mode silencieux.'],
-      ['Comment avancer ou revenir dans une vidéo ?', 'Touchez ou faites glisser la fine barre tout en bas de la vidéo : le temps s’affiche en grand pendant que vous glissez.'],
-      ['Comment changer la vitesse ou masquer une vidéo ?', 'Restez appuyé sur la vidéo : vitesse (×0,5 à ×2), « Pas intéressé », masquer les vidéos d’un membre, garder, copier le lien ou signaler.'],
-      ['« Pour toi » et « Abonnements », c’est quoi ?', '« Pour toi » montre tout le cercle, en commençant par les vidéos que vous n’avez pas encore vues. « Abonnements » montre seulement les membres que vous suivez. Pas d’algorithme : l’ordre reste celui des publications.'],
-      ['Qui voit le nombre de vues ?', 'Chaque membre qui regarde une vidéo plus de deux secondes compte pour une vue (une seule fois). Vous voyez les vues de vos vidéos sur la vidéo et dans l’onglet « Vidéos » de votre profil.'],
-    ],
-  },
-  {
-    title: 'Le cercle',
-    icon: 'users',
-    items: [
-      ['Suivre ou être ami : quelle différence ?', 'Suivre, c’est voir les publications d’un membre dans « Mes abonnements ». Être ami, c’est une relation dans les deux sens, acceptée par les deux membres.'],
-      ['Comment écrire en privé à un membre ?', 'Ouvrez son profil et touchez « Message », ou allez dans Messages puis touchez le crayon.'],
-      ['Qu’est-ce qu’un groupe privé ?', 'Un espace réservé à quelques membres, sur invitation ou validation. Ses publications ne sont visibles que de ses membres.'],
-      ['Comment faire entrer un proche ?', 'Menu, puis « Inviter un proche » : partagez votre lien d’invitation. Votre proche entre directement, sans attendre la validation de la Direction.'],
-    ],
-  },
-  {
-    title: 'Notifications',
-    icon: 'bellRing',
-    items: [
-      ['Comment recevoir les notifications sur iPhone ?', 'Dans Safari, touchez « Partager » puis « Sur l’écran d’accueil ». Ouvrez AURUM depuis la nouvelle icône, puis activez les notifications dans Réglages.'],
-      ['Comment les couper ?', 'Réglages, section « Notifications ». Vous pouvez aussi les gérer dans les réglages de votre téléphone.'],
-    ],
-  },
-  {
-    title: 'Compte et confidentialité',
-    icon: 'lock',
-    items: [
-      ['Comment changer ma photo ou mon nom ?', 'Réglages, en haut de la page : photo, couverture, nom, métier, ville et présentation.'],
-      ['J’ai oublié mon mot de passe', 'Sur la page de connexion, touchez « Mot de passe oublié ? » : un lien vous est envoyé par e-mail, valable une heure.'],
-      ['Comment signaler un contenu ou un membre ?', 'Touchez « … » sur la publication, le commentaire ou le profil, puis « Signaler ». La Direction examine chaque signalement.'],
-      ['Comment bloquer quelqu’un ?', 'Sur son profil, touchez « … » puis « Bloquer ». Il ne voit plus vos publications et ne peut plus vous écrire.'],
-      ['Comment télécharger ou supprimer mes données ?', 'Réglages, section « Vos données » : « Exporter mes données » pour tout télécharger, « Supprimer mon compte » pour tout effacer définitivement.'],
-    ],
-  },
-];
+const back = () => h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => (history.length > 1 ? history.back() : navigate(store.user ? '/reglages' : '/')) }, icon('back'));
+const qa = (q, ...a) => h('details', { class: 'faq' }, h('summary', null, q), h('div', { class: 'faq-a' }, ...a.map((x) => (typeof x === 'string' ? h('p', null, x) : x))));
 
-// Typographie française : espaces insécables dans les guillemets et avant ? ! : ;
-const fr = (t) => t.replace(/« /g, '« ').replace(/ »/g, ' »').replace(/ ([?!:;])/g, ' $1');
-
-export async function helpView(ctx) {
-  ctx.title = 'Aide — AURUM';
-  ctx.description = 'Les réponses aux questions fréquentes sur AURUM : publier, vidéos, stories, notifications, confidentialité.';
-  const search = h('input', { class: 'input', type: 'search', placeholder: 'Rechercher une question…', 'aria-label': 'Rechercher dans l’aide' });
-  const none = h('p', { class: 'muted help-none', hidden: true }, 'Aucune réponse ne correspond. Écrivez-nous, nous répondons vite.');
-  const sections = SECTIONS.map((sec) =>
-    h(
-      'section',
-      { class: 'help-section' },
-      h('h2', null, h('span', { class: 'help-ic' }, icon(sec.icon)), sec.title),
-      ...sec.items.map(([q, a]) => h('details', { class: 'help-item' }, h('summary', null, fr(q), icon('chevron', 'icon-sm')), h('p', null, fr(a)))),
-    ),
+export function helpView(ctx) {
+  ctx.title = 'Aide — Vibz';
+  ctx.description = 'Questions fréquentes : regarder, créer, LIVE, messages, confidentialité.';
+  return h(
+    'div',
+    { class: 'page help' },
+    h('header', { class: 'page-head' }, back(), h('h1', null, 'Aide'), h('span', { class: 'icon-btn' })),
+    h('h2', { class: 'section-title' }, 'Regarder'),
+    qa('Comment marche « Pour toi » ?', 'Le fil mêle les vidéos populaires du moment, des nouveautés qui cherchent leur public et des vidéos proches de ce que tu aimes : les comptes, hashtags, sons et thèmes que tu regardes jusqu’au bout, aimes, commentes ou partages. Passer vite une vidéo ou la marquer « Pas intéressé » compte aussi.', 'Tu peux remettre ton fil à zéro, ou le rendre non personnalisé : Réglages → Confidentialité.'),
+    qa('Les gestes', 'Glisse vers le haut pour la vidéo suivante. Touche une fois pour mettre en pause, deux fois pour aimer. Reste appuyé pour les options : vitesse de lecture, « Pas intéressé », enregistrer, signaler. Sur ordinateur : flèches haut et bas, espace pour la pause, M pour le son, L pour aimer.'),
+    qa('Pourquoi la vidéo démarre sans le son ?', 'Les navigateurs coupent le son tant que tu n’as pas touché l’écran. Touche « Activer le son » : il reste activé pour toute la visite.'),
+    h('h2', { class: 'section-title' }, 'Créer'),
+    qa('Publier une vidéo', 'Touche + : filme directement (15 s, 60 s ou 3 min, en plusieurs prises, avec minuteur et filtres) ou importe une vidéo de ton appareil. Ajoute des textes, des autocollants, un filtre et un son, choisis ta couverture, écris ta description avec #hashtags et @mentions, puis publie.', 'La vidéo part en arrière-plan, en qualité d’origine : tu peux continuer à regarder des vidéos pendant l’envoi. Après une coupure, l’envoi reprend là où il s’était arrêté.'),
+    qa('Utiliser le son d’une autre vidéo', 'Touche le disque qui tourne, en bas à droite d’une vidéo, puis « Utiliser ce son ». Le son est mêlé à ta vidéo pendant le tournage.'),
+    qa('Duo et Stitch', 'Dans « Partager » : le Duo place ta vidéo à côté de l’originale ; le Stitch reprend jusqu’à 5 secondes de l’originale avant la tienne. Chaque créateur peut les autoriser ou non pour chacune de ses vidéos.'),
+    qa('Brouillons', 'À la dernière étape, « Brouillon » garde ta vidéo et ta description sur cet appareil pour plus tard (bouton + → Brouillons).'),
+    h('h2', { class: 'section-title' }, 'LIVE et cadeaux'),
+    qa('Passer en LIVE', 'Va dans LIVE → « Passer en LIVE », autorise la caméra et le micro, donne un titre. Tes abonnés sont prévenus. Les spectateurs peuvent commenter, envoyer des cœurs et des cadeaux.', 'L’image passe directement de ton appareil à ceux des spectateurs : une bonne connexion (Wi-Fi ou 4G/5G) est conseillée.'),
+    qa('Pièces et diamants', 'Les pièces s’achètent dans le Portefeuille et servent à offrir des cadeaux pendant les LIVE. Le créateur reçoit des diamants (un par pièce).'),
+    h('h2', { class: 'section-title' }, 'Compte et confidentialité'),
+    qa('Compte privé', 'Réglages → Confidentialité → Compte privé : seules les personnes que tu acceptes voient tes vidéos. Pour chaque vidéo, tu choisis aussi qui la voit (tout le monde, tes amis, ou toi uniquement).'),
+    qa('Bloquer ou signaler', 'Depuis un profil (« … ») : Bloquer empêche ce compte de te voir, te suivre, te commenter et t’écrire. Signaler transmet le contenu à l’équipe de modération, de façon anonyme.'),
+    qa('Notifications', 'Réglages → Notifications. Sur iPhone, ajoute d’abord Vibz à l’écran d’accueil (Partager → Sur l’écran d’accueil), puis ouvre-le depuis l’icône.'),
+    qa('Installer l’application', 'Sur Android et ordinateur : menu du navigateur → « Installer l’application ». Sur iPhone : Partager → « Sur l’écran d’accueil ». Vibz s’ouvre alors en plein écran, comme une application.'),
+    h('h2', { class: 'section-title', id: 'apparence' }, 'Apparence'),
+    h('p', { class: 'muted' }, 'Clair, sombre ou comme l’appareil : Réglages → Apparence. Le fil des vidéos reste toujours sombre.'),
+    h('p', { class: 'help-links' }, h('a', { href: '/regles' }, 'Règles de la communauté'), ' · ', h('a', { href: '/cgu' }, 'Conditions d’utilisation'), ' · ', h('a', { href: '/confidentialite' }, 'Confidentialité'), ' · ', h('a', { href: '/mentions-legales' }, 'Contact')),
   );
-  const norm = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  search.addEventListener('input', () => {
-    const q = norm(search.value.trim());
-    let any = false;
-    for (const sec of sections) {
-      let shown = 0;
-      for (const d of sec.querySelectorAll('.help-item')) {
-        const ok = !q || norm(d.textContent).includes(q);
-        d.hidden = !ok;
-        if (ok) shown++;
-        if (q && ok) d.open = true;
-      }
-      sec.hidden = !shown;
-      any = any || shown > 0;
-    }
-    none.hidden = any;
-  });
-  // Contact : l'adresse de la Direction (informations légales)
-  const contact = h('div', { class: 'help-contact' });
-  api
-    .get('/api/legal')
-    .then(({ legal }) => {
-      if (legal?.email) {
-        contact.append(h('b', null, 'Une autre question ?'), h('span', null, 'La Direction vous répond, en général dans la journée.'), h('a', { class: 'btn btn-primary', href: `mailto:${legal.email}` }, icon('mail', 'icon-sm'), 'Écrire à la Direction'));
-      }
-    })
-    .catch(() => {});
-  const body = h('div', { class: 'help' }, h('div', { class: 'help-search' }, icon('search'), search), none, ...sections, contact);
-  if (store.isMember) return h('div', null, backHead('Aide', 'Questions fréquentes'), body);
-  return h('div', null, siteTopbar(), h('div', { class: 'container narrow legal-page' }, h('h1', null, 'Aide'), body), siteFooter());
+}
+
+export function rulesView(ctx) {
+  ctx.title = 'Règles de la communauté — Vibz';
+  const rule = (emoji, title, text) => h('div', { class: 'rule' }, h('span', { class: 'rule-emoji' }, emoji), h('div', null, h('h3', null, title), h('p', null, text)));
+  return h(
+    'div',
+    { class: 'page rules' },
+    h('header', { class: 'page-head' }, back(), h('h1', null, 'Règles de la communauté'), h('span', { class: 'icon-btn' })),
+    h('p', { class: 'lead' }, 'Vibz est un endroit pour créer, rire, apprendre et partager. Ces règles s’appliquent aux vidéos, photos, sons, descriptions, commentaires, messages, LIVE et profils.'),
+    rule('🤝', 'Respect', 'Pas de harcèlement, d’insultes, de menaces ni de propos haineux visant une personne ou un groupe (origine, religion, genre, orientation, handicap…).'),
+    rule('🛡️', 'Sécurité des mineurs', 'Aucun contenu sexualisant des mineurs, aucune sollicitation. Les comptes de moins de 13 ans sont interdits.'),
+    rule('🔞', 'Nudité et contenu sexuel', 'Nudité, actes sexuels et contenus pornographiques sont interdits.'),
+    rule('⚠️', 'Violence et actes dangereux', 'Pas de violence réelle, de contenus choquants, ni de défis qui mettent en danger (soi ou les autres).'),
+    rule('🎭', 'Authenticité', 'Pas d’usurpation d’identité, de faux comptes, de spam, d’arnaques ni de manipulation des J’aime ou des vues.'),
+    rule('©️', 'Propriété intellectuelle', 'Ne publie que ce que tu as le droit de publier : tes images, tes sons, ou ceux d’autres créateurs de Vibz via Duo, Stitch et « Utiliser ce son ».'),
+    rule('🔒', 'Vie privée', 'Ne publie pas les informations personnelles de quelqu’un (adresse, téléphone, documents) ni d’images de personnes sans leur accord.'),
+    h('h2', { class: 'section-title' }, 'Ce qui se passe en cas de manquement'),
+    h('p', null, 'Les contenus signalés sont examinés. Selon la gravité : contenu masqué ou retiré, LIVE arrêté, compte suspendu. Tu peux contester une décision en écrivant à l’adresse des mentions légales.'),
+  );
 }

@@ -1,111 +1,160 @@
 'use strict';
-const { detectLang } = require('./translate');
-
 // Sérialisation et logique sociale partagée entre les routes.
+const { detectLang } = require('./translate');
+const { extractMentions } = require('./tags');
 
-function isFounder(ctx, memberNumber) {
-  return memberNumber != null && memberNumber <= ctx.config.founderLimit;
-}
+// Spectateur courant dans les requêtes SQL : « v.id » (0 sans compte) et « v.admin ».
+// Le seul paramètre de ces sélections est l'identifiant du spectateur, placé en premier.
+const VIEWER = '(SELECT x.id, COALESCE((SELECT is_admin FROM users WHERE id = x.id), 0) AS admin FROM (SELECT ? AS id) x) v';
+const NOW_MS = "(CAST(strftime('%s','now') AS INTEGER) * 1000)";
+// LIVE en cours d'un compte (le direct qui ne donne plus signe de vie depuis 45 s ne compte plus)
+const LIVE_OF = (col) => `(SELECT lv.id FROM lives lv WHERE lv.user_id = ${col} AND lv.ended_at IS NULL AND lv.last_beat > ${NOW_MS} - 45000 ORDER BY lv.id DESC LIMIT 1)`;
 
-function authorOf(ctx, row, prefix = '') {
+// Comptes bloqués dans un sens ou dans l'autre
+const BLOCKED_WITH = (col) => `${col} IN (SELECT blocked_id FROM blocks WHERE blocker_id = v.id UNION SELECT blocker_id FROM blocks WHERE blocked_id = v.id)`;
+
+// Amis = abonnements réciproques
+const FRIEND_OF = (col) => `(EXISTS (SELECT 1 FROM follows f1 WHERE f1.follower_id = v.id AND f1.followee_id = ${col})
+  AND EXISTS (SELECT 1 FROM follows f2 WHERE f2.follower_id = ${col} AND f2.followee_id = v.id))`;
+
+// Publication visible par le spectateur v (p = publication, u = auteur)
+const VISIBLE = `(p.user_id = v.id OR (
+  u.banned_at IS NULL AND u.is_bot = 0
+  AND (p.privacy = 'public' OR (p.privacy = 'friends' AND ${FRIEND_OF('p.user_id')}))
+  AND (u.private_account = 0 OR EXISTS (SELECT 1 FROM follows fa WHERE fa.follower_id = v.id AND fa.followee_id = p.user_id))
+  AND NOT ${BLOCKED_WITH('p.user_id')}
+))`;
+// La même, plus tout pour l'administration (modération)
+const VISIBLE_OR_ADMIN = `(v.admin = 1 OR ${VISIBLE})`;
+
+function authorOf(row, prefix = '') {
   return {
     id: row[`${prefix}user_id`] ?? row.id,
     username: row[`${prefix}username`],
     displayName: row[`${prefix}display_name`],
     avatar: row[`${prefix}avatar`] || null,
-    memberNumber: row[`${prefix}member_number`] ?? null,
-    founder: isFounder(ctx, row[`${prefix}member_number`]),
     verified: Boolean(row[`${prefix}verified_at`]),
-    bot: Boolean(row[`${prefix}is_bot`]),
   };
 }
 
-function publicUser(ctx, u) {
-  return {
+// ---------------------------------------------------------------------------
+// Comptes
+// ---------------------------------------------------------------------------
+const USER_SELECT = `
+  SELECT u.*,
+    (SELECT COUNT(*) FROM follows f WHERE f.followee_id = u.id) AS followers_count,
+    (SELECT COUNT(*) FROM follows f WHERE f.follower_id = u.id) AS following_count,
+    (SELECT COUNT(*) FROM likes l JOIN posts lp ON lp.id = l.post_id WHERE lp.user_id = u.id) AS likes_count,
+    (SELECT COUNT(*) FROM posts cp WHERE cp.user_id = u.id AND (cp.user_id = v.id OR cp.privacy = 'public')) AS posts_count,
+    EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = v.id AND f.followee_id = u.id) AS is_following,
+    EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = u.id AND f.followee_id = v.id) AS follows_you,
+    EXISTS(SELECT 1 FROM follow_requests r WHERE r.requester_id = v.id AND r.target_id = u.id) AS requested,
+    EXISTS(SELECT 1 FROM blocks b WHERE b.blocker_id = v.id AND b.blocked_id = u.id) AS blocked,
+    EXISTS(SELECT 1 FROM blocks b WHERE b.blocker_id = u.id AND b.blocked_id = v.id) AS blocked_by,
+    ${LIVE_OF('u.id')} AS live_id
+  FROM ${VIEWER} CROSS JOIN users u`;
+
+function serializeUser(ctx, u, viewer) {
+  const me = viewer && viewer.id === u.id;
+  const out = {
     id: u.id,
     username: u.username,
     displayName: u.display_name,
     avatar: u.avatar || null,
-    cover: u.cover || null,
-    bio: u.bio,
-    city: u.city,
-    profession: u.profession,
-    website: u.website,
-    memberNumber: u.member_number ?? null,
-    founder: isFounder(ctx, u.member_number),
+    bio: u.bio || '',
+    website: u.website || '',
     verified: Boolean(u.verified_at),
-    bot: Boolean(u.is_bot),
-    joinedAt: u.paid_at || u.created_at,
+    private: Boolean(u.private_account),
+    demo: Boolean(u.is_demo),
+    joinedAt: u.created_at,
+    live: u.live_id || null,
     online: ctx.hub.isOnline(u.id),
   };
+  if ('followers_count' in u) {
+    out.counts = { followers: u.followers_count, following: u.following_count, likes: u.likes_count, posts: u.posts_count };
+    out.isFollowing = Boolean(u.is_following);
+    out.followsYou = Boolean(u.follows_you);
+    out.friend = Boolean(u.is_following && u.follows_you);
+    out.requested = Boolean(u.requested);
+    out.blocked = Boolean(u.blocked);
+    out.blockedBy = Boolean(u.blocked_by);
+    out.me = Boolean(me);
+    // Contenus d'un compte privé : réservés à ses abonnés
+    out.locked = Boolean(u.private_account && !me && !u.is_following);
+    out.showLiked = Boolean(u.show_liked) || Boolean(me);
+  }
+  return out;
+}
+
+function prefs(u) {
+  try {
+    return { likes: true, comments: true, follows: true, mentions: true, messages: true, live: true, ...JSON.parse(u.notify_prefs || '{}') };
+  } catch {
+    return { likes: true, comments: true, follows: true, mentions: true, messages: true, live: true };
+  }
 }
 
 function selfUser(ctx, u) {
   return {
-    ...publicUser(ctx, u),
+    ...serializeUser(ctx, u, u),
     email: u.email,
-    isMember: Boolean(u.paid_at),
     isAdmin: Boolean(u.is_admin),
-    emailDigest: u.email_digest !== 0,
+    coins: u.coins || 0,
+    diamonds: u.diamonds || 0,
     lang: u.lang || null,
-    admission: u.paid_at
-      ? null
-      : {
-          requested: Boolean(u.admission_requested_at),
-          declined: Boolean(u.admission_declined_at),
-          // Admission acceptée (invitation ou Direction) : reste le droit d'entrée à régler
-          approved: Boolean(u.admission_approved_at),
-          note: u.admission_note || '',
-        },
+    onboarded: Boolean(u.onboarded_at),
+    settings: {
+      privateAccount: Boolean(u.private_account),
+      showLiked: Boolean(u.show_liked),
+      dmPolicy: u.dm_policy || 'everyone',
+      personalized: u.personalized !== 0,
+      notify: prefs(u),
+    },
   };
 }
 
-// Réactions disponibles (la première est celle d'un simple toucher).
-const REACTIONS = ['love', 'like', 'bravo', 'fire', 'haha', 'wow'];
-
-// Le seul paramètre de POST_SELECT est l'identifiant du membre qui consulte (v.id) ;
-// il précède tous les paramètres de la clause WHERE ajoutée par l'appelant.
+// ---------------------------------------------------------------------------
+// Publications
+// ---------------------------------------------------------------------------
 const POST_SELECT = `
-  SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.groupe_id, p.journal_id, p.flagged, p.preview_at, p.video_id,
+  SELECT p.id, p.body, p.image, p.created_at, p.edited_at, p.user_id, p.flagged, p.video_id, p.sound_id, p.privacy,
+         p.allow_comments, p.allow_duet, p.allow_stitch, p.allow_download, p.category, p.fx, p.bg, p.duet_of, p.stitch_of,
+         p.pinned_at, p.pinned_comment_id, p.share_count, p.guest_views,
          vid.mime AS v_mime, vid.width AS v_width, vid.height AS v_height, vid.duration AS v_duration, vid.size AS v_size,
-         ji.kind AS j_kind, ji.title AS j_title, ji.image AS j_image, ji.url AS j_url, ji.site_name AS j_site, ji.summary AS j_summary,
-         u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
+         u.username, u.display_name, u.avatar, u.verified_at, u.private_account,
+         s.title AS s_title, s.post_id AS s_post_id, s.video_id AS s_video_id, s.cover AS s_cover, s.duration AS s_duration,
+         su.username AS s_username, su.display_name AS s_display_name, su.avatar AS s_avatar, sv.mime AS s_mime,
+         dp.id AS d_id, du.username AS d_username, du.display_name AS d_display_name,
          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count,
-         (SELECT GROUP_CONCAT(l.reaction) FROM likes l WHERE l.post_id = p.id) AS reactions,
          (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
-         (SELECT l.reaction FROM likes l WHERE l.post_id = p.id AND l.user_id = v.id) AS my_reaction,
+         (SELECT COUNT(*) FROM bookmarks b WHERE b.post_id = p.id) AS save_count,
+         (SELECT COUNT(*) FROM reposts rp WHERE rp.post_id = p.id) AS repost_count,
+         (SELECT COALESCE(SUM(vv.plays), 0) FROM video_views vv WHERE vv.post_id = p.id) + p.guest_views AS view_count,
+         EXISTS(SELECT 1 FROM likes l WHERE l.post_id = p.id AND l.user_id = v.id) AS liked,
          EXISTS(SELECT 1 FROM bookmarks b WHERE b.post_id = p.id AND b.user_id = v.id) AS saved,
+         EXISTS(SELECT 1 FROM reposts rp WHERE rp.post_id = p.id AND rp.user_id = v.id) AS reposted,
          EXISTS(SELECT 1 FROM follows fw WHERE fw.follower_id = v.id AND fw.followee_id = p.user_id) AS follows_author,
-         (SELECT GROUP_CONCAT(pm.url, '|') FROM post_media pm WHERE pm.post_id = p.id) AS media,
-         CASE WHEN p.video_id IS NULL THEN 0 ELSE (SELECT COUNT(*) FROM video_views vv WHERE vv.post_id = p.id) END AS view_count
-  FROM (SELECT ? AS id) v
+         EXISTS(SELECT 1 FROM follow_requests fr WHERE fr.requester_id = v.id AND fr.target_id = p.user_id) AS requested_author,
+         (SELECT GROUP_CONCAT(url, '|') FROM (SELECT pm.url FROM post_media pm WHERE pm.post_id = p.id ORDER BY pm.position, pm.id)) AS media,
+         ${LIVE_OF('p.user_id')} AS live_id
+  FROM ${VIEWER}
   CROSS JOIN posts p
   JOIN users u ON u.id = p.user_id
-  LEFT JOIN journal_items ji ON ji.id = p.journal_id
-  LEFT JOIN videos vid ON vid.id = p.video_id`;
+  LEFT JOIN videos vid ON vid.id = p.video_id
+  LEFT JOIN sounds s ON s.id = p.sound_id
+  LEFT JOIN users su ON su.id = s.author_id
+  LEFT JOIN videos sv ON sv.id = s.video_id AND sv.complete = 1
+  LEFT JOIN posts dp ON dp.id = COALESCE(p.duet_of, p.stitch_of)
+  LEFT JOIN users du ON du.id = dp.user_id`;
 
-// Publications hors groupes (fil, profils, recherche, tendances).
-const PUBLIC_POST = 'p.groupe_id IS NULL';
-// Publications visibles par le lecteur v.id : publiques ou de ses groupes.
-const VISIBLE_POST = `(p.groupe_id IS NULL OR p.groupe_id IN (SELECT groupe_id FROM groupe_members WHERE user_id = v.id AND status = 'member'))`;
-
-// À ajouter dans la clause WHERE d'une requête POST_SELECT : masque les membres bloqués.
-const NOT_BLOCKED = `p.user_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = v.id
-                                       UNION SELECT blocker_id FROM blocks WHERE blocked_id = v.id)`;
-
-// Vrai si l'un des deux membres a bloqué l'autre.
-async function isBlocked(ctx, a, b) {
-  return Boolean(
-    await ctx.db.get('SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)', a, b, b, a),
-  );
-}
-
-function reactionSummary(list) {
-  const counts = {};
-  for (const r of (list || '').split(',').filter(Boolean)) counts[r] = (counts[r] || 0) + 1;
-  return Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([type, count]) => ({ type, count }));
+function parseFx(value) {
+  if (!value) return null;
+  try {
+    const fx = JSON.parse(value);
+    return fx && typeof fx === 'object' ? fx : null;
+  } catch {
+    return null;
+  }
 }
 
 // « injure,sexuel » → ['Insulte', 'Propos sexuels déplacés'] ; null si rien à signaler
@@ -114,110 +163,157 @@ function flaggedLabels(value) {
   return require('./contentFilter').labels(String(value).split(','));
 }
 
+function postKind(row) {
+  if (row.video_id) return 'video';
+  if (row.image || row.media) return 'photo';
+  return 'text';
+}
+
 function serializePost(ctx, row, viewer) {
-  const mine = row.user_id === viewer.id;
-  // Vidéo : l'aperçu reste dans « image » (grilles, notifications), mais n'entre pas dans la galerie
+  const V = require('./videos');
+  const mine = Boolean(viewer && row.user_id === viewer.id);
+  const kind = postKind(row);
   const video = row.video_id
     ? {
-        url: require('./videos').videoUrl(row.video_id, require('./videos').TYPES[row.v_mime] || 'mp4'),
+        url: V.videoUrl(row.video_id, V.TYPES[row.v_mime] || 'mp4'),
         poster: row.image || null,
         width: row.v_width || null,
         height: row.v_height || null,
         duration: row.v_duration || null,
-        size: row.v_size || null, // le téléphone télécharge la vidéo entière d'avance (morceaux de 1 Mo)
-        // Éphémère : effacée à cette date (comme une story)
-        expiresAt: require('./videos').expiresAt(ctx, row.created_at),
-        views: row.view_count || 0,
+        size: row.v_size || null,
+        expiresAt: V.expiresAt(ctx, row.created_at),
       }
     : null;
   const images = video ? [] : [row.image, ...(row.media ? row.media.split('|') : [])].filter(Boolean);
+  const sound = row.sound_id && row.s_title
+    ? {
+        id: row.sound_id,
+        title: row.s_title,
+        original: row.s_post_id === row.id,
+        author: { username: row.s_username, displayName: row.s_display_name, avatar: row.s_avatar || null },
+        cover: row.s_cover || row.s_avatar || null,
+        url: row.s_video_id && row.s_mime ? V.videoUrl(row.s_video_id, V.TYPES[row.s_mime] || 'mp4') : null,
+        duration: row.s_duration || null,
+      }
+    : null;
+  const source = row.d_id ? { id: row.d_id, username: row.d_username, displayName: row.d_display_name } : null;
   return {
     id: row.id,
+    kind,
     body: row.body,
     lang: detectLang(row.body),
-    image: video ? video.poster : images[0] || null,
-    images,
-    video,
     createdAt: row.created_at,
     editedAt: row.edited_at || null,
-    groupId: row.groupe_id || null,
-    // Contenu du Journal partagé dans le Salon (carte avec photo et titre)
-    journal: row.journal_id && row.j_title
-      ? { id: row.journal_id, kind: row.j_kind, title: row.j_title, image: row.j_image || null, url: row.j_url, siteName: row.j_site || '', summary: row.j_summary || '' }
-      : null,
-    author: authorOf(ctx, row),
-    likeCount: row.like_count,
-    reactions: reactionSummary(row.reactions),
-    myReaction: row.my_reaction || null,
-    liked: Boolean(row.my_reaction),
+    video,
+    images,
+    bg: row.bg || null,
+    author: { ...authorOf(row), private: Boolean(row.private_account), live: row.live_id || null },
+    likeCount: row.like_count || 0,
+    commentCount: row.comment_count || 0,
+    saveCount: row.save_count || 0,
+    shareCount: row.share_count || 0,
+    repostCount: row.repost_count || 0,
+    viewCount: row.view_count || 0,
+    liked: Boolean(row.liked),
     saved: Boolean(row.saved),
-    commentCount: row.comment_count,
-    // Le lecteur suit-il déjà l'auteur ? (bouton « Suivre » sur les vidéos et les publications)
+    reposted: Boolean(row.reposted),
     followsAuthor: Boolean(row.follows_author),
+    requestedAuthor: Boolean(row.requested_author),
     mine,
-    canDelete: mine || Boolean(viewer.is_admin),
-    // Filtre automatique : texte masqué derrière un avertissement (catégories détectées)
+    sound,
+    privacy: row.privacy || 'public',
+    allowComments: row.allow_comments !== 0,
+    allowDuet: row.allow_duet !== 0 && kind === 'video',
+    allowStitch: row.allow_stitch !== 0 && kind === 'video',
+    allowDownload: row.allow_download !== 0,
+    category: row.category || null,
+    fx: parseFx(row.fx),
+    duetOf: row.duet_of && source ? source : null,
+    stitchOf: row.stitch_of && source ? source : null,
+    pinned: Boolean(row.pinned_at),
+    pinnedCommentId: row.pinned_comment_id || null,
+    canDelete: mine || Boolean(viewer?.is_admin),
     flagged: flaggedLabels(row.flagged),
-    // Annonce dévoilée d'abord aux Fondateurs
-    preview: Boolean(row.preview_at),
   };
 }
 
-async function getPost(ctx, postId, viewer) {
-  const row = await ctx.db.get(`${POST_SELECT} WHERE p.id = ?`, viewer.id, postId);
+// Une publication visible par ce spectateur (null sinon)
+async function getPost(ctx, postId, viewer, { admin = true } = {}) {
+  const row = await ctx.db.get(`${POST_SELECT} WHERE p.id = ? AND ${admin ? VISIBLE_OR_ADMIN : VISIBLE}`, viewer?.id || 0, postId);
   return row ? serializePost(ctx, row, viewer) : null;
 }
 
-// Le premier paramètre est l'identifiant du membre qui lit (ses J'aime sur les commentaires)
+// Plusieurs publications, dans l'ordre demandé (les invisibles sont écartées)
+async function getPosts(ctx, ids, viewer) {
+  if (!ids.length) return [];
+  const rows = await ctx.db.all(`${POST_SELECT} WHERE p.id IN (${ids.map(() => '?').join(',')}) AND ${VISIBLE}`, viewer?.id || 0, ...ids);
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  return ids.map((id) => byId.get(id)).filter(Boolean).map((r) => serializePost(ctx, r, viewer));
+}
+
+// ---------------------------------------------------------------------------
+// Commentaires
+// ---------------------------------------------------------------------------
 const COMMENT_SELECT = `
   SELECT c.id, c.post_id, c.parent_id, c.body, c.created_at, c.user_id, c.flagged,
-         u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot,
+         u.username, u.display_name, u.avatar, u.verified_at,
+         p.user_id AS post_author_id, p.pinned_comment_id,
          (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = c.id) AS like_count,
-         EXISTS(SELECT 1 FROM comment_likes cl WHERE cl.comment_id = c.id AND cl.user_id = v.id) AS liked
-  FROM (SELECT ? AS id) v CROSS JOIN comments c JOIN users u ON u.id = c.user_id`;
+         EXISTS(SELECT 1 FROM comment_likes cl WHERE cl.comment_id = c.id AND cl.user_id = v.id) AS liked,
+         EXISTS(SELECT 1 FROM comment_likes cl WHERE cl.comment_id = c.id AND cl.user_id = p.user_id) AS author_liked,
+         (SELECT COUNT(*) FROM comments r WHERE r.parent_id = c.id) AS reply_count
+  FROM ${VIEWER} CROSS JOIN comments c JOIN users u ON u.id = c.user_id JOIN posts p ON p.id = c.post_id`;
 
 function serializeComment(ctx, row, viewer) {
+  const mine = Boolean(viewer && row.user_id === viewer.id);
+  const postOwner = Boolean(viewer && row.post_author_id === viewer.id);
   return {
     id: row.id,
     postId: row.post_id,
+    parentId: row.parent_id || null,
     body: row.body,
     lang: detectLang(row.body),
     createdAt: row.created_at,
-    author: authorOf(ctx, row),
-    canDelete: row.user_id === viewer.id || Boolean(viewer.is_admin),
-    flagged: flaggedLabels(row.flagged),
-    // Réponse à un autre commentaire (un seul niveau, comme TikTok) et J'aime
-    parentId: row.parent_id || null,
+    author: authorOf(row),
+    byCreator: row.user_id === row.post_author_id,
     likeCount: row.like_count || 0,
     liked: Boolean(row.liked),
+    authorLiked: Boolean(row.author_liked),
+    replyCount: row.reply_count || 0,
+    pinned: row.pinned_comment_id === row.id,
+    mine,
+    canDelete: mine || postOwner || Boolean(viewer?.is_admin),
+    canPin: postOwner && !row.parent_id,
+    flagged: flaggedLabels(row.flagged),
   };
 }
 
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
 const NOTIF_SELECT = `
-  SELECT n.id, n.type, n.post_id, n.groupe_id, n.event_id, n.place_id, n.created_at, n.read_at,
-         a.id AS user_id, a.username, a.display_name, a.avatar, a.member_number, a.verified_at, a.is_bot,
-         CASE WHEN p.flagged IS NULL THEN p.body ELSE '' END AS post_body, p.image AS post_image,
-         g.name AS groupe_name, e.title AS event_title, pl.name AS place_name
+  SELECT n.id, n.type, n.post_id, n.comment_id, n.live_id, n.body, n.created_at, n.read_at,
+         a.id AS user_id, a.username, a.display_name, a.avatar, a.verified_at,
+         p.image AS post_image, CASE WHEN p.flagged IS NULL THEN p.body ELSE '' END AS post_body,
+         EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = n.user_id AND f.followee_id = a.id) AS following_back,
+         EXISTS(SELECT 1 FROM follow_requests fr WHERE fr.requester_id = a.id AND fr.target_id = n.user_id) AS pending_request
   FROM notifications n
   JOIN users a ON a.id = n.actor_id
-  LEFT JOIN posts p ON p.id = n.post_id
-  LEFT JOIN groupes g ON g.id = n.groupe_id
-  LEFT JOIN events e ON e.id = n.event_id
-  LEFT JOIN places pl ON pl.id = n.place_id`;
+  LEFT JOIN posts p ON p.id = n.post_id`;
 
-function serializeNotification(ctx, row) {
+function serializeNotification(_ctx, row) {
   return {
     id: row.id,
     type: row.type,
     createdAt: row.created_at,
     read: Boolean(row.read_at),
-    actor: authorOf(ctx, row),
-    post: row.post_id
-      ? { id: row.post_id, excerpt: (row.post_body || '').slice(0, 120), image: row.post_image || null }
-      : null,
-    group: row.groupe_id ? { id: row.groupe_id, name: row.groupe_name || 'Groupe' } : null,
-    event: row.event_id ? { id: row.event_id, title: row.event_title || 'Événement' } : null,
-    place: row.place_id ? { id: row.place_id, name: row.place_name || 'Adresse' } : null,
+    actor: authorOf(row),
+    followingBack: Boolean(row.following_back),
+    pendingRequest: Boolean(row.pending_request),
+    body: row.body || '',
+    post: row.post_id ? { id: row.post_id, image: row.post_image || null, excerpt: (row.post_body || '').slice(0, 100) } : null,
+    commentId: row.comment_id || null,
+    liveId: row.live_id || null,
   };
 }
 
@@ -225,7 +321,7 @@ async function counters(ctx, userId) {
   const row = await ctx.db.get(
     `SELECT (SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL) AS n,
             (SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND read_at IS NULL) AS m,
-            (SELECT COUNT(*) FROM friend_requests WHERE addressee_id = ? AND status = 'pending') AS r`,
+            (SELECT COUNT(*) FROM follow_requests WHERE target_id = ?) AS r`,
     userId, userId, userId,
   );
   return { notifications: row.n, messages: row.m, requests: row.r };
@@ -235,73 +331,126 @@ async function pushCounters(ctx, userId) {
   if (ctx.hub.isOnline(userId)) ctx.hub.send(userId, 'counters', await counters(ctx, userId));
 }
 
-const DEDUP = ['like', 'comment_like', 'follow', 'friend_request', 'friend_accept', 'group_invite', 'group_request', 'event_join', 'place_endorse', 'admission_request', 'invite_accepted'];
+// Une seule notification par action répétée (J'aime retiré puis remis, etc.)
+const DEDUP = ['like', 'comment_like', 'follow', 'follow_request', 'follow_accept', 'repost', 'favorite'];
 
-async function notify(ctx, { userId, actorId, type, postId = null, groupId = null, eventId = null, placeId = null }) {
+// Texte des notifications sur le téléphone (pas pour les J'aime : trop fréquents)
+function pushText(type, actorName, body, user) {
+  const p = prefs(user);
+  const clip = (s) => (s.length > 120 ? `${s.slice(0, 117)}…` : s);
+  switch (type) {
+    case 'follow': return p.follows && `${actorName} a commencé à te suivre.`;
+    case 'follow_request': return p.follows && `${actorName} souhaite s’abonner à ton compte.`;
+    case 'follow_accept': return p.follows && `${actorName} a accepté ta demande d’abonnement.`;
+    case 'comment': return p.comments && `${actorName} a commenté : ${clip(body)}`;
+    case 'reply': return p.comments && `${actorName} a répondu : ${clip(body)}`;
+    case 'mention': return p.mentions && `${actorName} parle de toi : ${clip(body)}`;
+    case 'live': return p.live && `${actorName} est en LIVE${body ? ` : ${clip(body)}` : ''}`;
+    case 'duet': return p.comments && `${actorName} a fait un Duo avec ta vidéo.`;
+    case 'stitch': return p.comments && `${actorName} a fait un Stitch de ta vidéo.`;
+    case 'gift': return p.likes && `${actorName} t’a envoyé ${body}.`;
+    default: return null;
+  }
+}
+
+function notificationUrl(type, n, actorUsername, ownerUsername) {
+  if (type === 'follow' || type === 'follow_accept') return `/@${actorUsername}`;
+  if (type === 'follow_request') return '/activite?type=demandes';
+  if (type === 'live') return `/live/${actorUsername}`;
+  if (n.postId) return `/@${ownerUsername}/video/${n.postId}${n.commentId ? `?commentaire=${n.commentId}` : ''}`;
+  return '/activite';
+}
+
+async function notify(ctx, { userId, actorId, type, postId = null, commentId = null, liveId = null, body = null }) {
   if (!userId || userId === actorId) return;
+  if (await isBlocked(ctx, userId, actorId)) return;
   if (DEDUP.includes(type)) {
-    // Pas de doublon pour une même action répétée
     const existing = await ctx.db.get(
-      'SELECT id FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ? AND groupe_id IS ? AND event_id IS ? AND place_id IS ?',
-      userId, actorId, type, postId, groupId, eventId, placeId,
+      'SELECT id FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ? AND comment_id IS ?',
+      userId, actorId, type, postId, commentId,
     );
     if (existing) return;
   }
   const { lastInsertRowid } = await ctx.db.run(
-    'INSERT INTO notifications (user_id, actor_id, type, post_id, groupe_id, event_id, place_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    userId, actorId, type, postId, groupId, eventId, placeId, Date.now(),
+    'INSERT INTO notifications (user_id, actor_id, type, post_id, comment_id, live_id, body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    userId, actorId, type, postId, commentId, liveId, body ? String(body).slice(0, 300) : null, Date.now(),
   );
   if (ctx.hub.isOnline(userId)) {
     const row = await ctx.db.get(`${NOTIF_SELECT} WHERE n.id = ?`, lastInsertRowid);
-    ctx.hub.send(userId, 'notification', serializeNotification(ctx, row));
+    if (row) ctx.hub.send(userId, 'notification', serializeNotification(ctx, row));
     await pushCounters(ctx, userId);
+  }
+  // Notification sur le téléphone, selon les réglages de la personne
+  const [user, actor] = await Promise.all([
+    ctx.db.get('SELECT id, username, notify_prefs FROM users WHERE id = ?', userId),
+    ctx.db.get('SELECT username, display_name FROM users WHERE id = ?', actorId),
+  ]);
+  const text = user && actor && pushText(type, actor.display_name, body || '', user);
+  if (text) {
+    const { sendPush } = require('./push');
+    let owner = user.username;
+    if (postId) owner = (await ctx.db.get('SELECT u.username FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ?', postId))?.username || owner;
+    await sendPush(ctx, userId, {
+      title: ctx.config.appName,
+      body: text,
+      url: notificationUrl(type, { postId, commentId }, actor.username, owner),
+      tag: `${type}-${postId || actorId}`,
+    });
   }
 }
 
-async function retractNotification(ctx, { userId, actorId, type, postId = null, groupId = null, eventId = null, placeId = null }) {
+async function retractNotification(ctx, { userId, actorId, type, postId = null, commentId = null }) {
   await ctx.db.run(
-    'DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ? AND groupe_id IS ? AND event_id IS ? AND place_id IS ?',
-    userId, actorId, type, postId, groupId, eventId, placeId,
+    'DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND type = ? AND post_id IS ? AND comment_id IS ?',
+    userId, actorId, type, postId, commentId,
   );
   await pushCounters(ctx, userId);
 }
 
-const MENTION_RE = /(^|[^\w@.])@([a-z0-9_.]{3,20})/gi;
-
-// groupId : dans un groupe privé, seuls ses membres sont prévenus.
-async function notifyMentions(ctx, text, actorId, postId, groupId = null) {
-  const names = new Set();
-  for (const m of text.matchAll(MENTION_RE)) {
-    names.add(m[2].replace(/\.+$/, '').toLowerCase());
-    if (names.size >= 10) break;
-  }
-  for (const name of names) {
-    const u = groupId
-      ? await ctx.db.get(
-          `SELECT u.id FROM users u JOIN groupe_members gm ON gm.user_id = u.id AND gm.groupe_id = ? AND gm.status = 'member'
-           WHERE u.username = ? AND u.paid_at IS NOT NULL`,
-          groupId, name,
-        )
-      : await ctx.db.get('SELECT id FROM users WHERE username = ? AND paid_at IS NOT NULL', name);
-    if (u) await notify(ctx, { userId: u.id, actorId, type: 'mention', postId });
+// @mentions d'un texte : chaque compte cité (existant, non bloqué) est prévenu
+async function notifyMentions(ctx, text, actorId, { postId = null, commentId = null, except = [] } = {}) {
+  for (const name of extractMentions(text)) {
+    const u = await ctx.db.get('SELECT id FROM users WHERE username = ? AND banned_at IS NULL AND is_bot = 0', name);
+    if (u && !except.includes(u.id)) await notify(ctx, { userId: u.id, actorId, type: 'mention', postId, commentId, body: text });
   }
 }
 
+// Vrai si l'un des deux comptes a bloqué l'autre.
+async function isBlocked(ctx, a, b) {
+  if (!a || !b) return false;
+  return Boolean(
+    await ctx.db.get('SELECT 1 FROM blocks WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)', a, b, b, a),
+  );
+}
+
+async function areFriends(ctx, a, b) {
+  const row = await ctx.db.get(
+    `SELECT EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?)
+        AND EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS ok`,
+    a, b, b, a,
+  );
+  return Boolean(row?.ok);
+}
+
 module.exports = {
-  flaggedLabels,
-  isFounder,
+  VIEWER,
+  NOW_MS,
+  LIVE_OF,
+  BLOCKED_WITH,
+  FRIEND_OF,
+  VISIBLE,
+  VISIBLE_OR_ADMIN,
   authorOf,
-  publicUser,
+  USER_SELECT,
+  serializeUser,
   selfUser,
+  prefs,
   POST_SELECT,
   serializePost,
+  postKind,
   getPost,
-  REACTIONS,
-  NOT_BLOCKED,
-  PUBLIC_POST,
-  VISIBLE_POST,
-  reactionSummary,
-  isBlocked,
+  getPosts,
+  flaggedLabels,
   COMMENT_SELECT,
   serializeComment,
   NOTIF_SELECT,
@@ -311,4 +460,6 @@ module.exports = {
   notify,
   retractNotification,
   notifyMentions,
+  isBlocked,
+  areFriends,
 };

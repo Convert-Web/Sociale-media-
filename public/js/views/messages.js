@@ -1,241 +1,252 @@
+// Messagerie : conversations et discussion en temps réel (« Vu », « écrit… »), vidéos partagées,
+// émojis, signalement d'un message, blocage.
 import { api, enc } from '../api.js';
 import { store, isPolling } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, nameLine, memberChip, clear, spinner, emptyState, timeAgo, clock, dayLabel, richText, autosize, toast } from '../dom.js';
-import { pickMember } from './profile.js';
-import { pushBanner } from '../components/pushcard.js';
-import { translateLink } from '../components/translate.js';
-import { sensitive, flaggedNotice } from '../components/sensitive.js';
+import { h, icon, avatar, spinner, emptyState, timeAgo, clock, dayLabel, richText, autosize, toast, modal, debounce, verifiedMark } from '../dom.js';
+import { translateLink, myLang } from '../components/translate.js';
+import { sensitive } from '../components/sensitive.js';
 import { reportDialog } from '../components/report.js';
+import { openSheet, closeSheet } from '../components/sheet.js';
+import { convRow } from './inbox.js';
 
-export function messagesView(ctx) {
-  const other = ctx.params.username || null;
-  const listItems = h('div', { class: 'dm-items' }, spinner());
+// Choisir un compte (nouveau message)
+export function pickUser(title, onPick) {
+  const input = h('input', { class: 'input', type: 'search', placeholder: 'Rechercher un compte', autofocus: true });
+  const list = h('div', { class: 'pick-list' });
+  const paint = (users) => list.replaceChildren(...users.map((u) => h('button', { type: 'button', class: 'pick-row', onclick: () => { m.close(); onPick(u); } }, avatar(u, 'md'), h('span', null, h('b', null, u.displayName), h('small', null, `@${u.username}`)))));
+  const search = debounce(async () => {
+    const q = input.value.trim();
+    try {
+      if (!q) {
+        const r = await api.get('/api/share/targets');
+        return paint(r.users);
+      }
+      const r = await api.get(`/api/search/suggest?q=${enc(q)}`);
+      paint(r.users.filter((u) => !u.me));
+    } catch {
+      /* recherche indisponible */
+    }
+  }, 200);
+  input.addEventListener('input', search);
+  search();
+  const m = modal(title, h('div', { class: 'modal-body form-stack' }, input, list));
+}
+
+function bubble(m, meId, other) {
+  const mine = m.senderId === meId;
+  const parts = [];
+  if (m.post) {
+    parts.push(
+      m.post.unavailable
+        ? h('div', { class: 'dm-post gone' }, icon('eyeOff', 'icon-sm'), 'Vidéo indisponible')
+        : h('a', { href: `/@${enc(m.post.author.username)}/video/${m.post.id}`, class: 'dm-post' }, m.post.image ? h('img', { src: m.post.image, alt: '' }) : h('span', { class: 'dm-post-text' }, m.post.body), h('span', { class: 'dm-post-meta' }, avatar(m.post.author, 'xs'), h('b', null, m.post.author.displayName)), h('span', { class: 'dm-post-play' }, icon('play', 'icon-sm'))),
+    );
+  }
+  if (m.body) {
+    const text = h('div', { class: 'dm-text' }, richText(m.body));
+    const content = m.flagged && !mine ? sensitive(text, m.flagged) : text;
+    const tr = !mine && m.lang && m.lang !== myLang() ? translateLink([m.body], m.lang, { small: true, show: ([t]) => text.replaceChildren(richText(t)), hide: () => text.replaceChildren(richText(m.body)) }) : null;
+    parts.push(h('div', { class: 'dm-bubble' }, content, tr));
+  }
+  const el = h('div', { class: `dm-msg${mine ? ' mine' : ''}`, dataset: { id: m.id }, title: clock(m.createdAt) }, mine ? null : avatar(other, 'xs'), h('div', { class: 'dm-stack' }, parts));
+  if (!mine) {
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      reportDialog('message', m.id, 'Signaler le message');
+    });
+  }
+  return el;
+}
+
+export async function messagesView(ctx) {
+  const username = ctx.params.username || null;
+  ctx.title = 'Messages — Vibz';
+  const listHost = h('div', { class: 'dm-list' }, spinner());
+  const newBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Nouveau message', onclick: () => pickUser('Nouveau message', (u) => navigate(`/messages/${enc(u.username)}`)) }, icon('pen'));
+  const side = h('aside', { class: 'dm-side' }, h('header', { class: 'page-head' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => navigate('/boite') }, icon('back')), h('h1', null, 'Messages'), newBtn), listHost);
   const threadHost = h('section', { class: 'dm-thread' });
-  const root = h('div', { class: `dm${other ? ' has-thread' : ''}` });
-
-  const newBtn = h('button', { class: 'icon-btn', 'aria-label': 'Nouveau message', title: 'Nouveau message' }, icon('pen'));
-  newBtn.addEventListener('click', () => pickMember('Nouveau message', (u) => navigate(`/messages/${u.username}`)));
+  const root = h('div', { class: `dm${username ? ' has-thread' : ''}` }, side, threadHost);
 
   async function loadList() {
     try {
       const { conversations } = await api.get('/api/conversations');
-      clear(listItems);
-      if (!conversations.length) {
-        listItems.append(
-          emptyState('mail', 'Aucune conversation', 'Écrivez à un membre : vos échanges restent entre vous.', h('button', { class: 'btn btn-primary btn-sm', onclick: () => newBtn.click() }, 'Nouveau message')),
-        );
-      }
-      for (const c of conversations) {
-        const active = other && c.user.username.toLowerCase() === other.toLowerCase();
-        listItems.append(
-          h(
-            'a',
-            { href: `/messages/${c.user.username}`, class: `dm-item${active ? ' active' : ''}${c.unread && !active ? ' unread' : ''}` },
-            avatar(c.user, '', { presence: true }),
-            h(
-              'div',
-              { class: 'meta' },
-              h('div', { class: 'line1' }, nameLine(c.user, { link: false }), h('small', null, timeAgo(c.lastMessage.createdAt))),
-              h('div', { class: 'preview-text' }, `${c.lastMessage.fromMe ? 'Vous : ' : ''}${c.lastMessage.body}`),
-            ),
-            c.unread && !active ? h('span', { class: 'dot', 'aria-label': 'Non lu' }) : null,
-          ),
-        );
-      }
+      listHost.replaceChildren(...(conversations.length ? conversations.map((c) => convRow(c, username && c.user.username.toLowerCase() === username.toLowerCase())) : [emptyState('send', 'Aucune conversation', 'Écris à quelqu’un pour commencer.')]));
     } catch (err) {
-      clear(listItems).append(h('p', { class: 'muted small', style: { padding: '16px' } }, err.message));
+      listHost.replaceChildren(emptyState('alert', 'Messages indisponibles', err.message));
     }
   }
+  loadList();
 
-  // ---------------------------------------------------------------------
-  async function loadThread() {
-    if (!other) {
-      threadHost.append(h('div', { class: 'dm-empty' }, emptyState('mail', 'Vos messages', 'Choisissez une conversation, ou écrivez à un membre du cercle.', h('button', { class: 'btn btn-primary', onclick: () => newBtn.click() }, 'Nouveau message'))));
-      return;
-    }
-    threadHost.append(spinner());
-    let data;
-    try {
-      data = await api.get(`/api/conversations/${enc(other)}`);
-    } catch (err) {
-      clear(threadHost).append(h('div', { class: 'dm-empty' }, emptyState('alert', 'Conversation indisponible', err.message)));
-      return;
-    }
-    const peer = data.user;
-    const me = store.user.id;
-    const box = h('div', { class: 'dm-messages' });
-    const seen = h('div', { class: 'seen', hidden: true }, 'Vu');
-    let lastDay = null;
-    let lastMine = null;
+  if (!username) {
+    threadHost.append(emptyState('send', 'Tes messages', 'Choisis une conversation, ou écris à quelqu’un.', h('button', { type: 'button', class: 'btn btn-primary', onclick: () => newBtn.click() }, 'Nouveau message')));
+    const off = store.on('rt:message', loadList);
+    ctx.onCleanup(off);
+    return root;
+  }
 
-    let lastId = 0;
-    const addMessage = (m, { animate = true } = {}) => {
-      lastId = Math.max(lastId, m.id);
-      if (box.querySelector(`[data-id="${m.id}"]`)) return;
-      const day = dayLabel(m.createdAt);
+  // Discussion
+  let data;
+  try {
+    data = await api.get(`/api/conversations/${enc(username)}`);
+  } catch (err) {
+    threadHost.append(emptyState('user', 'Conversation impossible', err.message));
+    return root;
+  }
+  const other = data.user;
+  const meId = store.user.id;
+  ctx.title = `${other.displayName} — Messages`;
+  const scroller = h('div', { class: 'dm-scroll' });
+  const msgs = h('div', { class: 'dm-msgs' });
+  const seenEl = h('div', { class: 'dm-seen', hidden: true }, 'Vu');
+  const typing = h('div', { class: 'dm-typing', hidden: true }, avatar(other, 'xs'), h('span', { class: 'dots' }, h('i'), h('i'), h('i')));
+  scroller.append(msgs, seenEl, typing);
+  let lastDay = '';
+  let lastId = 0;
+  let firstId = null;
+  let seenUpTo = data.seenUpTo;
+  const appendMsg = (m, { top = false } = {}) => {
+    if (msgs.querySelector(`[data-id="${m.id}"]`)) return;
+    const day = dayLabel(m.createdAt);
+    const el = bubble(m, meId, other);
+    if (top) {
+      msgs.prepend(el);
+    } else {
       if (day !== lastDay) {
-        box.insertBefore(h('div', { class: 'day-sep' }, day), seen);
+        msgs.append(h('div', { class: 'dm-day' }, day));
         lastDay = day;
       }
-      const mine = m.senderId === me;
-      const text = h('span', { class: 'bubble-text' }, richText(m.body));
-      const tr = mine ? null : translateLink(m.body, m.lang, { show: ([t]) => text.replaceChildren(richText(t)), hide: () => text.replaceChildren(richText(m.body)), small: true });
-      const report = () => reportDialog('message', m.id, 'Signaler ce message');
-      // Filtre automatique : message flouté chez le destinataire, mention discrète chez l'auteur
-      const content = !m.flagged
-        ? [text, tr]
-        : mine
-          ? [text, h('small', { class: 'bubble-flag' }, 'Masqué chez le destinataire · transmis à la Direction')]
-          : sensitive(h('div', null, text, tr), m.flagged, { extra: h('button', { class: 'sensitive-show', type: 'button', onclick: report }, 'Signaler') });
-      const bubble = h('div', { class: `bubble ${mine ? 'mine' : 'theirs'}${m.flagged ? ' flagged' : ''}`, dataset: { id: m.id } }, content, h('time', null, clock(m.createdAt)));
-      // Signaler un message reçu : clic droit, ou appui long sur téléphone
-      if (!mine) {
-        bubble.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          report();
-        });
-        let press = null;
-        const cancel = () => clearTimeout(press);
-        bubble.addEventListener('touchstart', () => {
-          cancel();
-          press = setTimeout(report, 600);
-        }, { passive: true });
-        for (const ev of ['touchend', 'touchmove', 'touchcancel']) bubble.addEventListener(ev, cancel, { passive: true });
-      }
-      if (!animate) bubble.style.animation = 'none';
-      box.insertBefore(bubble, seen);
-      if (mine) {
-        lastMine = m;
-        seen.hidden = !m.readAt;
-      } else {
-        seen.hidden = true;
-      }
-    };
-    box.append(seen);
-    for (const m of data.messages) addMessage(m, { animate: false });
-    const applySeen = (upTo) => {
-      if (lastMine && upTo >= lastMine.id) seen.hidden = false;
-    };
-    applySeen(data.seenUpTo || 0);
-    if (!data.messages.length) {
-      box.prepend(h('div', { class: 'day-sep', style: { textTransform: 'none', letterSpacing: '0' } }, `Début de votre conversation avec ${peer.displayName}.`));
+      msgs.append(el);
+      lastId = Math.max(lastId, m.id);
     }
-    const scrollDown = () => requestAnimationFrame(() => (box.scrollTop = box.scrollHeight));
+  };
+  const paintSeen = () => {
+    const lastMine = [...msgs.querySelectorAll('.dm-msg.mine')].pop();
+    seenEl.hidden = !lastMine || Number(lastMine.dataset.id) > seenUpTo;
+  };
+  for (const m of data.messages) appendMsg(m);
+  firstId = data.messages[0]?.id || null;
+  paintSeen();
+  const toBottom = () => requestAnimationFrame(() => (scroller.scrollTop = scroller.scrollHeight));
+  toBottom();
 
-    const ta = h('textarea', { placeholder: `Écrire à ${peer.displayName.split(' ')[0]}…`, rows: 1, maxlength: 2000, 'aria-label': 'Message' });
-    autosize(ta);
-    const send = h('button', { class: 'btn btn-primary btn-icon', type: 'submit', 'aria-label': 'Envoyer' }, icon('send'));
-    const form = h(
-      'form',
-      {
-        class: 'dm-composer',
-        onsubmit: async (e) => {
-          e.preventDefault();
-          const body = ta.value.trim();
-          if (!body) return;
-          send.disabled = true;
-          try {
-            const { message } = await api.post(`/api/conversations/${enc(peer.username)}`, { body });
-            addMessage(message);
-            flaggedNotice(message);
-            ta.value = '';
-            ta.dispatchEvent(new Event('input'));
-            scrollDown();
-            loadList();
-          } catch (err) {
-            toast(err.message, 'error');
-          } finally {
-            send.disabled = false;
-            ta.focus();
-          }
-        },
-      },
-      ta,
-      send,
-    );
-    ta.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-        e.preventDefault();
-        form.requestSubmit();
+  // Plus anciens : en remontant
+  let more = data.hasMore;
+  scroller.addEventListener('scroll', async () => {
+    if (scroller.scrollTop > 60 || !more || !firstId) return;
+    more = false;
+    const h0 = scroller.scrollHeight;
+    const d = await api.get(`/api/conversations/${enc(username)}?before=${firstId}`).catch(() => null);
+    if (!d) return;
+    for (const m of [...d.messages].reverse()) appendMsg(m, { top: true });
+    firstId = d.messages[0]?.id || firstId;
+    more = d.hasMore;
+    scroller.scrollTop = scroller.scrollHeight - h0;
+  });
+
+  // Saisie
+  const input = h('textarea', { class: 'dm-input', rows: 1, maxlength: 2000, placeholder: 'Envoyer un message…', 'aria-label': 'Message' });
+  autosize(input);
+  const send = h('button', { type: 'submit', class: 'dm-send', 'aria-label': 'Envoyer', disabled: true }, icon('send'));
+  const emojis = h('div', { class: 'dm-emojis', hidden: true }, ['😂', '😍', '🔥', '👍', '🙏', '😮', '😢', '🥳', '❤️', '👀', '💯', '✨'].map((e) => h('button', { type: 'button', onclick: () => { input.value += e; input.dispatchEvent(new Event('input')); input.focus(); } }, e)));
+  const emojiBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Émojis', onclick: () => emojis.toggleAttribute('hidden') }, icon('smile'));
+  let typingSent = 0;
+  input.addEventListener('input', () => {
+    send.disabled = !input.value.trim();
+    if (input.value && Date.now() - typingSent > 3000) {
+      typingSent = Date.now();
+      api.post(`/api/conversations/${enc(username)}/typing`).catch(() => {});
+    }
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+  const form = h('form', {
+    class: 'dm-form',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      const body = input.value.trim();
+      if (!body) return;
+      send.disabled = true;
+      try {
+        const { message } = await api.post(`/api/conversations/${enc(username)}`, { body });
+        input.value = '';
+        input.dispatchEvent(new Event('input'));
+        emojis.hidden = true;
+        appendMsg(message);
+        paintSeen();
+        toBottom();
+        loadList();
+      } catch (err) {
+        toast(err.message, 'error');
+        send.disabled = false;
       }
-    });
+    },
+  }, emojiBtn, input, send);
 
-    // Temps réel
-    ctx.onCleanup(
-      store.on('rt:message', ({ message }) => {
-        const involves = message.senderId === peer.id || message.recipientId === peer.id;
-        if (involves) {
-          addMessage(message);
-          scrollDown();
-          if (message.senderId === peer.id) api.post(`/api/conversations/${enc(peer.username)}/read`).catch(() => {});
-        }
-      }),
-    );
-    // Rafraîchissement régulier (hébergement serverless) : nouveaux messages toutes les 4 s
-    if (isPolling()) {
-      let busy = false;
-      const timer = setInterval(async () => {
-        if (document.hidden || busy) return;
-        busy = true;
+  const blocked = data.blocked || data.refused;
+  const optBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Options' }, icon('moreH'));
+  optBtn.addEventListener('click', () => {
+    const item = (ic, label, fn, danger) => h('button', { type: 'button', class: `opt-item${danger ? ' danger' : ''}`, onclick: () => { closeSheet(); fn(); } }, h('span', { class: 'opt-ic' }, icon(ic)), label);
+    openSheet({ title: other.displayName, body: h('div', { class: 'opt-list' },
+      item('user', 'Voir le profil', () => navigate(`/@${enc(other.username)}`)),
+      item('flag', 'Signaler', () => reportDialog('user', other.id, 'Signaler ce compte'), true),
+      item('ban', data.blocked ? 'Débloquer' : 'Bloquer', async () => {
         try {
-          const upd = await api.get(`/api/conversations/${enc(peer.username)}?after=${lastId}`);
-          for (const m of upd.messages) addMessage(m);
-          if (upd.messages.length) {
-            scrollDown();
-            loadList();
-          }
-          applySeen(upd.seenUpTo || 0);
-        } catch {
-          /* nouvel essai au prochain tour */
-        } finally {
-          busy = false;
+          if (data.blocked) await api.del(`/api/users/${enc(other.username)}/block`);
+          else await api.post(`/api/users/${enc(other.username)}/block`);
+          toast(data.blocked ? 'Compte débloqué' : 'Compte bloqué');
+          navigate(`/messages/${enc(other.username)}`, { replace: true });
+        } catch (err) {
+          toast(err.message, 'error');
         }
-      }, 4000);
-      ctx.onCleanup(() => clearInterval(timer));
-    }
-    ctx.onCleanup(
-      store.on('rt:read', ({ by }) => {
-        if (by === peer.id && lastMine) seen.hidden = false;
-      }),
-    );
-
-    clear(threadHost).append(
-      h(
-        'header',
-        { class: 'page-head' },
-        h('a', { href: '/messages', class: 'icon-btn mobile-only', 'aria-label': 'Retour' }, icon('back')),
-        h('a', { href: `/@${peer.username}` }, avatar(peer, 'sm', { presence: true })),
-        h(
-          'div',
-          { class: 'grow' },
-          h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, nameLine(peer), memberChip(peer)),
-          h('div', { class: 'sub' }, peer.online ? 'En ligne' : `@${peer.username}`),
-        ),
-      ),
-      box,
-      data.blocked
-        ? h('div', { class: 'dm-blocked' }, icon('ban', 'icon-sm'), 'Vous ne pouvez plus échanger avec ce membre.')
-        : data.automatic
-          ? h('div', { class: 'dm-blocked' }, icon('info', 'icon-sm'), 'Compte automatique : il ne lit pas les réponses.')
-          : form,
-    );
-    scrollDown();
-    if (!data.blocked && !data.automatic && window.matchMedia('(min-width: 721px)').matches) ta.focus();
-    loadList();
-  }
-
-  // Rafraîchit la liste quand un message arrive ailleurs
-  ctx.onCleanup(store.on('rt:message', () => loadList()));
-  ctx.onCleanup(store.on('rt:tick', () => loadList()));
-
-  loadList();
-  loadThread();
-
-  ctx.title = 'Messages — AURUM';
-  root.append(
-    h('section', { class: 'dm-list' }, h('header', { class: 'page-head' }, h('div', { class: 'grow' }, h('h1', null, 'Messages'), h('div', { class: 'sub' }, 'Privés, entre membres')), newBtn), pushBanner(), listItems),
-    threadHost,
+      }, true),
+    ) });
+  });
+  threadHost.append(
+    h('header', { class: 'dm-head' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => navigate('/messages') }, icon('back')), h('a', { href: `/@${enc(other.username)}`, class: 'dm-who' }, avatar(other, 'sm', { presence: true }), h('span', null, h('b', null, other.displayName, other.verified ? verifiedMark() : null), h('small', null, other.online ? 'En ligne' : `@${other.username}`))), optBtn),
+    scroller,
+    blocked ? h('p', { class: 'dm-blocked' }, data.blocked ? 'Vous ne pouvez plus vous écrire.' : data.refused) : h('div', { class: 'dm-compose' }, emojis, form),
   );
+
+  // Temps réel : messages, « Vu », « écrit… » ; sur Vercel, relecture toutes les 3 secondes
+  const fetchNew = async () => {
+    const d = await api.get(`/api/conversations/${enc(username)}?after=${lastId}`).catch(() => null);
+    if (!d) return;
+    const atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
+    for (const m of d.messages) appendMsg(m);
+    seenUpTo = d.seenUpTo;
+    paintSeen();
+    if (d.messages.length && atBottom) toBottom();
+    if (d.messages.length) typing.hidden = true;
+  };
+  const offs = [
+    store.on('rt:message', ({ message }) => {
+      if (message.senderId === other.id || message.recipientId === other.id) fetchNew();
+      loadList();
+    }),
+    store.on('rt:read', ({ by }) => {
+      if (by !== other.id) return;
+      seenUpTo = lastId;
+      paintSeen();
+    }),
+    store.on('rt:typing', ({ from }) => {
+      if (from !== other.id) return;
+      typing.hidden = false;
+      toBottom();
+      clearTimeout(typing._t);
+      typing._t = setTimeout(() => (typing.hidden = true), 4000);
+    }),
+  ];
+  let poll = 0;
+  if (isPolling()) poll = setInterval(() => !document.hidden && fetchNew(), 3000);
+  ctx.onCleanup(() => {
+    offs.forEach((fn) => fn());
+    clearInterval(poll);
+  });
+  setTimeout(() => input.focus(), 100);
   return root;
 }

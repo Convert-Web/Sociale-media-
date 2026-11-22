@@ -1,318 +1,200 @@
-import { api } from '../api.js';
-import { store, connectRealtime } from '../store.js';
+// Connexion, inscription (avec date de naissance et nom d'utilisateur vérifié pendant la saisie),
+// mot de passe oublié, réinitialisation, déconnexion.
+import { api, enc } from '../api.js';
+import { store, disconnectRealtime } from '../store.js';
 import { navigate, safePath } from '../router.js';
-import { h, icon, memberCard, cardSince, avatar } from '../dom.js';
-import { rememberedInvitation, rememberInvitation } from './invite.js';
+import { h, icon, toast, debounce, logoMark } from '../dom.js';
+import { detachPush } from '../push.js';
 
-function authLayout(content) {
+const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
+function frame(ctx, title, subtitle, ...content) {
   return h(
     'div',
     { class: 'auth' },
-    h(
-      'aside',
-      { class: 'auth-art' },
-      h('a', { href: '/', class: 'logo' }, 'AURUM'),
-      memberCard({ name: store.user?.displayName || 'Votre nom', number: null, since: cardSince(Date.now()) }),
-      h('blockquote', null, h('p', null, 'Dis-moi qui tu fréquentes, je te dirai qui tu es.'), h('footer', null, 'Proverbe')),
-    ),
-    h('main', { class: 'auth-form' }, h('a', { href: '/', class: 'logo' }, 'AURUM'), h('div', { class: 'auth-box fade-up' }, content)),
+    h('header', { class: 'auth-top' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Fermer', onclick: () => navigate(safePath(ctx.query.get('suite'), '/')) }, icon('x')), h('a', { href: '/aide', class: 'icon-btn', 'aria-label': 'Aide' }, icon('help'))),
+    h('div', { class: 'auth-card' }, h('div', { class: 'auth-logo' }, logoMark(56)), h('h1', null, title), subtitle ? h('p', { class: 'auth-sub' }, subtitle) : null, ...content),
   );
 }
 
-function errorBox() {
-  const el = h('div', { class: 'form-error', role: 'alert', hidden: true });
-  return {
-    el,
-    show(msg) {
-      el.textContent = msg;
-      el.hidden = false;
-    },
-    hide() {
-      el.hidden = true;
-    },
-  };
+function field(label, input, hint = null) {
+  return h('label', { class: 'field' }, h('span', null, label), input, hint);
 }
 
-function field(label, input, hint) {
-  return h('label', { class: 'field' }, h('span', null, label), input, hint ? h('small', { class: 'hint' }, hint) : null);
+function passwordInput(attrs = {}) {
+  const input = h('input', { class: 'input', type: 'password', autocomplete: 'current-password', required: true, minlength: 8, ...attrs });
+  const eye = h('button', { type: 'button', class: 'pw-eye', 'aria-label': 'Afficher le mot de passe' }, icon('eye'));
+  eye.addEventListener('click', () => {
+    input.type = input.type === 'password' ? 'text' : 'password';
+    eye.replaceChildren(icon(input.type === 'password' ? 'eye' : 'eyeOff'));
+  });
+  return { input, el: h('div', { class: 'pw-wrap' }, input, eye) };
 }
 
-function busy(btn, on, label) {
-  btn.disabled = on;
-  if (on) {
-    btn.dataset.label = btn.textContent;
-    btn.textContent = label;
-  } else if (btn.dataset.label) {
-    btn.textContent = btn.dataset.label;
-  }
-}
-
-function afterAuth(user, fallbackPath) {
+async function afterAuth(ctx, user, { fresh = false } = {}) {
   store.setUser(user);
-  if (user.isMember) {
-    connectRealtime();
-    return navigate(fallbackPath, { replace: true });
-  }
-  navigate('/rejoindre', { replace: true });
+  await store.refresh().catch(() => {});
+  const next = safePath(ctx.query.get('suite'), '/');
+  navigate(fresh ? `/bienvenue?suite=${enc(next)}` : next, { replace: true });
 }
 
-// ---------------------------------------------------------------------------
 export function loginView(ctx) {
-  const err = errorBox();
-  const login = h('input', { class: 'input', name: 'login', autocomplete: 'username', required: true, placeholder: 'vous@exemple.com ou @pseudo' });
-  const password = h('input', { class: 'input', type: 'password', name: 'password', autocomplete: 'current-password', required: true, placeholder: '••••••••' });
-  const btn = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'submit' }, 'Entrer dans le cercle');
+  ctx.title = 'Connexion — Vibz';
+  const login = h('input', { class: 'input', type: 'text', autocomplete: 'username', required: true, placeholder: 'E-mail ou nom d’utilisateur', autocapitalize: 'none' });
+  const pw = passwordInput({ placeholder: 'Mot de passe' });
+  const submit = h('button', { type: 'submit', class: 'btn btn-primary btn-lg btn-block' }, 'Se connecter');
   const form = h(
     'form',
     {
+      class: 'form-stack',
       onsubmit: async (e) => {
         e.preventDefault();
-        err.hide();
-        busy(btn, true, 'Vérification…');
+        submit.disabled = true;
         try {
-          const { user } = await api.post('/api/auth/login', { login: login.value, password: password.value });
-          await store.refresh();
-          afterAuth(user, safePath(ctx.query.get('suite'), '/salon'));
-        } catch (e2) {
-          err.show(e2.message);
-          busy(btn, false);
+          const { user } = await api.post('/api/auth/login', { login: login.value.trim(), password: pw.input.value });
+          await afterAuth(ctx, user);
+        } catch (err) {
+          submit.disabled = false;
+          toast(err.message, 'error');
         }
       },
     },
-    err.el,
     field('Identifiant', login),
-    field('Mot de passe', password),
-    h('div', { style: { textAlign: 'right', marginTop: '-6px' } }, h('a', { href: '/mot-de-passe-oublie', class: 'small', style: { color: 'var(--link)' } }, 'Mot de passe oublié ?')),
-    btn,
+    field('Mot de passe', pw.el),
+    h('a', { href: '/mot-de-passe-oublie', class: 'auth-link' }, 'Mot de passe oublié ?'),
+    submit,
   );
-  ctx.title = 'Connexion — AURUM';
-  ctx.description = 'Connectez-vous à votre cercle AURUM.';
-  return authLayout([
-    h('span', { class: 'eyebrow' }, 'Membres'),
-    h('h1', null, 'Bon retour parmi nous.'),
-    h('p', { class: 'sub' }, 'Présentez votre carte pour entrer.'),
-    form,
-    h('p', { class: 'auth-alt' }, 'Pas encore membre ? ', h('a', { href: '/inscription' }, 'Demander ma carte')),
-  ]);
-}
-
-// ---------------------------------------------------------------------------
-function slugify(name) {
-  return name
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '.')
-    .replace(/^\.+|\.+$/g, '')
-    .slice(0, 20);
-}
-
-function scorePassword(pw) {
-  if (!pw) return 0;
-  let s = 0;
-  if (pw.length >= 8) s++;
-  if (pw.length >= 12) s++;
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
-  if (/\d/.test(pw) && /[^A-Za-z0-9]/.test(pw)) s++;
-  return Math.max(1, s);
+  return frame(ctx, 'Connexion à Vibz', 'Retrouve tes abonnements, tes messages et tes vidéos.', form, h('p', { class: 'auth-switch' }, 'Pas encore de compte ? ', h('a', { href: `/inscription${location.search}` }, 'S’inscrire')));
 }
 
 export function signupView(ctx) {
-  const err = errorBox();
-  let usernameTouched = false;
-  const displayName = h('input', { class: 'input', autocomplete: 'name', required: true, minlength: 2, maxlength: 40, placeholder: 'Victoire de Montclar' });
-  const username = h('input', { class: 'input', autocomplete: 'username', required: true, maxlength: 20, placeholder: 'victoire', pattern: '[A-Za-z0-9_.]{3,20}', dataset: { hint: '3 à 20 caractères : lettres sans accent, chiffres, « _ » ou « . ».' } });
-  const email = h('input', { class: 'input', type: 'email', autocomplete: 'email', required: true, placeholder: 'vous@exemple.com' });
-  const password = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minlength: 8, placeholder: '8 caractères minimum' });
-  const meter = h('div', { class: 'pw-meter', dataset: { score: '0' } }, h('i'), h('i'), h('i'), h('i'));
-  const consent = h('input', { type: 'checkbox', required: true });
-  const btn = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'submit' }, store.config.paidEntry ? 'Continuer' : 'Créer mon compte', icon('arrow'));
-  // Anti-robots : champ invisible pour les humains (les robots le remplissent) et délai d'envoi
-  const trap = h('input', { name: 'website', type: 'text', tabindex: '-1', autocomplete: 'off', 'aria-hidden': 'true' });
+  ctx.title = 'Inscription — Vibz';
   const shownAt = Date.now();
-
-  // Entrée sur invitation : code d'un parrain (lien d'invitation) ou demande d'admission
-  // Le tout premier membre (la Direction) entre directement, sans invitation ni demande
-  const firstMember = !store.config.paidEntry && store.config.foundersLeft >= store.config.founderLimit;
-  const onInvitation = store.config.admission === 'invitation' && !firstMember;
-  let code = (ctx.query.get('invitation') || rememberedInvitation()).toUpperCase();
-  const inviteBox = h('div');
-  const note = h('textarea', { class: 'textarea', rows: 3, maxlength: 500, placeholder: 'Votre activité, ce qui vous amène, qui vous connaissez au sein du cercle…' });
-  const noteField = field('Présentez-vous (facultatif)', note, 'Lu par la Direction, qui valide chaque demande personnellement.');
-  const paintEntry = () => {
-    noteField.hidden = !onInvitation || Boolean(code);
-    btn.firstChild.textContent = onInvitation && !code ? 'Envoyer ma demande' : store.config.paidEntry ? 'Continuer' : 'Créer mon compte';
-  };
-  if (code) {
-    api
-      .get(`/api/invitations/${encodeURIComponent(code)}/preview`)
-      .then((d) => {
-        if (!d.valid) {
-          code = '';
-          rememberInvitation(null);
-          inviteBox.replaceChildren(h('div', { class: 'form-error' }, 'Ce lien d’invitation n’est plus valable : votre demande sera examinée par la Direction.'));
-        } else {
-          inviteBox.replaceChildren(h('div', { class: 'invite-banner' }, avatar(d.inviter, 'sm'), h('span', null, 'Invitation de ', h('b', null, d.inviter.displayName)), icon('check')));
-        }
-        paintEntry();
-      })
-      .catch(() => {});
-  }
-  paintEntry();
-
-  displayName.addEventListener('input', () => {
-    if (usernameTouched) return;
-    username.value = slugify(displayName.value);
-    // Rempli automatiquement : on revérifie le champ (un ancien « obligatoire » disparaît)
-    username.dispatchEvent(new Event('change', { bubbles: true }));
+  // Étape 1 : date de naissance (comme les grands réseaux : 13 ans au moins)
+  const day = h('select', { class: 'input', required: true, 'aria-label': 'Jour' }, h('option', { value: '' }, 'Jour'), Array.from({ length: 31 }, (_, i) => h('option', { value: String(i + 1) }, String(i + 1))));
+  const month = h('select', { class: 'input', required: true, 'aria-label': 'Mois' }, h('option', { value: '' }, 'Mois'), MONTHS.map((m, i) => h('option', { value: String(i + 1) }, m)));
+  const year = h('select', { class: 'input', required: true, 'aria-label': 'Année' }, h('option', { value: '' }, 'Année'), Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map((y) => h('option', { value: String(y) }, String(y))));
+  const email = h('input', { class: 'input', type: 'email', autocomplete: 'email', required: true, placeholder: 'adresse@exemple.fr' });
+  const username = h('input', { class: 'input', type: 'text', autocomplete: 'username', minlength: 2, maxlength: 24, placeholder: 'nom_utilisateur', autocapitalize: 'none', spellcheck: 'false' });
+  const userHint = h('small', { class: 'field-hint' }, 'Lettres, chiffres, « _ » et « . » — modifiable ensuite.');
+  const name = h('input', { class: 'input', type: 'text', autocomplete: 'name', maxlength: 30, placeholder: 'Ton nom (facultatif)' });
+  const pw = passwordInput({ autocomplete: 'new-password', placeholder: '8 caractères au moins' });
+  const terms = h('input', { type: 'checkbox', required: true });
+  const trap = h('input', { type: 'text', name: 'website', tabindex: '-1', autocomplete: 'off', class: 'trap', 'aria-hidden': 'true' });
+  const submit = h('button', { type: 'submit', class: 'btn btn-primary btn-lg btn-block' }, 'S’inscrire');
+  const check = debounce(async () => {
+    const v = username.value.trim().replace(/^@/, '');
+    if (!v) return;
+    try {
+      const r = await api.get(`/api/auth/username?u=${enc(v)}`);
+      userHint.textContent = r.ok ? `@${v} est disponible` : r.reason;
+      userHint.classList.toggle('ok', r.ok);
+      userHint.classList.toggle('bad', !r.ok);
+    } catch {
+      /* vérification indisponible */
+    }
+  }, 300);
+  username.addEventListener('input', check);
+  // Suggestion tirée de l'e-mail : affichée en exemple, utilisée seulement si le champ reste vide
+  email.addEventListener('change', () => {
+    const base = email.value.split('@')[0].toLowerCase().replace(/[^a-z0-9_.]/g, '').replace(/^[._]+|[._]+$/g, '').slice(0, 20);
+    if (base.length >= 2) username.placeholder = base;
   });
-  username.addEventListener('input', () => {
-    usernameTouched = true;
-    username.value = username.value.replace(/[^A-Za-z0-9_.]/g, '');
-  });
-  password.addEventListener('input', () => (meter.dataset.score = String(scorePassword(password.value))));
-
   const form = h(
     'form',
     {
+      class: 'form-stack',
       onsubmit: async (e) => {
         e.preventDefault();
-        err.hide();
-        busy(btn, true, 'Création…');
+        submit.disabled = true;
+        const birthdate = `${year.value}-${String(month.value).padStart(2, '0')}-${String(day.value).padStart(2, '0')}`;
         try {
           const { user } = await api.post('/api/auth/signup', {
-            displayName: displayName.value,
-            username: username.value,
-            email: email.value,
-            password: password.value,
-            invitation: code || undefined,
-            note: noteField.hidden ? undefined : note.value,
+            birthdate,
+            email: email.value.trim(),
+            username: username.value.trim() || username.placeholder,
+            displayName: name.value.trim() || username.value.trim() || username.placeholder,
+            password: pw.input.value,
+            terms: terms.checked,
             website: trap.value,
             elapsed: Date.now() - shownAt,
           });
-          if (user.isMember || user.admission?.approved) rememberInvitation(null);
-          afterAuth(user, '/bienvenue');
-        } catch (e2) {
-          err.show(e2.message);
-          busy(btn, false);
+          toast(`Bienvenue sur Vibz, ${user.displayName} !`);
+          await afterAuth(ctx, user, { fresh: true });
+        } catch (err) {
+          submit.disabled = false;
+          toast(err.message, 'error');
         }
       },
     },
-    inviteBox,
-    err.el,
-    h('div', { class: 'hp', 'aria-hidden': 'true' }, h('label', null, 'Ne pas remplir', trap)),
-    field('Nom complet', displayName, 'Tel qu’il apparaîtra sur votre carte.'),
-    field("Nom d'utilisateur", h('div', { class: 'input-prefix' }, h('b', null, '@'), username)),
+    h('div', { class: 'field' }, h('span', null, 'Date de naissance'), h('div', { class: 'dob' }, day, month, year), h('small', { class: 'field-hint' }, 'Elle n’apparaîtra pas sur ton profil.')),
     field('E-mail', email),
-    h('label', { class: 'field' }, h('span', null, 'Mot de passe'), password, meter),
-    noteField,
-    h(
-      'label',
-      { class: 'check' },
-      consent,
-      h(
-        'span',
-        null,
-        "J'ai 18 ans ou plus et j'accepte les ",
-        h('a', { href: '/cgu', target: '_blank' }, 'conditions d’utilisation'),
-        ' et la ',
-        h('a', { href: '/confidentialite', target: '_blank' }, 'politique de confidentialité'),
-        '.',
-      ),
-    ),
-    btn,
+    field('Nom d’utilisateur', username, userHint),
+    field('Nom affiché', name),
+    field('Mot de passe', pw.el, h('small', { class: 'field-hint' }, 'Des lettres et au moins un chiffre ou un symbole.')),
+    trap,
+    h('label', { class: 'check' }, terms, h('span', null, 'J’accepte les ', h('a', { href: '/cgu', target: '_blank' }, 'conditions d’utilisation'), ' et la ', h('a', { href: '/confidentialite', target: '_blank' }, 'politique de confidentialité'), '.')),
+    submit,
   );
-
-  ctx.title = 'Inscription — AURUM';
-  ctx.description = 'Rejoignez AURUM, le réseau social privé : votre carte et votre numéro de membre en quelques secondes.';
-  const paid = store.config.paidEntry;
-  return authLayout([
-    paid ? h('div', { class: 'steps' }, h('i', { class: 'on' }), h('i'), h('span', null, 'Étape 1 sur 2 — Votre identité')) : null,
-    h('h1', null, 'Demandez votre carte.'),
-    h(
-      'p',
-      { class: 'sub' },
-      paid
-        ? onInvitation
-          ? `Les ${store.config.founderLimit} places gratuites de Fondateur sont attribuées. L’entrée se fait sur invitation ou après validation de la Direction, puis par un droit d’entrée unique.`
-          : "Quelques informations, puis le droit d'entrée. Deux minutes, pas plus."
-        : onInvitation
-          ? 'L’entrée se fait sur invitation. Sans invitation, votre demande est étudiée personnellement par la Direction.'
-          : 'Quelques informations et votre carte de membre est à vous. Gratuit.',
-    ),
-    form,
-    h('p', { class: 'auth-alt' }, 'Déjà membre ? ', h('a', { href: '/connexion' }, 'Se connecter')),
-  ]);
+  return frame(ctx, 'Inscris-toi sur Vibz', 'Crée un compte pour suivre d’autres comptes, aimer des vidéos et créer les tiennes.', form, h('p', { class: 'auth-switch' }, 'Tu as déjà un compte ? ', h('a', { href: `/connexion${location.search}` }, 'Se connecter')));
 }
 
-// ---------------------------------------------------------------------------
 export function forgotView(ctx) {
-  const err = errorBox();
-  const ok = h('div', { class: 'form-ok', hidden: true });
-  const email = h('input', { class: 'input', type: 'email', autocomplete: 'email', required: true, placeholder: 'vous@exemple.com' });
-  const btn = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'submit' }, 'Recevoir un lien');
-  const form = h(
-    'form',
-    {
-      onsubmit: async (e) => {
-        e.preventDefault();
-        err.hide();
-        busy(btn, true, 'Envoi…');
-        try {
-          await api.post('/api/auth/forgot', { email: email.value });
-          ok.textContent = 'Si un compte correspond à cette adresse, un lien de réinitialisation vient de vous être envoyé. Il est valable une heure.';
-          ok.hidden = false;
-          form.reset();
-        } catch (e2) {
-          err.show(e2.message);
-        } finally {
-          busy(btn, false);
-        }
-      },
+  ctx.title = 'Mot de passe oublié — Vibz';
+  const email = h('input', { class: 'input', type: 'email', required: true, autocomplete: 'email', placeholder: 'adresse@exemple.fr' });
+  const submit = h('button', { type: 'submit', class: 'btn btn-primary btn-lg btn-block' }, 'Recevoir le lien');
+  const done = h('p', { class: 'auth-done', hidden: true }, 'Si un compte existe avec cette adresse, un lien vient de partir. Pense à regarder dans les indésirables.');
+  const form = h('form', {
+    class: 'form-stack',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      submit.disabled = true;
+      try {
+        await api.post('/api/auth/forgot', { email: email.value.trim() });
+        done.hidden = false;
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        submit.disabled = false;
+      }
     },
-    err.el,
-    ok,
-    field('E-mail du compte', email),
-    btn,
-  );
-  ctx.title = 'Mot de passe oublié — AURUM';
-  return authLayout([
-    h('h1', null, 'Clé égarée ?'),
-    h('p', { class: 'sub' }, 'Indiquez votre e-mail, nous vous envoyons un lien pour choisir un nouveau mot de passe.'),
-    form,
-    h('p', { class: 'auth-alt' }, h('a', { href: '/connexion' }, 'Retour à la connexion')),
-  ]);
+  }, field('E-mail du compte', email), submit, done);
+  return frame(ctx, 'Mot de passe oublié', 'Nous t’envoyons un lien pour en choisir un nouveau.', form, h('p', { class: 'auth-switch' }, h('a', { href: '/connexion' }, 'Retour à la connexion')));
 }
 
 export function resetView(ctx) {
+  ctx.title = 'Nouveau mot de passe — Vibz';
   const token = ctx.query.get('jeton') || '';
-  const err = errorBox();
-  const pw = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minlength: 8, placeholder: '8 caractères minimum' });
-  const pw2 = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', required: true, minlength: 8, placeholder: 'Confirmez' });
-  const btn = h('button', { class: 'btn btn-primary btn-lg btn-block', type: 'submit' }, 'Enregistrer');
-  const form = h(
-    'form',
-    {
-      onsubmit: async (e) => {
-        e.preventDefault();
-        err.hide();
-        if (pw.value !== pw2.value) return err.show('Les deux mots de passe ne correspondent pas.');
-        busy(btn, true, 'Enregistrement…');
-        try {
-          const { user } = await api.post('/api/auth/reset', { token, password: pw.value });
-          await store.refresh();
-          afterAuth(user, '/salon');
-        } catch (e2) {
-          err.show(e2.message);
-          busy(btn, false);
-        }
-      },
+  const pw = passwordInput({ autocomplete: 'new-password', placeholder: '8 caractères au moins' });
+  const submit = h('button', { type: 'submit', class: 'btn btn-primary btn-lg btn-block' }, 'Enregistrer');
+  const form = h('form', {
+    class: 'form-stack',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      submit.disabled = true;
+      try {
+        const { user } = await api.post('/api/auth/reset', { token, password: pw.input.value });
+        toast('Mot de passe modifié');
+        await afterAuth(ctx, user);
+      } catch (err) {
+        submit.disabled = false;
+        toast(err.message, 'error');
+      }
     },
-    err.el,
-    field('Nouveau mot de passe', pw),
-    field('Confirmation', pw2),
-    btn,
-  );
-  ctx.title = 'Nouveau mot de passe — AURUM';
-  return authLayout([h('h1', null, 'Nouveau mot de passe.'), h('p', { class: 'sub' }, 'Choisissez-le solide : il protège votre place au cercle.'), form]);
+  }, field('Nouveau mot de passe', pw.el), submit);
+  return frame(ctx, 'Nouveau mot de passe', null, form);
+}
+
+export async function logout() {
+  try {
+    await detachPush();
+  } catch {
+    /* sans importance */
+  }
+  await api.post('/api/auth/logout').catch(() => {});
+  disconnectRealtime();
+  store.setUser(null);
+  store.setCounters({ notifications: 0, messages: 0, requests: 0 });
+  toast('Tu es déconnecté·e');
+  navigate('/', { replace: true });
 }

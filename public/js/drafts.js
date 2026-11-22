@@ -1,9 +1,9 @@
-// Brouillons : une publication préparée (texte, photos ou vidéo) est gardée sur ce téléphone, dans
-// la base de données de l'appareil, pour être publiée plus tard. Rien n'est envoyé au serveur avant
-// la publication. Chaque membre ne voit que ses propres brouillons.
+// Brouillons : une création (vidéo, photos ou texte, avec ses effets et réglages) est gardée sur cet
+// appareil, dans sa base de données, pour être publiée plus tard. Rien n'est envoyé au serveur avant
+// la publication. Chaque compte ne voit que ses propres brouillons.
 import { store } from './store.js';
 
-const DB = 'aurum-brouillons';
+const DB = 'vibz-brouillons';
 const STORE = 'drafts';
 let dbp = null;
 
@@ -38,12 +38,13 @@ const tx = async (mode, fn) => {
 const owner = () => store.user?.id || 0;
 
 // Enregistre (ou met à jour, si id est donné) un brouillon ; renvoie son identifiant
-export async function saveDraft({ id = null, body = '', photos = [], video = null }) {
+export async function saveDraft({ id = null, body = '', photos = [], video = null, meta = null }) {
   const record = {
     owner: owner(),
     body,
     photos: photos.map((f) => ({ blob: f, name: f.name || 'photo.jpg', type: f.type || 'image/jpeg' })),
     video: video ? { blob: video.file, name: video.file.name || 'video.mp4', type: video.file.type || 'video/mp4', poster: video.info?.poster || null, duration: video.info?.duration || 0 } : null,
+    meta,
     updatedAt: Date.now(),
   };
   if (id) record.id = id;
@@ -55,7 +56,7 @@ export async function saveDraft({ id = null, body = '', photos = [], video = nul
   return tx('readwrite', (s) => s.put(record));
 }
 
-// Brouillons du membre, les plus récents d'abord
+// Brouillons du compte, les plus récents d'abord
 export async function listDrafts() {
   try {
     const all = await tx('readonly', (s) => s.index('owner').getAll(owner()));
