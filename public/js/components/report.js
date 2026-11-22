@@ -2,14 +2,18 @@ import { api } from '../api.js';
 import { h, modal, toast } from '../dom.js';
 
 const REASONS = [
-  ['spam', 'Spam ou publicité'],
-  ['inappropriate', 'Contenu inapproprié'],
+  ['spam', 'Spam ou arnaque'],
+  ['inappropriate', 'Nudité ou contenu sexuel'],
+  ['violence', 'Violence ou contenu choquant'],
   ['harassment', 'Harcèlement ou propos haineux'],
-  ['fake', 'Faux profil ou usurpation'],
+  ['dangerous', 'Actes dangereux'],
+  ['minor', 'Sécurité des mineurs'],
+  ['fake', 'Faux compte ou usurpation'],
+  ['ip', 'Atteinte à la propriété intellectuelle'],
   ['other', 'Autre'],
 ];
 
-// Fenêtre de signalement d'une publication, d'un commentaire ou d'un membre.
+// Fenêtre de signalement d'une vidéo, d'un commentaire, d'un message, d'un LIVE ou d'un compte.
 export function reportDialog(type, id, title = 'Signaler') {
   let chosen = null;
   const details = h('textarea', { class: 'textarea', maxlength: 500, rows: 3, placeholder: 'Précisions (facultatif)' });
@@ -44,14 +48,14 @@ export function reportDialog(type, id, title = 'Signaler') {
           try {
             await api.post('/api/reports', { type, id, reason: chosen, details: details.value });
             m.close();
-            toast('Merci. La direction va examiner ce signalement.');
+            toast('Merci. Notre équipe va examiner ce signalement.');
           } catch (err) {
             send.disabled = false;
             toast(err.message, 'error');
           }
         },
       },
-      h('p', { class: 'muted small' }, 'Votre signalement est anonyme pour le membre concerné.'),
+      h('p', { class: 'muted small' }, 'Ton signalement reste anonyme pour le compte concerné.'),
       h('div', { class: 'choices' }, options),
       details,
       send,

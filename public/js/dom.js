@@ -82,7 +82,16 @@ export function money(cents, currency = 'eur') {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: currency.toUpperCase() }).format(cents / 100);
 }
 export const num = (n) => new Intl.NumberFormat('fr-FR').format(n);
-export const memberNo = (n) => (n ? `N° ${String(n).padStart(4, '0')}` : 'N° ····');
+// Compteurs façon réseau social : 987 · 1,2 k · 34 k · 1,5 M
+export function short(n) {
+  n = Number(n) || 0;
+  const fmt = (v) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: v < 10 ? 1 : 0 }).format(v);
+  if (n < 1000) return String(n);
+  if (n < 1e6) return `${fmt(n / 1000)} k`;
+  if (n < 1e9) return `${fmt(n / 1e6)} M`;
+  return `${fmt(n / 1e9)} Md`;
+}
+export const duration = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 export function plural(n, one, many) {
   return `${num(n)} ${n > 1 ? many : one}`;
@@ -116,9 +125,9 @@ export function richText(str) {
           : h('a', { href: m[1], target: '_blank', rel: 'noopener noreferrer nofollow' }, m[1].replace(/^https?:\/\/(www\.)?/, '')),
       );
     } else if (m[2]) {
-      frag.append(h('a', { href: `/@${m[2]}` }, `@${m[2]}`));
+      frag.append(h('a', { href: `/@${m[2]}`, class: 'mention-link' }, `@${m[2]}`));
     } else if (m[3]) {
-      frag.append(h('a', { href: `/explorer?q=${encodeURIComponent(`#${m[3]}`)}` }, `#${m[3]}`));
+      frag.append(h('a', { href: `/tag/${encodeURIComponent(m[3].toLocaleLowerCase('fr'))}`, class: 'tag-link' }, `#${m[3]}`));
     }
     last = m.index + m[0].length;
   }
@@ -140,8 +149,8 @@ export function initials(name = '') {
   return letters.toUpperCase();
 }
 
-export function avatar(user, size = '', { presence = false } = {}) {
-  const cls = ['avatar', size && `avatar-${size}`].filter(Boolean).join(' ');
+export function avatar(user, size = '', { presence = false, live = false } = {}) {
+  const cls = ['avatar', size && `avatar-${size}`, live && user?.live ? 'avatar-live' : ''].filter(Boolean).join(' ');
   const el = h('span', { class: cls });
   if (user?.avatar) {
     el.append(h('img', { src: user.avatar, alt: '', loading: 'lazy', decoding: 'async' }));
@@ -159,147 +168,23 @@ export function avatar(user, size = '', { presence = false } = {}) {
     );
   }
   if (presence && user?.online) el.append(h('span', { class: 'presence', title: 'En ligne' }));
+  if (live && user?.live) el.append(h('span', { class: 'live-chip' }, 'LIVE'));
   return el;
 }
 
-// Étiquette des comptes automatiques (AURUM, Le Concierge)
-export function botChip() {
-  return h('span', { class: 'bot-chip', title: 'Compte automatique : publications générées par AURUM' }, 'Automatique');
-}
-
-// Badge « Membre vérifié » (identité confirmée par la Direction)
+// Badge « Compte vérifié » (attribué par l'administration)
 export function verifiedMark() {
-  return h('span', { class: 'verified', title: 'Membre vérifié', 'aria-label': 'Membre vérifié' }, icon('verified'));
+  return h('span', { class: 'verified', title: 'Compte vérifié', 'aria-label': 'Compte vérifié' }, icon('verified'));
 }
 
 export function nameLine(user, { link = true } = {}) {
   const parts = [
     h('b', null, user.displayName),
     user.verified ? verifiedMark() : null,
-    user.bot ? botChip() : null,
   ];
   return link
     ? h('a', { href: `/@${user.username}`, class: 'name-line' }, parts)
     : h('span', { class: 'name-line' }, parts);
-}
-
-export function memberChip(user) {
-  return user.memberNumber ? h('span', { class: 'member-no', title: 'Numéro de membre' }, memberNo(user.memberNumber)) : null;
-}
-
-// ---------------------------------------------------------------------------
-// Carte de membre 3D : titane pour les membres, carte métal pop art pour les Fondateurs
-// ---------------------------------------------------------------------------
-
-// Trame pop art (points de tailles variables, façon impression en demi-teintes) :
-// un seul tracé par couleur, calculé une fois pour toutes les cartes.
-function halftone(w, hgt, step, size) {
-  let d = '';
-  for (let y = step / 2, row = 0; y < hgt; y += step, row++) {
-    for (let x = step / 2 + (row % 2 ? step / 2 : 0); x < w; x += step) {
-      const r = Math.min(1, Math.max(0, size(x / w, y / hgt))) * step * 0.52;
-      if (r < 0.14) continue;
-      const f = (n) => n.toFixed(2);
-      d += `M${f(x - r)} ${f(y)}a${f(r)} ${f(r)} 0 1 0 ${f(2 * r)} 0a${f(r)} ${f(r)} 0 1 0 ${f(-2 * r)} 0`;
-    }
-  }
-  return d;
-}
-function burst(cx, cy, points, outer, inner) {
-  const pts = [];
-  for (let i = 0; i < points * 2; i++) {
-    const a = (Math.PI * i) / points - Math.PI / 2;
-    const r = i % 2 ? inner : outer;
-    pts.push(`${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`);
-  }
-  return pts.join(' ');
-}
-let popArt = '';
-function popArtSvg() {
-  if (popArt) return popArt;
-  const W = 160;
-  const H = 101;
-  // Le motif reste à droite : le nom et le numéro, à gauche, se lisent sur le métal
-  const pink = halftone(W, H, 4.2, (u, v) => 1.15 - Math.hypot(u - 1, v * 0.64) / 0.6);
-  const cyan = halftone(W, H, 3.4, (u, v) => 1 - Math.hypot(u - 1.02, (v - 0.8) * 0.64) / 0.3);
-  const yellow = halftone(W, H, 2.8, (u, v) => 1 - Math.hypot(u - 0.66, (v - 1.12) * 0.64) / 0.28);
-  popArt = `<svg class="mcard-art" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <path d="${cyan}" fill="#19c6ff" opacity="0.85"/>
-    <path d="${yellow}" fill="#ffd60a" opacity="0.8"/>
-    <path d="${pink}" fill="#ff2e93" opacity="0.9"/>
-    <g transform="translate(2.2 2.2)"><polygon points="${burst(115, 54, 16, 26.5, 20)}" fill="#ff2e93"/></g>
-    <polygon points="${burst(115, 54, 16, 26.5, 20)}" fill="#ffd60a" stroke="#0b0b0f" stroke-width="1.6" stroke-linejoin="round"/>
-    <circle cx="115" cy="54" r="16" fill="#fbfbfd" stroke="#0b0b0f" stroke-width="1.6"/>
-    <circle cx="115" cy="54" r="13.3" fill="none" stroke="#0b0b0f" stroke-width="0.5" stroke-dasharray="1 1.2"/>
-    <text x="116.4" y="63.6" text-anchor="middle" class="mcard-art-a" fill="#19c6ff">A</text>
-    <text x="115" y="62.2" text-anchor="middle" class="mcard-art-a" fill="#ff2e93" stroke="#0b0b0f" stroke-width="1.3" paint-order="stroke">A</text>
-  </svg>`;
-  return popArt;
-}
-
-export function memberCard({ name, number, since, founder, interactive = true }) {
-  let card;
-  if (founder) {
-    card = h(
-      'div',
-      { class: 'mcard founder' },
-      h(
-        'div',
-        { class: 'mcard-top' },
-        h('div', { class: 'mcard-logo' }, 'AURUM', h('small', null, 'LE CERCLE PRIVÉ')),
-        h('div', { class: 'mcard-pop-label' }, 'Fondateur'),
-      ),
-      h('div', { class: 'mcard-chip' }),
-      h('div', { class: 'mcard-number emboss' }, memberNo(number)),
-      h(
-        'div',
-        { class: 'mcard-bottom' },
-        h('div', null, h('small', null, `Membre depuis ${since || '—'}`), h('b', { class: 'emboss' }, (name || 'Votre nom').toUpperCase())),
-      ),
-    );
-    card.insertAdjacentHTML('afterbegin', popArtSvg());
-  } else {
-    card = h(
-      'div',
-      { class: 'mcard' },
-      h(
-        'div',
-        { class: 'mcard-top' },
-        h('div', { class: 'mcard-logo' }, 'AURUM', h('small', null, 'LE CERCLE PRIVÉ')),
-        h('div', { class: 'mcard-chip' }),
-      ),
-      h('div', { class: 'mcard-number' }, memberNo(number)),
-      h(
-        'div',
-        { class: 'mcard-bottom' },
-        h('div', null, h('small', null, 'Membre'), h('b', null, name || 'Votre nom')),
-        h('div', { style: { textAlign: 'right' } }, h('small', null, 'Depuis'), h('b', null, since || '—')),
-      ),
-    );
-  }
-  if (interactive) tilt(card);
-  return h('div', { class: 'mcard-wrap' }, card);
-}
-
-export function tilt(card) {
-  const target = card;
-  const move = (e) => {
-    const r = target.getBoundingClientRect();
-    const x = (e.clientX - r.left) / r.width;
-    const y = (e.clientY - r.top) / r.height;
-    target.classList.add('is-tracking');
-    target.style.setProperty('--rx', `${(x - 0.5) * 22}deg`);
-    target.style.setProperty('--ry', `${(0.5 - y) * 16}deg`);
-    target.style.setProperty('--mx', `${x * 100}%`);
-    target.style.setProperty('--my', `${y * 100}%`);
-  };
-  const leave = () => {
-    target.classList.remove('is-tracking');
-    target.style.setProperty('--rx', '0deg');
-    target.style.setProperty('--ry', '0deg');
-  };
-  target.addEventListener('pointermove', move);
-  target.addEventListener('pointerleave', leave);
 }
 
 // Toucher simple (action habituelle) et double-toucher (aimer), comme sur les grands réseaux.
@@ -338,33 +223,23 @@ export function heartBurst(host, e) {
 }
 
 // Partager un lien : feuille de partage du téléphone, sinon copie du lien
-export async function shareLink(title, path) {
+export async function shareLink(title, path, { native = true } = {}) {
   const url = `${location.origin}${path}`;
-  if (navigator.share) {
+  if (native && navigator.share) {
     try {
       await navigator.share({ title, url });
-      return;
+      return true;
     } catch (err) {
-      if (err?.name === 'AbortError') return;
+      if (err?.name === 'AbortError') return false;
     }
   }
   try {
     await navigator.clipboard.writeText(url);
-    toast('Lien copié.');
+    toast('Lien copié');
   } catch {
     toast(url);
   }
-}
-
-export function remaining(ts) {
-  const hours = Math.max(1, Math.ceil((ts - Date.now()) / 3600000));
-  return hours >= 48 ? `${Math.round(hours / 24)} jours` : `${hours} h`;
-}
-
-export function cardSince(ts) {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`;
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +247,8 @@ export function cardSince(ts) {
 // ---------------------------------------------------------------------------
 export function toast(message, type = 'ok') {
   const host = document.getElementById('toasts');
-  const el = h('div', { class: `toast ${type}`, role: 'status' }, icon(type === 'error' ? 'alert' : 'check'), message);
+  if (!host) return;
+  const el = h('div', { class: `toast ${type}`, role: 'status' }, type === 'error' ? icon('alert') : null, message);
   host.append(el);
   setTimeout(() => {
     el.classList.add('out');
@@ -385,7 +261,7 @@ export function spinner() {
 }
 
 export function emptyState(iconName, title, text, action) {
-  return h('div', { class: 'empty' }, icon(iconName), h('h3', null, title), text ? h('p', null, text) : null, action || null);
+  return h('div', { class: 'empty' }, h('span', { class: 'empty-icon' }, icon(iconName)), h('h3', null, title), text ? h('p', null, text) : null, action || null);
 }
 
 let openModalEl = null;
@@ -465,6 +341,11 @@ export function lightbox(src) {
   box.addEventListener('pointerup', end);
   box.addEventListener('pointercancel', end);
   document.body.append(box);
+}
+
+// Squelettes de chargement : grille de vidéos
+export function skeletonGrid(n = 9) {
+  return h('div', { class: 'grid', 'aria-hidden': 'true' }, Array.from({ length: n }, () => h('div', { class: 'tile sk' })));
 }
 
 // Squelettes de chargement (plus élégants qu'une roue)
@@ -603,3 +484,10 @@ export async function shrinkImage(file, maxDim = 1600, quality = 0.85) {
 }
 
 export const TOO_BIG_GIF = 4 * 1024 * 1024;
+
+// Logo : un « V » qui joue, dans un carré aux couleurs de Vibz
+export function logoMark(size = 40) {
+  const el = h('span', { class: 'logo-mark', style: { width: `${size}px`, height: `${size}px` }, 'aria-hidden': 'true' });
+  el.innerHTML = '<svg viewBox="0 0 48 48"><defs><linearGradient id="vz" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7b5cff"/><stop offset="1" stop-color="#ff3d7f"/></linearGradient></defs><rect width="48" height="48" rx="13" fill="url(#vz)"/><path d="M13 14.5 22.6 34a1.6 1.6 0 0 0 2.9 0L35 14.5" fill="none" stroke="#fff" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="35" cy="14.5" r="3.4" fill="#ffd84d"/></svg>';
+  return el;
+}

@@ -3,7 +3,7 @@
 // la publication. Chaque membre ne voit que ses propres brouillons.
 import { store } from './store.js';
 
-const DB = 'aurum-brouillons';
+const DB = 'vibz-brouillons';
 const STORE = 'drafts';
 let dbp = null;
 

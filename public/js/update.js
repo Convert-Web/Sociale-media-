@@ -8,7 +8,7 @@ import { h, icon, toast } from './dom.js';
 import { store } from './store.js';
 import { uploading } from './components/uploads.js';
 
-const CACHE = 'aurum-app'; // même nom que dans sw.js
+const CACHE = 'vibz-app'; // même nom que dans sw.js
 const EVERY = 2 * 60 * 1000;
 const AGAIN_AFTER = 30 * 60 * 1000; // « Plus tard » : le bouton revient au bout de 30 minutes
 
@@ -69,7 +69,7 @@ function showButton() {
     pill = h(
       'div',
       { class: 'update-pill', role: 'status', 'aria-live': 'polite' },
-      h('button', { type: 'button', class: 'update-go', onclick: applyUpdate, title: 'Une nouvelle version d’AURUM est prête' }, icon('refresh', 'icon-sm'), label),
+      h('button', { type: 'button', class: 'update-go', onclick: applyUpdate, title: 'Une nouvelle version de Vibz est prête' }, icon('refresh', 'icon-sm'), label),
       h('button', { type: 'button', class: 'update-later', 'aria-label': 'Plus tard', onclick: later }, icon('x', 'icon-xs')),
     );
   }
@@ -134,7 +134,7 @@ export function startUpdateChecks() {
   addEventListener('focus', () => soon());
   addEventListener('online', () => setTimeout(() => checkForUpdate(), 1500));
   // Le serveur annonce une autre version dans une réponse ordinaire : on vérifie tout de suite
-  addEventListener('aurum:version', () => {
+  addEventListener('vibz:version', () => {
     lastCheck = 0;
     checkForUpdate();
     swCheckedAt = 0;

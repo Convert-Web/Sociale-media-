@@ -1,323 +1,202 @@
-import { api } from '../api.js';
-import { store, disconnectRealtime } from '../store.js';
+// Réglages et confidentialité : compte, confidentialité, notifications, apparence, aide et mentions.
+import { api, enc } from '../api.js';
+import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, toast, memberCard, cardSince, fullDate, memberNo, confirmDialog, modal, shrinkImage, TOO_BIG_GIF } from '../dom.js';
-import { backHead } from './feed.js';
-import { cropImage } from '../components/cropper.js';
-import { pushCard } from '../components/pushcard.js';
-import { LANG_CHOICES, myLang } from '../components/translate.js';
+import { h, icon, toast, confirmDialog, modal, emptyState, spinner } from '../dom.js';
+import { pushState, enablePush, disablePush } from '../push.js';
+import { LANG_CHOICES } from '../components/translate.js';
+import { toggle } from '../components/postedit.js';
+import { userRow } from '../components/userlist.js';
+import { logout } from './auth.js';
+import { validatePasswordHint } from './onboarding.js';
 
-function field(label, input, hint) {
-  return h('label', { class: 'field' }, h('span', null, label), input, hint ? h('small', { class: 'hint' }, hint) : null);
+const back = (to = '/reglages') => h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => navigate(to) }, icon('back'));
+const head = (title, to) => h('header', { class: 'page-head' }, back(to), h('h1', null, title), h('span', { class: 'icon-btn' }));
+const group = (title, ...rows) => h('section', { class: 'set-group' }, title ? h('h2', null, title) : null, h('div', { class: 'set-card' }, rows));
+const link = (href, ic, label, sub = null) => h('a', { href, class: 'set-row' }, h('span', { class: 'set-ic' }, icon(ic)), h('span', { class: 'set-text' }, label, sub ? h('small', null, sub) : null), icon('chevron', 'icon-sm'));
+const button = (ic, label, onclick, danger = false) => h('button', { type: 'button', class: `set-row${danger ? ' danger' : ''}`, onclick }, h('span', { class: 'set-ic' }, icon(ic)), h('span', { class: 'set-text' }, label));
+
+async function saveSettings(patch) {
+  try {
+    const { user } = await api.patch('/api/me/settings', patch);
+    store.setUser(user);
+    toast('Réglage enregistré');
+    return user;
+  } catch (err) {
+    toast(err.message, 'error');
+    return null;
+  }
 }
 
-function imagePicker(onFile) {
-  const input = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/gif', hidden: true });
-  input.addEventListener('change', () => {
-    const f = input.files[0];
-    input.value = '';
-    if (!f) return;
-    if (f.type === 'image/gif' && f.size > TOO_BIG_GIF) return toast('GIF trop lourd (4 Mo maximum).', 'error');
-    onFile(f);
-  });
-  return input;
+export function getTheme() {
+  try {
+    return localStorage.getItem('vibz:theme') || 'system';
+  } catch {
+    return 'system';
+  }
+}
+export function setTheme(v) {
+  try {
+    if (v === 'system') localStorage.removeItem('vibz:theme');
+    else localStorage.setItem('vibz:theme', v);
+  } catch {
+    /* stockage indisponible */
+  }
+  if (v === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = v;
 }
 
-export function settingsView(ctx) {
+export async function settingsView(ctx) {
+  const section = ctx.params.section || '';
   const u = store.user;
+  const s = u.settings;
+  ctx.title = 'Réglages — Vibz';
 
-  // --- Photo & couverture --------------------------------------------------
-  const avatarHost = h('div');
-  const coverHost = h('div', { class: 'cover cover-edit' });
-  const paintMedia = () => {
-    avatarHost.replaceChildren(avatar(store.user, 'lg'));
-    coverHost.replaceChildren(...(store.user.cover ? [h('img', { src: store.user.cover, alt: '' })] : []));
-  };
-  paintMedia();
-
-  const upload = async (kind, file) => {
-    const fd = new FormData();
-    // Recadrage : jamais d'image étirée, l'utilisateur choisit le cadre (GIF animés conservés tels quels)
-    let small;
-    if (file.type === 'image/gif') small = file;
-    else {
-      const cropped = await cropImage(file, kind === 'avatar' ? { aspect: 1, round: true, outWidth: 800, title: 'Photo de profil' } : { aspect: 3, outWidth: 1500, title: 'Photo de couverture' });
-      if (!cropped) return;
-      small = await shrinkImage(cropped, kind === 'avatar' ? 800 : 1600);
-    }
-    fd.append('image', small, small.name || 'photo.jpg');
-    try {
-      const { user } = await api.post(`/api/me/${kind}`, fd);
-      store.setUser(user);
-      paintMedia();
-      toast(kind === 'avatar' ? 'Photo mise à jour.' : 'Couverture mise à jour.');
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  };
-  const removeMedia = async (kind) => {
-    try {
-      const { user } = await api.del(`/api/me/${kind}`);
-      store.setUser(user);
-      paintMedia();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  };
-  const avatarInput = imagePicker((f) => upload('avatar', f));
-  const coverInput = imagePicker((f) => upload('cover', f));
-
-  // --- Profil ---------------------------------------------------------------
-  const displayName = h('input', { class: 'input', value: u.displayName, maxlength: 40, required: true });
-  const profession = h('input', { class: 'input', value: u.profession, maxlength: 60, placeholder: 'Fondatrice, investisseur, architecte…' });
-  const city = h('input', { class: 'input', value: u.city, maxlength: 60, placeholder: 'Paris, Genève, Monaco…' });
-  const website = h('input', { class: 'input', value: u.website, maxlength: 120, placeholder: 'votre-site.com' });
-  const bio = h('textarea', { class: 'textarea', maxlength: 280, placeholder: 'Quelques mots pour vous présenter au cercle.' });
-  bio.value = u.bio;
-  const saveBtn = h('button', { class: 'btn btn-primary', type: 'submit' }, 'Enregistrer');
-
-  const profileForm = h(
-    'form',
-    {
-      class: 'card',
-      onsubmit: async (e) => {
-        e.preventDefault();
-        saveBtn.disabled = true;
-        try {
-          const { user } = await api.patch('/api/me', {
-            displayName: displayName.value,
-            profession: profession.value,
-            city: city.value,
-            website: website.value,
-            bio: bio.value,
-          });
-          store.setUser(user);
-          website.value = user.website;
-          toast('Profil enregistré.');
-        } catch (err) {
-          toast(err.message, 'error');
-        } finally {
-          saveBtn.disabled = false;
-        }
-      },
-    },
-    h('h2', null, 'Votre profil'),
-    h('p', { class: 'desc' }, 'Ce que voient les autres membres.'),
-    h(
-      'div',
-      { class: 'media-edit' },
-      avatarHost,
-      h(
-        'div',
-        { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
-        h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: () => avatarInput.click() }, icon('camera', 'icon-sm'), 'Changer la photo'),
-        h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: () => coverInput.click() }, icon('image', 'icon-sm'), 'Changer la couverture'),
-        h('button', { type: 'button', class: 'btn btn-sm', style: { color: 'var(--muted)' }, onclick: () => removeMedia('avatar') }, 'Retirer la photo'),
-      ),
-      avatarInput,
-      coverInput,
-    ),
-    coverHost,
-    h('div', { class: 'grid-2' }, field('Nom affiché', displayName), field('Profession', profession)),
-    h('div', { class: 'grid-2' }, field('Ville', city), field('Site web', website)),
-    field('Biographie', bio, '280 caractères maximum. Les @mentions et #sujets sont cliquables.'),
-    h('div', { class: 'row-end' }, h('a', { href: `/@${u.username}`, class: 'btn btn-ghost' }, 'Voir mon profil'), saveBtn),
-  );
-
-  // --- Carte de membre ------------------------------------------------------
-  const membership = h(
-    'div',
-    { class: 'card' },
-    h('h2', null, 'Votre carte'),
-    h('p', { class: 'desc' }, u.founder ? 'Carte Fondateur : entrée gratuite à vie et avant-premières du cercle.' : 'Membre du cercle, à vie.'),
-    h('div', { style: { maxWidth: '380px' } }, memberCard({ name: u.displayName, number: u.memberNumber, since: cardSince(u.joinedAt), founder: u.founder })),
-    u.founder
-      ? h(
-          'ul',
-          { class: 'founder-perks' },
-          [
-            ['sparkles', 'Avant-premières', 'Les annonces de la Direction, avant tout le monde.'],
-            ['calendar', 'Agenda en avance', 'Les événements de la Direction s’ouvrent d’abord aux Fondateurs, pendant 48 h.'],
-            ['gem', 'Entrée gratuite, à vie', 'Votre numéro ne sera jamais réattribué.'],
-          ].map(([ic, t, d]) => h('li', null, icon(ic), h('div', null, h('b', null, t), h('small', null, d)))),
-        )
-      : null,
-    h(
-      'div',
-      { class: 'profile-meta', style: { marginTop: '0' } },
-      h('span', null, icon('gem'), memberNo(u.memberNumber)),
-      h('span', null, icon('calendar'), `Admis le ${fullDate(u.joinedAt)}`),
-      h('span', null, icon('mail'), u.email),
-    ),
-  );
-
-  // --- Sécurité ---------------------------------------------------------------
-  const current = h('input', { class: 'input', type: 'password', autocomplete: 'current-password', required: true });
-  const next = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', minlength: 8, required: true });
-  const pwBtn = h('button', { class: 'btn btn-ghost', type: 'submit' }, 'Changer le mot de passe');
-  const security = h(
-    'form',
-    {
-      class: 'card',
-      onsubmit: async (e) => {
-        e.preventDefault();
-        pwBtn.disabled = true;
-        try {
-          await api.post('/api/auth/password', { current: current.value, next: next.value });
-          security.reset();
-          toast('Mot de passe modifié. Vos autres sessions ont été fermées.');
-        } catch (err) {
-          toast(err.message, 'error');
-        } finally {
-          pwBtn.disabled = false;
-        }
-      },
-    },
-    h('h2', null, 'Sécurité'),
-    h('div', { class: 'grid-2' }, field('Mot de passe actuel', current), field('Nouveau mot de passe', next, '8 caractères minimum.')),
-    h('div', { class: 'row-end' }, pwBtn),
-  );
-
-  // --- Données ---------------------------------------------------------------
-  const deleteAccount = async () => {
-    const ok = await confirmDialog(
-      'Quitter définitivement le cercle ?',
-      `Votre profil, vos publications, vos messages et votre numéro seront supprimés.${store.config.paidEntry ? ' Le droit d’entrée ne sera pas remboursé.' : ''} Cette action est irréversible.`,
-      'Continuer',
+  if (section === 'compte') {
+    const lang = h('select', { class: 'input' }, h('option', { value: '' }, 'Langue de l’appareil'), LANG_CHOICES.map(([c, l]) => h('option', { value: c, selected: u.lang === c }, l)));
+    lang.addEventListener('change', async () => {
+      try {
+        const r = await api.post('/api/me/lang', { lang: lang.value || null });
+        store.setUser(r.user);
+        toast('Langue de traduction enregistrée');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    });
+    return h('div', { class: 'page settings' }, head('Compte'),
+      group('Informations', h('div', { class: 'set-row static' }, h('span', { class: 'set-ic' }, icon('mail')), h('span', { class: 'set-text' }, 'E-mail', h('small', null, u.email))), h('div', { class: 'set-row static' }, h('span', { class: 'set-ic' }, icon('at')), h('span', { class: 'set-text' }, 'Nom d’utilisateur', h('small', null, `@${u.username}`)))),
+      group('Sécurité', button('key', 'Changer de mot de passe', changePassword)),
+      group('Traduction', h('label', { class: 'set-row static' }, h('span', { class: 'set-ic' }, icon('globe')), h('span', { class: 'set-text' }, 'Traduire les contenus en', lang))),
+      group('Tes données', h('a', { href: '/api/me/export', class: 'set-row', download: `vibz-${u.username}.json` }, h('span', { class: 'set-ic' }, icon('download')), h('span', { class: 'set-text' }, 'Télécharger mes données', h('small', null, 'Profil, vidéos, commentaires, messages… au format JSON')))),
+      group(null, button('logout', 'Se déconnecter', logout), button('trash', 'Supprimer mon compte', deleteAccount, true)),
     );
-    if (!ok) return;
-    const pw = h('input', { class: 'input', type: 'password', autocomplete: 'current-password', placeholder: 'Votre mot de passe', required: true });
-    const btn = h('button', { class: 'btn btn-danger btn-block', type: 'submit' }, 'Supprimer mon compte');
-    const m = modal(
-      'Confirmez avec votre mot de passe',
-      h(
-        'form',
-        {
-          class: 'modal-body',
-          style: { display: 'grid', gap: '14px' },
-          onsubmit: async (e) => {
-            e.preventDefault();
-            btn.disabled = true;
-            try {
-              await api.del('/api/me', { password: pw.value });
-              m.close();
-              disconnectRealtime();
-              store.setUser(null);
-              toast('Votre compte a été supprimé.');
-              navigate('/');
-            } catch (err) {
-              toast(err.message, 'error');
-              btn.disabled = false;
-            }
-          },
-        },
-        pw,
-        btn,
-      ),
-    );
-  };
+  }
 
-  const data = h(
-    'div',
-    { class: 'card' },
-    h('h2', null, 'Vos données'),
-    h('p', { class: 'desc' }, 'Elles vous appartiennent : téléchargez-les ou effacez-les quand vous le souhaitez.'),
-    h(
-      'div',
-      { style: { display: 'flex', gap: '10px', flexWrap: 'wrap' } },
-      h('a', { href: '/api/me/export', class: 'btn btn-ghost', download: `aurum-${u.username}.json` }, icon('download', 'icon-sm'), 'Exporter mes données'),
-      h('button', { class: 'btn btn-danger', onclick: deleteAccount }, icon('trash', 'icon-sm'), 'Supprimer mon compte'),
-    ),
-  );
-
-  // --- Membres bloqués ---------------------------------------------------------
-  const blockedList = h('div', { class: 'blocked-list' }, h('p', { class: 'muted small' }, 'Chargement…'));
-  const paintBlocked = async () => {
-    try {
-      const { users } = await api.get('/api/me/blocked');
-      if (!users.length) {
-        blockedList.replaceChildren(h('p', { class: 'muted small' }, 'Vous n’avez bloqué personne.'));
+  if (section === 'confidentialite') {
+    const priv = toggle('Compte privé', s.privateAccount, 'Seuls les abonnés que tu acceptes voient tes vidéos.');
+    priv.input.addEventListener('change', async () => {
+      if (!priv.input.checked && !(await confirmDialog('Passer en compte public ?', 'Tout le monde pourra voir tes vidéos et s’abonner. Les demandes en attente seront acceptées.', 'Passer en public', false))) {
+        priv.input.checked = true;
         return;
       }
-      blockedList.replaceChildren(
-        ...users.map((b) =>
-          h(
-            'div',
-            { class: 'user-row' },
-            avatar(b, 'sm'),
-            h('span', { class: 'meta' }, h('b', null, b.displayName), h('small', null, `@${b.username}`)),
-            h('button', {
-              class: 'btn btn-secondary btn-sm',
-              onclick: async () => {
-                try {
-                  await api.del(`/api/users/${encodeURIComponent(b.username)}/block`);
-                  toast(`${b.displayName} est débloqué.`);
-                  paintBlocked();
-                } catch (err) {
-                  toast(err.message, 'error');
-                }
-              },
-            }, 'Débloquer'),
-          ),
-        ),
-      );
-    } catch (err) {
-      blockedList.replaceChildren(h('p', { class: 'muted small' }, err.message));
-    }
-  };
-  paintBlocked();
-  const blockedCard = h(
-    'div',
-    { class: 'card' },
-    h('h2', null, 'Membres bloqués'),
-    h('p', { class: 'desc' }, 'Ils ne voient plus votre profil ni vos publications, et ne peuvent plus vous écrire.'),
-    blockedList,
+      await saveSettings({ privateAccount: priv.input.checked });
+    });
+    const liked = toggle('Vidéos aimées visibles', s.showLiked, 'Affiche l’onglet « J’aime » de ton profil aux autres.');
+    liked.input.addEventListener('change', () => saveSettings({ showLiked: liked.input.checked }));
+    const perso = toggle('Fil « Pour toi » personnalisé', s.personalized, 'Désactivé : les vidéos sont classées par popularité et fraîcheur, sans tenir compte de ce que tu regardes.');
+    perso.input.addEventListener('change', () => saveSettings({ personalized: perso.input.checked }));
+    const dm = h('select', { class: 'input' }, [['everyone', 'Tout le monde'], ['friends', 'Amis'], ['none', 'Personne']].map(([v, l]) => h('option', { value: v, selected: s.dmPolicy === v }, l)));
+    dm.addEventListener('change', () => saveSettings({ dmPolicy: dm.value }));
+    const blocked = h('div', { class: 'set-card' }, spinner());
+    api.get('/api/me/blocked').then(({ users }) => {
+      blocked.replaceChildren(...(users.length ? users.map((b) => userRow(b, { action: h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: async (e) => { await api.del(`/api/users/${enc(b.username)}/block`); e.target.closest('.user-row').remove(); toast('Compte débloqué'); } }, 'Débloquer') })) : [h('p', { class: 'muted small pad' }, 'Aucun compte bloqué.')]));
+    }).catch(() => blocked.replaceChildren());
+    return h('div', { class: 'page settings' }, head('Confidentialité'),
+      group('Visibilité', priv.el, liked.el),
+      group('Messages', h('label', { class: 'set-row static' }, h('span', { class: 'set-ic' }, icon('send')), h('span', { class: 'set-text' }, 'Qui peut t’envoyer des messages', dm))),
+      group('Ton fil « Pour toi »', perso.el, button('refresh', 'Actualiser ton fil « Pour toi »', async () => {
+        if (!(await confirmDialog('Actualiser ton fil ?', 'Les centres d’intérêt appris par Vibz sont effacés : ton fil repart de zéro, comme pour un nouveau compte.', 'Actualiser', false))) return;
+        await api.del('/api/me/interests');
+        toast('Ton fil « Pour toi » repart de zéro');
+      })),
+      h('section', { class: 'set-group' }, h('h2', null, 'Comptes bloqués'), blocked),
+    );
+  }
+
+  if (section === 'notifications') {
+    const n = s.notify;
+    const pushRow = h('div', { class: 'set-card' }, spinner());
+    const paintPush = async () => {
+      const st = await pushState();
+      const texts = {
+        unsupported: 'Ce navigateur ne gère pas les notifications.',
+        install: 'Sur iPhone : ajoute d’abord Vibz à l’écran d’accueil (Partager → Sur l’écran d’accueil), puis ouvre-le depuis l’icône.',
+        denied: 'Les notifications sont bloquées pour ce site dans les réglages du navigateur.',
+      };
+      if (texts[st]) return pushRow.replaceChildren(h('p', { class: 'muted small pad' }, texts[st]));
+      const t = toggle('Notifications sur cet appareil', st === 'on', 'Messages, abonnés, commentaires, LIVE…');
+      t.input.addEventListener('change', async () => {
+        try {
+          if (t.input.checked) await enablePush();
+          else await disablePush();
+          toast(t.input.checked ? 'Notifications activées' : 'Notifications désactivées');
+          if (t.input.checked) api.post('/api/push/test').catch(() => {});
+        } catch (err) {
+          t.input.checked = !t.input.checked;
+          toast(err.message, 'error');
+        }
+      });
+      pushRow.replaceChildren(t.el);
+    };
+    paintPush();
+    const pref = (key, label, hint) => {
+      const t = toggle(label, n[key] !== false, hint);
+      t.input.addEventListener('change', () => saveSettings({ notify: { [key]: t.input.checked } }));
+      return t.el;
+    };
+    return h('div', { class: 'page settings' }, head('Notifications'),
+      h('section', { class: 'set-group' }, h('h2', null, 'Sur cet appareil'), pushRow),
+      group('Me prévenir pour', pref('messages', 'Messages'), pref('comments', 'Commentaires et réponses'), pref('mentions', 'Mentions'), pref('follows', 'Nouveaux abonnés'), pref('live', 'LIVE des comptes suivis'), pref('likes', 'Cadeaux reçus')),
+    );
+  }
+
+  if (section === 'apparence') {
+    const current = getTheme();
+    const opt = (v, label, ic) => h('label', { class: 'set-row' }, h('span', { class: 'set-ic' }, icon(ic)), h('span', { class: 'set-text' }, label), h('input', { type: 'radio', name: 'theme', value: v, checked: current === v, onchange: () => { setTheme(v); toast('Apparence enregistrée'); } }));
+    return h('div', { class: 'page settings' }, head('Apparence'), group(null, opt('system', 'Comme l’appareil', 'sliders'), opt('light', 'Clair', 'sun'), opt('dark', 'Sombre', 'moon')), h('p', { class: 'muted small pad' }, 'Le fil des vidéos reste toujours sombre, pour mieux les voir.'));
+  }
+
+  return h('div', { class: 'page settings' }, head('Réglages et confidentialité', `/@${u.username}`),
+    group('Compte', link('/reglages/compte', 'user', 'Compte', u.email), link('/reglages/confidentialite', 'lock', 'Confidentialité', s.privateAccount ? 'Compte privé' : 'Compte public'), link('/reglages/notifications', 'bell', 'Notifications'), link('/reglages/apparence', 'moon', 'Apparence')),
+    group('Créer et gagner', link('/studio', 'creator', 'Studio créateur', 'Statistiques de tes vidéos'), link('/portefeuille', 'wallet', 'Portefeuille', `${u.coins} pièce${u.coins > 1 ? 's' : ''}`)),
+    u.isAdmin ? group('Administration', link('/admin', 'shield', 'Administration')) : null,
+    group('Aide', link('/aide', 'help', 'Aide'), link('/regles', 'shield', 'Règles de la communauté'), link('/cgu', 'book', 'Conditions d’utilisation'), link('/cgv', 'book', 'Conditions de vente (pièces)'), link('/confidentialite', 'lock', 'Politique de confidentialité'), link('/mentions-legales', 'info', 'Mentions légales'), button('info', 'Gérer les cookies', () => document.dispatchEvent(new CustomEvent('vibz:cookies')))),
+    group(null, button('logout', 'Se déconnecter', logout)),
+    h('p', { class: 'muted small center' }, `Vibz · version ${String(store.config?.version || '').slice(0, 7)}`),
   );
-
-  const notifCard = pushCard();
-
-  // --- Courriels ------------------------------------------------------------------
-  const digest = h('input', { type: 'checkbox', class: 'switch', checked: store.user.emailDigest !== false, 'aria-label': 'Recevoir la Lettre du cercle' });
-  digest.addEventListener('change', async () => {
-    try {
-      const { user } = await api.post('/api/me/emails', { digest: digest.checked });
-      store.setUser(user);
-      toast(digest.checked ? 'Vous recevrez la Lettre chaque dimanche.' : 'Vous ne recevrez plus la Lettre.');
-    } catch (err) {
-      digest.checked = !digest.checked;
-      toast(err.message, 'error');
-    }
-  });
-  // --- Langue des traductions ----------------------------------------------------
-  const langSelect = h('select', { class: 'input', 'aria-label': 'Langue des traductions' }, LANG_CHOICES.map(([code, name]) => h('option', { value: code }, name)));
-  langSelect.value = myLang();
-  langSelect.addEventListener('change', async () => {
-    try {
-      const { user } = await api.post('/api/me/lang', { lang: langSelect.value });
-      store.setUser(user);
-      toast('Langue des traductions enregistrée.');
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  });
-  const langCard = h(
-    'div',
-    { class: 'card' },
-    h('h2', null, 'Traduction'),
-    h('p', { class: 'desc' }, 'Sous chaque publication, commentaire ou message écrit dans une autre langue, « Voir la traduction » le traduit dans la langue de votre choix.'),
-    h('label', { class: 'field' }, h('span', null, 'Traduire les contenus en'), langSelect),
-  );
-
-  const mailCard = h(
-    'div',
-    { class: 'card' },
-    h('h2', null, 'Courriels'),
-    h('p', { class: 'desc' }, `Envoyés à ${u.email}. Les courriels de sécurité (mot de passe oublié) sont toujours envoyés.`),
-    h('label', { class: 'admission-mode', style: { boxShadow: 'none', padding: '4px 0', background: 'transparent' } }, h('span', { class: 'grow' }, h('b', null, 'La Lettre du cercle'), h('small', { class: 'muted' }, 'Chaque dimanche matin : les événements, les meilleures publications, le Journal et l’adresse de la semaine.')), digest),
-  );
-  notifCard.id = 'notifications';
-  if (location.hash === '#notifications') setTimeout(() => notifCard.scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
-
-  ctx.title = 'Réglages — AURUM';
-  return h('div', null, backHead('Réglages', `@${u.username}`), h('div', { class: 'settings' }, profileForm, notifCard, langCard, mailCard, membership, security, blockedCard, data, h('a', { href: '/aide', class: 'card settings-help' }, h('span', { class: 'create-icon' }, icon('help')), h('span', { class: 'grow' }, h('b', null, 'Aide'), h('small', null, 'Questions fréquentes, nous écrire')), icon('chevron', 'icon-sm'))));
 }
+
+function changePassword() {
+  const cur = h('input', { class: 'input', type: 'password', required: true, autocomplete: 'current-password' });
+  const next = h('input', { class: 'input', type: 'password', required: true, minlength: 8, autocomplete: 'new-password' });
+  const save = h('button', { type: 'submit', class: 'btn btn-primary btn-block' }, 'Changer le mot de passe');
+  const m = modal('Mot de passe', h('form', {
+    class: 'modal-body form-stack',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      save.disabled = true;
+      try {
+        await api.post('/api/auth/password', { current: cur.value, next: next.value });
+        m.close();
+        toast('Mot de passe changé : les autres appareils sont déconnectés');
+      } catch (err) {
+        save.disabled = false;
+        toast(err.message, 'error');
+      }
+    },
+  }, h('label', { class: 'field' }, h('span', null, 'Mot de passe actuel'), cur), h('label', { class: 'field' }, h('span', null, 'Nouveau mot de passe'), next, h('small', { class: 'field-hint' }, validatePasswordHint)), save));
+}
+
+function deleteAccount() {
+  const pw = h('input', { class: 'input', type: 'password', required: true, autocomplete: 'current-password' });
+  const go = h('button', { type: 'submit', class: 'btn btn-danger btn-block' }, 'Supprimer définitivement');
+  const m = modal('Supprimer ton compte', h('form', {
+    class: 'modal-body form-stack',
+    onsubmit: async (e) => {
+      e.preventDefault();
+      go.disabled = true;
+      try {
+        await api.del('/api/me', { password: pw.value });
+        m.close();
+        store.setUser(null);
+        toast('Ton compte a été supprimé');
+        navigate('/', { replace: true });
+      } catch (err) {
+        go.disabled = false;
+        toast(err.message, 'error');
+      }
+    },
+  }, h('p', null, 'Tes vidéos, commentaires, messages, abonnements et pièces seront effacés définitivement. Cette action est irréversible.'), h('label', { class: 'field' }, h('span', null, 'Confirme avec ton mot de passe'), pw), go));
+}
+
+export const noBlocked = () => emptyState('ban', 'Aucun compte bloqué', null);

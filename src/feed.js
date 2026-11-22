@@ -142,7 +142,8 @@ async function forYou(ctx, viewer, { exclude = [], limit = 8, rand = Math.random
      ORDER BY p.id DESC LIMIT 500`,
     vid, ...ex,
   );
-  const interests = await loadInterests(ctx.db, vid);
+  // Fil non personnalisé (réglage) : seulement popularité, fraîcheur et découverte
+  const interests = viewer && viewer.personalized === 0 ? null : await loadInterests(ctx.db, vid);
   const now = Date.now();
   const scored = rows.map((r) => ({ r, s: score(r, interests, now, rand) })).sort((a, b) => b.s - a.s);
   // Variété : un même créateur et un même son une fois par page (sauf s'il ne reste que lui)

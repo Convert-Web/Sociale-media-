@@ -1,7 +1,7 @@
-// Bannière cookies et mesure d'audience anonyme (sans cookie, hébergée par AURUM).
+// Bannière cookies et mesure d'audience anonyme (sans cookie, hébergée par Vibz).
 import { h } from '../dom.js';
 
-const KEY = 'aurum:cookies'; // « ok » ou « no » (mesure d'audience refusée)
+const KEY = 'vibz:cookies'; // « ok » ou « no » (mesure d'audience refusée)
 const read = () => {
   try {
     return localStorage.getItem(KEY);
@@ -45,7 +45,7 @@ export function trackPage(pattern) {
   }
   fetch('/api/a', {
     method: 'POST',
-    headers: { 'x-aurum': '1', 'content-type': 'application/json' },
+    headers: { 'x-vibz': '1', 'content-type': 'application/json' },
     body: JSON.stringify(body),
     credentials: 'same-origin',
     keepalive: true,
@@ -72,7 +72,7 @@ export function cookieBanner(force = false) {
       'p',
       null,
       h('b', null, 'Ni publicité, ni pistage. '),
-      'AURUM utilise un seul cookie, indispensable pour rester connecté, et compte ses visites de façon anonyme, sans cookie. ',
+      'Vibz utilise un seul cookie, indispensable pour rester connecté, et compte ses visites de façon anonyme, sans cookie. ',
       h('a', { href: '/confidentialite#cookies' }, 'En savoir plus'),
     ),
     h(
@@ -88,4 +88,4 @@ export function cookieBanner(force = false) {
 }
 
 // « Gérer mon choix » (politique de confidentialité)
-document.addEventListener('aurum:cookies', () => cookieBanner(true));
+document.addEventListener('vibz:cookies', () => cookieBanner(true));

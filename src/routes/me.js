@@ -66,6 +66,7 @@ module.exports = function meRoutes(ctx) {
     const privateAccount = b.privateAccount !== undefined ? (b.privateAccount ? 1 : 0) : u.private_account;
     const showLiked = b.showLiked !== undefined ? (b.showLiked ? 1 : 0) : u.show_liked;
     const dmPolicy = b.dmPolicy !== undefined ? b.dmPolicy : u.dm_policy;
+    const personalized = b.personalized !== undefined ? (b.personalized ? 1 : 0) : u.personalized;
     if (!DM_POLICIES.includes(dmPolicy)) fail(400, 'Réglage des messages invalide.');
     let notify_prefs = u.notify_prefs || '{}';
     if (b.notify && typeof b.notify === 'object') {
@@ -73,7 +74,7 @@ module.exports = function meRoutes(ctx) {
       for (const k of NOTIFY_KEYS) if (typeof b.notify[k] === 'boolean') cur[k] = b.notify[k];
       notify_prefs = JSON.stringify(cur);
     }
-    await db.run('UPDATE users SET private_account = ?, show_liked = ?, dm_policy = ?, notify_prefs = ? WHERE id = ?', privateAccount, showLiked, dmPolicy, notify_prefs, u.id);
+    await db.run('UPDATE users SET private_account = ?, show_liked = ?, dm_policy = ?, notify_prefs = ?, personalized = ? WHERE id = ?', privateAccount, showLiked, dmPolicy, notify_prefs, personalized, u.id);
     // Compte repassé en public : les demandes en attente sont acceptées
     if (u.private_account && !privateAccount) {
       const pending = await db.all('SELECT requester_id FROM follow_requests WHERE target_id = ?', u.id);

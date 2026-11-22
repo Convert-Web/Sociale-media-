@@ -1,4 +1,4 @@
-// Client HTTP minimal pour l'API AURUM.
+// Client HTTP minimal pour l'API de Vibz.
 export class ApiError extends Error {
   constructor(status, message, code) {
     super(message);
@@ -8,7 +8,7 @@ export class ApiError extends Error {
 }
 
 async function request(method, url, body) {
-  const opts = { method, headers: { 'x-aurum': '1' }, credentials: 'same-origin' };
+  const opts = { method, headers: { 'x-vibz': '1' }, credentials: 'same-origin' };
   if (body instanceof FormData) {
     opts.body = body;
   } else if (body !== undefined) {
@@ -39,11 +39,11 @@ export async function fromResponse(promise) {
 // (js/update.js affiche alors le bouton « Mettre à jour »)
 let serverVersion = null;
 function watchVersion(res) {
-  const v = res.headers.get('x-aurum-version');
+  const v = res.headers.get('x-vibz-version');
   if (!v || v === serverVersion) return;
   const first = serverVersion === null;
   serverVersion = v;
-  if (!first) window.dispatchEvent(new CustomEvent('aurum:version', { detail: v }));
+  if (!first) window.dispatchEvent(new CustomEvent('vibz:version', { detail: v }));
 }
 
 async function handle(res) {
@@ -51,7 +51,7 @@ async function handle(res) {
   const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : null;
   if (!res.ok) {
     const err = new ApiError(res.status, data?.error || 'Une erreur est survenue.', data?.code);
-    if (res.status === 401 || res.status === 402) window.dispatchEvent(new CustomEvent('aurum:auth', { detail: err }));
+    if (res.status === 401) window.dispatchEvent(new CustomEvent('vibz:auth', { detail: err }));
     throw err;
   }
   return data;

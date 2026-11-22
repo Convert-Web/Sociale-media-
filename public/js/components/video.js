@@ -3,7 +3,6 @@ import { api, ApiError } from '../api.js';
 import { store } from '../store.js';
 import { warmPosts } from '../warm.js';
 import { h, icon, onTaps } from '../dom.js';
-import { navigate } from '../router.js';
 
 export const MAX_SECONDS = 60;
 const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
@@ -73,7 +72,7 @@ async function putChunk(id, i, part) {
       await backOnline();
       let res;
       try {
-        res = await fetch(`/api/videos/${id}/chunks/${i}`, { method: 'PUT', headers: { 'x-aurum': '1', 'content-type': 'application/octet-stream' }, credentials: 'same-origin', body: part });
+        res = await fetch(`/api/videos/${id}/chunks/${i}`, { method: 'PUT', headers: { 'x-vibz': '1', 'content-type': 'application/octet-stream' }, credentials: 'same-origin', body: part });
       } catch {
         throw new ApiError(0, 'Connexion perdue pendant l’envoi.');
       }
@@ -398,15 +397,15 @@ export function videoPlayer(v, { onOpen, onDouble, postId = null } = {}) {
 let reelsCache = null;
 let reelsLoading = null;
 let reelsGen = 0; // un chargement lancé avant une publication ne remplace pas la liste plus récente
+// Premières vidéos de « Pour toi » demandées dès l'ouverture : le fil démarre sans attendre
 export function prefetchReels() {
   if (reelsLoading) return reelsLoading;
   const gen = reelsGen;
   reelsLoading = api
-    .get('/api/videos/feed')
+    .get('/api/feed/foryou')
     .then((d) => {
       if (gen !== reelsGen) return reelsCache;
-      reelsCache = { posts: d.posts, hasMore: d.hasMore, cursor: d.cursor || null, at: Date.now() };
-      // Dès l'entrée dans l'application : les premières vidéos en entier, une à une
+      reelsCache = { posts: d.posts, hasMore: d.hasMore, at: Date.now() };
       warmPosts(d.posts, { videos: 3 });
       return reelsCache;
     })
@@ -416,18 +415,19 @@ export function prefetchReels() {
     });
   return reelsLoading;
 }
-// Liste gardée 2 minutes ; une liste vide n'est jamais réutilisée (une vidéo vient peut-être d'arriver)
-export const cachedReels = () => (reelsCache?.posts.length && Date.now() - reelsCache.at < 2 * 60 * 1000 ? reelsCache : null);
-// Une vidéo vient d'être publiée : la liste est rechargée pour l'inclure
+// Liste gardée 2 minutes, utilisée une seule fois ; une liste vide n'est jamais réutilisée
+export function takeReels() {
+  const c = reelsCache?.posts.length && Date.now() - reelsCache.at < 2 * 60 * 1000 ? reelsCache : null;
+  reelsCache = null;
+  return c;
+}
+export const pendingReels = () => reelsLoading;
+// Une vidéo vient d'être publiée : la liste gardée d'avance est oubliée
 export function forgetReels() {
   reelsCache = null;
   reelsGen += 1;
   reelsLoading = null;
-  prefetchReels();
 }
-export const rememberReels = (posts, hasMore, cursor = null) => {
-  reelsCache = { posts, hasMore, cursor, at: Date.now() };
-};
 
 let shared = null;
 export function reelsPlayer() {
@@ -438,26 +438,15 @@ export function reelsPlayer() {
   return shared;
 }
 
-// À appeler dans le geste : la première vidéo démarre aussitôt, son compris
-function primeReels(url, video = null) {
+// À appeler dans le geste : le lecteur est déverrouillé (son compris) pour la suite de la visite
+export function unlockPlayer() {
   const v = reelsPlayer();
+  if (v.dataset.unlocked) return;
+  v.dataset.unlocked = '1';
   v.muted = !soundOn;
-  const src = url || '/img/unlock.mp4';
-  if (v.getAttribute('src') !== src) setSource(v, url ? video : null, src);
+  if (!v.getAttribute('src')) setSource(v, null, '/img/unlock.mp4');
   const p = v.play();
-  if (p) p.catch(() => {});
-  if (!url && p) p.then(() => v.pause()).catch(() => {});
-}
-
-export function openReels({ postId = null, url = null, video = null } = {}) {
-  const v = video || (!url ? cachedReels()?.posts.find((p) => p.video)?.video : null);
-  const local = v && localVideo(v);
-  // Lecture progressive, ou téléchargement presque fini : le lecteur est seulement déverrouillé
-  // (son compris) et la vidéo démarre dès que possible ; sinon elle démarre en ligne, tout de suite
-  const later = v && !local && (canProgressive() || preloadEta(v) < 2.5);
-  const first = local || (later ? null : url || v?.url || null);
-  primeReels(first, v || (url ? { url } : null));
-  navigate(postId ? `/videos?p=${postId}` : '/videos');
+  if (p) p.then(() => v.getAttribute('src') === '/img/unlock.mp4' && v.pause()).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------
@@ -754,7 +743,7 @@ export const localVideo = (v) => (v?.url && entries.get(v.url)?.url) || null;
 // Lecture en ligne : assemblée par le téléphone (sw.js) à partir des morceaux gardés par le réseau
 // de Vercel. Si un appareil coince sur ce chemin, la vidéo repart aussitôt par le serveur
 // (« ?direct=1 »), et ce téléphone garde ce choix trois jours.
-const DIRECT = 'aurum:video-direct';
+const DIRECT = 'vibz:video-direct';
 let direct = (() => {
   try {
     return Number(localStorage.getItem(DIRECT) || 0) > Date.now();
@@ -801,7 +790,7 @@ export const sameVideo = (el, v) => Boolean(el.getAttribute('src') && el.dataset
 // souci sur un téléphone, elle est coupée pour quelques jours et la lecture classique reprend.
 // ---------------------------------------------------------------------------
 const MS = typeof window !== 'undefined' ? window.ManagedMediaSource || window.MediaSource : null;
-const MSE_OFF = 'aurum:mse-off';
+const MSE_OFF = 'vibz:mse-off';
 let mseOff = (() => {
   try {
     return Number(localStorage.getItem(MSE_OFF) || 0) > Date.now();
@@ -817,7 +806,7 @@ export function reportVideoIssue(kind, v, detail = {}) {
   const id = idOf(v);
   fetch('/api/client-errors', {
     method: 'POST',
-    headers: { 'x-aurum': '1', 'content-type': 'application/json' },
+    headers: { 'x-vibz': '1', 'content-type': 'application/json' },
     body: JSON.stringify({ message: `Vidéo : ${kind}`, stack: JSON.stringify({ video: id, ...detail }).slice(0, 900), path: '/videos' }),
     keepalive: true,
   }).catch(() => {});

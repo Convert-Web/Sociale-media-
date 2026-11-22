@@ -107,6 +107,7 @@ function selfUser(ctx, u) {
       privateAccount: Boolean(u.private_account),
       showLiked: Boolean(u.show_liked),
       dmPolicy: u.dm_policy || 'everyone',
+      personalized: u.personalized !== 0,
       notify: prefs(u),
     },
   };

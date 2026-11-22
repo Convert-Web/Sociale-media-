@@ -437,6 +437,8 @@ const COLUMNS = [
   ['users', 'is_demo', 'INTEGER NOT NULL DEFAULT 0'],
   ['users', 'notify_prefs', "TEXT NOT NULL DEFAULT '{}'"],
   ['users', 'onboarded_at', 'INTEGER'],
+  // Fil « Pour toi » personnalisé (0 : classement sans centres d'intérêt, règlement DSA)
+  ['users', 'personalized', 'INTEGER NOT NULL DEFAULT 1'],
   // Publications
   ['posts', 'sound_id', 'INTEGER'],
   ['posts', 'privacy', "TEXT NOT NULL DEFAULT 'public'"],
