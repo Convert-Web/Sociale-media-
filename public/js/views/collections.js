@@ -2,7 +2,7 @@
 // pour un son : écoute, favoris et « Utiliser ce son ».
 import { api, enc } from '../api.js';
 import { navigate } from '../router.js';
-import { h, icon, short, emptyState, toast, avatar, duration } from '../dom.js';
+import { h, icon, short, count, emptyState, toast, avatar, duration } from '../dom.js';
 import { videoGrid } from '../components/grid.js';
 import { needLogin } from '../components/actions.js';
 import { shareLink } from '../dom.js';
@@ -25,7 +25,7 @@ export async function tagView(ctx) {
     'div',
     { class: 'page collection' },
     h('header', { class: 'page-head' }, backBtn(), h('span', { class: 'grow' }), h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Partager', onclick: () => shareLink(`#${info.tag} sur Vibz`, `/tag/${enc(info.tag)}`) }, icon('share'))),
-    h('div', { class: 'collection-head' }, h('span', { class: 'collection-cover tag' }, '#'), h('div', null, h('h1', null, `#${info.tag}`), h('p', null, `${short(info.views)} vues · ${short(info.posts)} publication${info.posts > 1 ? 's' : ''}`))),
+    h('div', { class: 'collection-head' }, h('span', { class: 'collection-cover tag' }, '#'), h('div', null, h('h1', null, `#${info.tag}`), h('p', null, `${count(info.views, 'vue')} · ${count(info.posts, 'publication')}`))),
     h('a', { href: `/creer?tag=${enc(info.tag)}`, class: 'btn btn-primary btn-block collection-cta', onclick: (e) => needLogin('Connecte-toi pour publier une vidéo.') && e.preventDefault() }, icon('video', 'icon-sm'), `Publier avec #${info.tag}`),
     grid.el,
   );

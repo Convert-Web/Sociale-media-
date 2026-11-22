@@ -2,7 +2,7 @@
 // (Top, Comptes, Vidéos, Sons, Hashtags, LIVE).
 import { api, enc } from '../api.js';
 import { navigate } from '../router.js';
-import { h, icon, short, debounce, emptyState, spinner, avatar, toast } from '../dom.js';
+import { h, icon, short, count, debounce, emptyState, spinner, avatar, toast } from '../dom.js';
 import { searchBar } from './explore.js';
 import { videoGrid, tile } from '../components/grid.js';
 import { userRow } from '../components/userlist.js';
@@ -82,7 +82,7 @@ export async function searchView(ctx) {
     const hist = readHistory();
     const trending = h('div', { class: 'trend-list' }, spinner());
     api.get('/api/trending').then(({ tags }) => {
-      trending.replaceChildren(...tags.slice(0, 12).map((t) => h('a', { href: `/tag/${enc(t.tag)}`, class: 'trend compact' }, h('span', { class: 'trend-hash' }, '#'), h('span', { class: 'trend-main' }, h('b', null, t.tag), h('small', null, `${short(t.views)} vues`)))));
+      trending.replaceChildren(...tags.slice(0, 12).map((t) => h('a', { href: `/tag/${enc(t.tag)}`, class: 'trend compact' }, h('span', { class: 'trend-hash' }, '#'), h('span', { class: 'trend-main' }, h('b', null, t.tag), h('small', null, count(t.views, 'vue'))))));
       if (!tags.length) trending.replaceChildren(h('p', { class: 'muted small' }, 'Pas encore de tendance.'));
     }).catch(() => trending.replaceChildren());
     body.append(

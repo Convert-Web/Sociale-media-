@@ -136,7 +136,20 @@ export function openComments(post, { onCount, focusId = null } = {}) {
       btn.hidden = false;
       btn.replaceChildren(`Afficher ${c.replyCount} réponse${c.replyCount > 1 ? 's' : ''}`, icon('chevronDown', 'icon-xs'));
     });
-    el.__replies = { box, add: (r) => { box.append(row(r, { reply: true })); hide.hidden = false; }, get open() { return open; } };
+    el.__replies = {
+      box,
+      add: (r) => {
+        const before = c.replyCount || 0;
+        c.replyCount = before + 1;
+        box.append(row(r, { reply: true }));
+        hide.hidden = false;
+        // Première réponse : elle est déjà affichée, rien d'autre à « afficher »
+        if (!open && !before) btn.hidden = true;
+      },
+      get open() {
+        return open;
+      },
+    };
     return h('div', { class: 'cm-thread' }, box, h('div', { class: 'cm-thread-actions' }, btn, hide));
   }
 

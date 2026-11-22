@@ -6,7 +6,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, richText, short, toast, emptyState, spinner, onTaps, heartBurst, verifiedMark, timeAgo, confirmDialog } from '../dom.js';
+import { h, icon, avatar, richText, short, count, toast, emptyState, spinner, onTaps, heartBurst, verifiedMark, timeAgo, confirmDialog } from '../dom.js';
 import {
   sound, reelsPlayer, preloadVideo, preloadStart, localVideo, sameVideo, setSource, PRIO, preloadEta, cancelPreload, holdPreloads, releasePreloads,
   clockLabel, canProgressive, progressiveReady, progressiveCheck, playProgressive, disableProgressive, downloadedBytes, relaxPreload, reportVideoIssue, videoBlob,
@@ -131,7 +131,7 @@ function slide(post) {
   const shareBtn = railButton('shareFill', 'Partager', short(post.shareCount), 'share');
   shareBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    openShare(post, { onShared: () => (shareBtn.__count.textContent = short(post.shareCount)) });
+    openShare(post, { onShared: () => (shareBtn.__count.textContent = short(post.shareCount)), onOptions: () => box.__options?.() });
   });
 
   // Photo du créateur, avec « + » pour s'abonner sans quitter la vidéo
@@ -161,41 +161,70 @@ function slide(post) {
   const rail = h('div', { class: 'rail' }, who, likeBtn, commentBtn, saveBtn, shareBtn, post.kind === 'video' ? disc : null);
 
   // Informations en bas : auteur, date, description dépliable, Duo/Stitch, son
-  let text = null;
-  if (post.body && post.kind !== 'text') {
-    const inner = h('span', { class: 'info-text-inner' }, richText(post.body));
-    const tr = post.lang && post.lang !== myLang() && store.user
-      ? translateLink([post.body], post.lang, { small: true, show: ([t]) => inner.replaceChildren(richText(t)), hide: () => inner.replaceChildren(richText(post.body)) })
-      : null;
-    text = h('div', { class: 'info-text' }, inner, tr);
-    text.addEventListener('click', (e) => {
-      if (e.target.closest('a, button')) return;
-      e.stopPropagation();
-      text.classList.toggle('open');
-    });
-  }
-  const chips = [];
-  if (post.duetOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.duetOf.username)}/video/${post.duetOf.id}` }, icon('duet', 'icon-xs'), `Duo avec @${post.duetOf.username}`));
-  if (post.stitchOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.stitchOf.username)}/video/${post.stitchOf.id}` }, icon('scissors', 'icon-xs'), `Stitch avec @${post.stitchOf.username}`));
-  if (post.privacy !== 'public') chips.push(h('span', { class: 'info-chip' }, icon(post.privacy === 'private' ? 'lock' : 'friends', 'icon-xs'), post.privacy === 'private' ? 'Moi uniquement' : 'Amis'));
-  const soundLine = post.sound
-    ? h('a', { class: 'info-sound', href: `/son/${post.sound.id}` }, icon('music', 'icon-xs'), h('span', { class: 'marquee' }, h('span', null, `${post.sound.title}  ·  ${post.sound.title}`)))
-    : null;
+  // (reconstruites quand la publication est modifiée : description, confidentialité, épinglage)
   const views = h('span', { class: 'info-views' });
   box.__paintViews = () => {
-    views.textContent = post.kind === 'video' && (post.mine || post.viewCount > 0) ? `${short(post.viewCount)} vues` : '';
+    views.textContent = post.kind === 'video' && (post.mine || post.viewCount > 0) ? count(post.viewCount, 'vue') : '';
   };
   box.__paintViews();
-  const info = h(
-    'div',
-    { class: 'info' },
-    post.repostedBy ? h('a', { class: 'info-repost', href: `/@${enc(post.repostedBy.username)}` }, icon('repost', 'icon-xs'), `${post.repostedBy.displayName} a republié`) : null,
-    post.pinned ? h('span', { class: 'info-pinned' }, 'Épinglée') : null,
-    h('div', { class: 'info-who' }, h('a', { href: `/@${enc(post.author.username)}`, class: 'info-user' }, h('b', null, post.author.displayName), post.author.verified ? verifiedMark() : null), h('span', { class: 'info-date' }, `· ${timeAgo(post.createdAt)}`), views),
-    text,
-    chips.length ? h('div', { class: 'info-chips' }, chips) : null,
-    soundLine,
-  );
+  const buildInfo = () => {
+    let text = null;
+    if (post.body && post.kind !== 'text') {
+      const inner = h('span', { class: 'info-text-inner' }, richText(post.body));
+      const tr = post.lang && post.lang !== myLang() && store.user
+        ? translateLink([post.body], post.lang, { small: true, show: ([t]) => inner.replaceChildren(richText(t)), hide: () => inner.replaceChildren(richText(post.body)) })
+        : null;
+      // Deux lignes, puis « plus » si la description est plus longue (comme dans le fil d'origine)
+      const moreBtn = h('button', { type: 'button', class: 'info-more', hidden: true }, 'plus');
+      const textBox = h('div', { class: 'info-text' }, inner);
+      const toggleOpen = () => {
+        const open = textBox.classList.toggle('open');
+        moreBtn.textContent = open ? 'moins' : 'plus';
+      };
+      moreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleOpen();
+      });
+      textBox.addEventListener('click', (e) => {
+        if (e.target.closest('a, button')) return;
+        e.stopPropagation();
+        if (!moreBtn.hidden || textBox.classList.contains('open')) toggleOpen();
+      });
+      // La place réelle n'est connue qu'une fois la vidéo à l'écran
+      const measure = () => {
+        if (!textBox.isConnected || textBox.classList.contains('open')) return;
+        moreBtn.hidden = inner.scrollHeight <= inner.clientHeight + 2;
+      };
+      if (typeof ResizeObserver === 'function') new ResizeObserver(measure).observe(inner);
+      text = h('div', { class: 'info-desc' }, textBox, h('div', { class: 'info-desc-actions' }, moreBtn, tr));
+    }
+    const chips = [];
+    if (post.duetOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.duetOf.username)}/video/${post.duetOf.id}` }, icon('duet', 'icon-xs'), `Duo avec @${post.duetOf.username}`));
+    if (post.stitchOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.stitchOf.username)}/video/${post.stitchOf.id}` }, icon('scissors', 'icon-xs'), `Stitch avec @${post.stitchOf.username}`));
+    if (post.privacy !== 'public') chips.push(h('span', { class: 'info-chip' }, icon(post.privacy === 'private' ? 'lock' : 'friends', 'icon-xs'), post.privacy === 'private' ? 'Moi uniquement' : 'Amis'));
+    const soundLine = post.sound
+      ? h('a', { class: 'info-sound', href: `/son/${post.sound.id}` }, icon('music', 'icon-xs'), h('span', { class: 'marquee' }, h('span', null, `${post.sound.title}  ·  ${post.sound.title}`)))
+      : null;
+    return h(
+      'div',
+      { class: 'info' },
+      post.repostedBy ? h('a', { class: 'info-repost', href: `/@${enc(post.repostedBy.username)}` }, icon('repost', 'icon-xs'), `${post.repostedBy.displayName} a republié`) : null,
+      post.pinned ? h('span', { class: 'info-pinned' }, 'Épinglée') : null,
+      h('div', { class: 'info-who' }, h('a', { href: `/@${enc(post.author.username)}`, class: 'info-user' }, h('b', null, post.author.displayName), post.author.verified ? verifiedMark() : null), h('span', { class: 'info-date' }, `· ${timeAgo(post.createdAt)}`), views),
+      text,
+      chips.length ? h('div', { class: 'info-chips' }, chips) : null,
+      soundLine,
+    );
+  };
+  let info = buildInfo();
+  box.__paintInfo = () => {
+    const next = buildInfo();
+    info.replaceWith(next);
+    info = next;
+    if (post.kind === 'text') media.querySelector('p').textContent = post.body;
+    commentBtn.__count.textContent = short(post.commentCount);
+    shareBtn.__count.textContent = short(post.shareCount);
+  };
 
   const progress = post.kind === 'video' ? null : h('div', { class: 'slide-progress' });
   box.append(...[media, h('div', { class: 'slide-shade' }), h('span', { class: 'slide-play', hidden: true }, icon('play')), rail, info, progress].filter(Boolean));
@@ -613,8 +642,13 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     e.preventDefault();
   };
   document.addEventListener('click', swallow, true);
+  // Clic droit (ordinateur) : les mêmes options que l'appui long
   track.addEventListener('contextmenu', (e) => {
-    if (e.target.closest('.slide-media')) e.preventDefault();
+    if (!e.target.closest('.slide-media') || e.target.closest('a, button')) return;
+    e.preventDefault();
+    if (e.pointerType === 'touch' || longPressed || Date.now() < swallowUntil) return;
+    const slide = e.target.closest('.slide');
+    if (slide?.__post) openOptions(slide);
   });
 
   function removeSlides(test) {
@@ -668,6 +702,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
           if (post.pinned) await api.del(`/api/posts/${post.id}/pin`);
           else await api.post(`/api/posts/${post.id}/pin`);
           post.pinned = !post.pinned;
+          document.dispatchEvent(new CustomEvent('vibz:post', { detail: post }));
           toast(post.pinned ? 'Épinglée en haut de ton profil' : 'Désépinglée');
         } catch (err) {
           toast(err.message, 'error');
@@ -708,7 +743,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
         }
       }, true),
     ].filter(Boolean);
-    const stats = post.mine ? h('p', { class: 'opt-stats' }, `${short(post.viewCount)} vues · ${short(post.likeCount)} J’aime · ${short(post.shareCount)} partages`) : null;
+    const stats = post.mine ? h('p', { class: 'opt-stats' }, `${count(post.viewCount, 'vue')} · ${short(post.likeCount)} J’aime · ${count(post.shareCount, 'partage')}`) : null;
     openSheet({ title: 'Options', body: h('div', { class: 'opt-list' }, stats, speeds ? h('p', { class: 'opt-label' }, 'Vitesse de lecture') : null, speeds, ...items) });
   }
 
@@ -748,6 +783,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       seen.add(p.id);
       all.push(p);
       const s = slide(p);
+      s.__options = () => openOptions(s);
       track.append(s);
       io.observe(s);
     }
@@ -823,10 +859,11 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
   // Une publication modifiée ailleurs (feuille de partage, commentaires…) : mise à jour de l'écran
   const onPostChange = (e) => {
     for (const el of track.querySelectorAll('.slide')) {
-      if (el.__post?.id !== e.detail.id || el.__post === e.detail) continue;
-      Object.assign(el.__post, e.detail);
+      if (el.__post?.id !== e.detail.id) continue;
+      if (el.__post !== e.detail) Object.assign(el.__post, e.detail);
       el.__paintLike?.(false);
       el.__paintSave?.();
+      el.__paintInfo?.();
     }
   };
   document.addEventListener('vibz:post', onPostChange);
@@ -862,6 +899,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       seen.add(post.id);
       all.unshift(post);
       const s = slide(post);
+      s.__options = () => openOptions(s);
       track.prepend(s);
       io.observe(s);
       track.scrollTop = 0;

@@ -2,7 +2,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, short, skeletonGrid } from '../dom.js';
+import { h, icon, short, count, skeletonGrid } from '../dom.js';
 import { videoGrid } from '../components/grid.js';
 
 export function searchBar(value = '', { autofocus = false } = {}) {
@@ -50,7 +50,7 @@ export async function exploreView(ctx) {
     if (!tags?.length) return;
     trends.replaceChildren(
       h('h2', { class: 'section-title' }, 'Tendances'),
-      h('div', { class: 'trend-list' }, tags.slice(0, 10).map((t, i) => h('a', { href: `/tag/${enc(t.tag)}`, class: 'trend' }, h('span', { class: 'trend-rank' }, String(i + 1)), h('span', { class: 'trend-hash' }, '#'), h('span', { class: 'trend-main' }, h('b', null, t.tag), h('small', null, `${short(t.posts)} publication${t.posts > 1 ? 's' : ''} · ${short(t.views)} vues`))))),
+      h('div', { class: 'trend-list' }, tags.slice(0, 10).map((t, i) => h('a', { href: `/tag/${enc(t.tag)}`, class: 'trend' }, h('span', { class: 'trend-rank' }, String(i + 1)), h('span', { class: 'trend-hash' }, '#'), h('span', { class: 'trend-main' }, h('b', null, t.tag), h('small', null, `${count(t.posts, 'publication')} · ${count(t.views, 'vue')}`))))),
     );
   }
   paintChips();

@@ -4,6 +4,19 @@ import { iconSvg } from './icons.js';
 
 const PROPS = new Set(['value', 'checked', 'disabled', 'selected', 'hidden', 'multiple', 'readOnly', 'required', 'autofocus']);
 
+// Filet de sécurité : append(), replaceChildren()… ignorent les valeurs vides (null, undefined,
+// false, true) au lieu d'afficher le mot « null » à l'écran.
+const blank = (n) => n === null || n === undefined || n === false || n === true;
+for (const proto of [Element.prototype, DocumentFragment.prototype]) {
+  for (const m of ['append', 'prepend', 'replaceChildren', 'before', 'after']) {
+    const native = proto[m];
+    if (typeof native !== 'function') continue;
+    proto[m] = function (...nodes) {
+      return native.apply(this, nodes.some(blank) ? nodes.filter((n) => !blank(n)) : nodes);
+    };
+  }
+}
+
 export function h(tag, props, ...children) {
   const el = document.createElement(tag);
   if (props) {
@@ -95,6 +108,10 @@ export const duration = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60
 
 export function plural(n, one, many) {
   return `${num(n)} ${n > 1 ? many : one}`;
+}
+// « 0 vue », « 1 vue », « 12 vues », « 1,2 k vues »
+export function count(n, one, many = `${one}s`) {
+  return `${short(n)} ${Number(n) >= 2 ? many : one}`;
 }
 
 // ---------------------------------------------------------------------------
