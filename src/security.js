@@ -32,7 +32,7 @@ async function verifyPassword(password, stored) {
 // pour ne pas révéler l'existence d'un compte via le temps de réponse.
 let dummyHash = null;
 async function burnPasswordCheck(password) {
-  if (!dummyHash) dummyHash = await hashPassword('aurum-dummy-password');
+  if (!dummyHash) dummyHash = await hashPassword('vibz-dummy-password');
   await verifyPassword(password, dummyHash);
   return false;
 }

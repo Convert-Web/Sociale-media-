@@ -7,7 +7,7 @@
 //   « block » — propos haineux, menaces, incitation au suicide, numéro de carte bancaire :
 //               le contenu est refusé et l'auteur invité à le reformuler ;
 //   « flag »  — insultes, vulgarité sexuelle, arnaques : le contenu est publié, mais masqué
-//               derrière un avertissement et transmis à la Direction.
+//               derrière un avertissement et transmis à l'administration.
 //
 // Les mots sont comparés en entier (« con » ne touche pas « conseil »), après normalisation :
 // minuscules, accents, écriture « l33t » (c0nn4rd), lettres répétées (connnnard),
@@ -242,7 +242,7 @@ function assertClean(field, ...texts) {
   if (r.level === 'flag') fail(422, `${field} : ce texte contient des propos injurieux ou déplacés. Merci de le reformuler.`, 'CONTENT_BLOCKED');
 }
 
-// Signalement automatique à la Direction (reporter_id = 0 : « Filtre automatique »).
+// Signalement automatique à l'administration (reporter_id = 0 : « Filtre automatique »).
 // Sans doublon : un seul signalement ouvert par contenu. Avec flagged vide, le signalement
 // automatique ouvert est classé (contenu corrigé par son auteur).
 async function autoReport(ctx, type, id, flagged) {
@@ -259,13 +259,13 @@ async function autoReport(ctx, type, id, flagged) {
     'INSERT INTO reports (reporter_id, target_type, target_id, reason, created_at) VALUES (0, ?, ?, ?, ?)',
     type, id, `auto: ${labels(flagged.split(',')).join(', ')}`, Date.now(),
   );
-  // La Direction est prévenue sur son téléphone (une seule notification visible à la fois)
+  // L'administration est prévenue sur son téléphone (une seule notification visible à la fois)
   const { sendPush } = require('./push');
-  const admins = await ctx.db.all('SELECT id FROM users WHERE is_admin = 1 AND paid_at IS NOT NULL');
+  const admins = await ctx.db.all('SELECT id FROM users WHERE is_admin = 1');
   for (const a of admins) {
     sendPush(ctx, a.id, {
       title: 'Contenu signalé automatiquement',
-      body: `${labels(flagged.split(',')).join(', ')} — à examiner dans la page Direction.`,
+      body: `${labels(flagged.split(',')).join(', ')} — à examiner dans l’administration.`,
       url: '/admin',
       tag: 'auto-report',
     }).catch(() => {});

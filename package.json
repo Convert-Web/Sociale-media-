@@ -1,8 +1,8 @@
 {
-  "name": "aurum-le-cercle",
-  "version": "1.0.0",
+  "name": "vibz",
+  "version": "2.0.0",
   "private": true,
-  "description": "AURUM — le réseau social privé à droit d'entrée (9,99 €).",
+  "description": "Vibz — l'application de vidéos courtes : fil « Pour toi », sons, Duo, Stitch, LIVE, messages.",
   "main": "server.js",
   "type": "commonjs",
   "engines": {
@@ -11,6 +11,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "seed": "node scripts/seed.js",
     "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
@@ -18,7 +19,6 @@
     "cookie-parser": "^1.4.7",
     "express": "^5.3.0",
     "express-rate-limit": "^8.7.4",
-    "fast-xml-parser": "^4.5.7",
     "multer": "^2.5.0",
     "nodemailer": "^10.5.0",
     "stripe": "^23.1.0",

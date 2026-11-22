@@ -2,16 +2,20 @@
 // Adresses des pages de l'application (mêmes que public/js/app.js) : elles renvoient la page
 // de l'application avec le statut 200 ; toute autre adresse renvoie la page 404 (statut 404).
 // La même liste figure dans vercel.json (réécriture vers index.html) : un test vérifie l'accord.
-const PAGE_RE = /^\/(?:|connexion|inscription|mot-de-passe-oublie|reinitialiser|rejoindre|bienvenue|salon|explorer|notifications|videos|reglages|enregistres|amis|invitations|admin|aide|cgu|cgv|rgpd|confidentialite|mentions-legales|messages(?:\/[^/]+)?|p\/[^/]+|@[^/]+|groupes(?:\/[^/]+)?|journal(?:\/[^/]+)?|agenda(?:\/[^/]+)?|carnet(?:\/[^/]+)?|invitation\/[^/]+)\/?$/;
+const PAGE_SOURCE = '(?:|abonnements|amis|explorer|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/[a-z-]+)?|portefeuille|studio|admin|aide|regles|bienvenue|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?';
+const PAGE_RE = new RegExp(`^/${PAGE_SOURCE}$`);
 
 const isPage = (path) => PAGE_RE.test(path);
 
 // Pages publiques, proposées aux moteurs de recherche
 const PUBLIC_PAGES = [
-  { path: '/', priority: '1.0', changefreq: 'weekly' },
-  { path: '/inscription', priority: '0.8', changefreq: 'monthly' },
-  { path: '/connexion', priority: '0.5', changefreq: 'yearly' },
+  { path: '/', priority: '1.0', changefreq: 'hourly' },
+  { path: '/explorer', priority: '0.9', changefreq: 'hourly' },
+  { path: '/live', priority: '0.7', changefreq: 'hourly' },
+  { path: '/inscription', priority: '0.6', changefreq: 'monthly' },
+  { path: '/connexion', priority: '0.4', changefreq: 'yearly' },
   { path: '/aide', priority: '0.5', changefreq: 'monthly' },
+  { path: '/regles', priority: '0.4', changefreq: 'yearly' },
   { path: '/cgu', priority: '0.3', changefreq: 'yearly' },
   { path: '/cgv', priority: '0.3', changefreq: 'yearly' },
   { path: '/confidentialite', priority: '0.3', changefreq: 'yearly' },
@@ -22,30 +26,21 @@ function robotsTxt(baseUrl) {
   return [
     'User-agent: *',
     'Allow: /',
-    // Espace membres et données : privés, rien à indexer
+    // Espaces personnels et données : rien à indexer
     'Disallow: /api/',
     'Disallow: /media/',
-    'Disallow: /salon',
-    'Disallow: /explorer',
-    'Disallow: /notifications',
     'Disallow: /messages',
-    'Disallow: /videos',
+    'Disallow: /boite',
+    'Disallow: /activite',
     'Disallow: /reglages',
-    'Disallow: /enregistres',
-    'Disallow: /amis',
-    'Disallow: /groupes',
-    'Disallow: /journal',
-    'Disallow: /agenda',
-    'Disallow: /carnet',
-    'Disallow: /invitations',
-    'Disallow: /invitation/',
+    'Disallow: /portefeuille',
+    'Disallow: /studio',
     'Disallow: /admin',
-    'Disallow: /rejoindre',
+    'Disallow: /creer',
+    'Disallow: /recherche',
     'Disallow: /bienvenue',
     'Disallow: /reinitialiser',
     'Disallow: /mot-de-passe-oublie',
-    'Disallow: /p/',
-    'Disallow: /@',
     '',
     `Sitemap: ${baseUrl}/sitemap.xml`,
     '',
@@ -60,4 +55,4 @@ function sitemapXml(baseUrl, lastmod) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
 
-module.exports = { PAGE_RE, isPage, PUBLIC_PAGES, robotsTxt, sitemapXml };
+module.exports = { PAGE_RE, PAGE_SOURCE, isPage, PUBLIC_PAGES, robotsTxt, sitemapXml };

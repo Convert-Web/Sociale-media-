@@ -9,7 +9,7 @@ const { openDatabase } = require('./db');
 const { Hub } = require('./realtime');
 const { createMailer } = require('./mailer');
 const { loadUser, csrfGuard } = require('./auth');
-const { webhookHandler } = require('./routes/billing');
+const { webhookHandler } = require('./routes/wallet');
 const { mediaHandler } = require('./uploads');
 const { videoHandler } = require('./videos');
 
@@ -20,10 +20,9 @@ const INDEX_HTML = path.join(PUBLIC_DIR, 'index.html');
 function securityHeaders(config) {
   const csp = [
     "default-src 'self'",
-    // Journal : images des articles, podcasts joués depuis leur hébergeur, lecteurs vidéo intégrés
-    "img-src 'self' data: blob: https:",
-    "media-src 'self' blob: https:",
-    'frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://www.dailymotion.com https://geo.dailymotion.com https://open.spotify.com https://embed.podcasts.apple.com https://w.soundcloud.com https://widget.deezer.com',
+    "img-src 'self' data: blob:",
+    "media-src 'self' blob: data:",
+    "frame-src 'none'",
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     "script-src 'self'",
@@ -39,7 +38,8 @@ function securityHeaders(config) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    // Caméra et micro : création de vidéos et LIVE, sur ce site uniquement
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(), display-capture=(self)');
     if (config.cookieSecure) res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
     next();
   };
@@ -64,12 +64,12 @@ async function createApp(config, overrides = {}) {
   // Le webhook Stripe a besoin du corps brut : déclaré avant le parseur JSON.
   app.post('/api/billing/webhook', ...webhookHandler(ctx));
 
-  app.use(express.json({ limit: '100kb' }));
+  app.use(express.json({ limit: '200kb' }));
   app.use(cookieParser());
   // Chaque réponse annonce la version en ligne : l'application ouverte voit aussitôt qu'une
   // nouvelle version existe (bouton « Mettre à jour »), sans requête supplémentaire
   app.use('/api', (_req, res, next) => {
-    res.setHeader('X-Aurum-Version', config.version);
+    res.setHeader('X-Vibz-Version', config.version);
     next();
   });
   app.use('/api', csrfGuard, loadUser(ctx));
@@ -93,12 +93,13 @@ async function createApp(config, overrides = {}) {
         standardHeaders: 'draft-7',
         legacyHeaders: false,
         message: tooMany,
-        skip: (req) => req.path === '/stream',
+        // Le LIVE interroge le serveur chaque seconde : compté à part
+        skip: (req) => req.path === '/stream' || /^\/live\/\d+\/(poll|host)$/.test(req.path),
       }),
     );
   }
 
-  const routes = ['auth', 'billing', 'public', 'invitations', 'posts', 'stories', 'moderation', 'push', 'friends', 'groups', 'events', 'previews', 'videos', 'places', 'journal', 'bots', 'emails', 'translate', 'users', 'messages', 'notifications', 'me', 'admin'];
+  const routes = ['auth', 'public', 'wallet', 'videos', 'posts', 'comments', 'feed', 'discover', 'stories', 'live', 'moderation', 'push', 'translate', 'users', 'messages', 'notifications', 'me', 'studio', 'admin'];
   for (const name of routes) app.use('/api', require(`./routes/${name}`)(ctx));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ressource introuvable.' }));
 
@@ -110,17 +111,17 @@ async function createApp(config, overrides = {}) {
   });
   app.get('/sitemap.xml', (_req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.type('application/xml').send(sitemapXml(config.baseUrl, '2026-11-18'));
+    res.type('application/xml').send(sitemapXml(config.baseUrl, '2026-11-22'));
   });
 
-  // Photos envoyées par les membres (stockées dans la base)
+  // Photos et vidéos envoyées (stockées dans la base)
   app.use('/media/v', videoHandler(ctx));
   app.use('/media', mediaHandler(ctx));
   app.use(express.static(PUBLIC_DIR, { maxAge: config.isProd ? '1h' : 0, index: false }));
 
   // Application monopage : toute route « propre » renvoie index.html.
-  // Attention : les noms d'utilisateur peuvent contenir un point (/@alexandre.v).
-  const STATIC_PREFIX = /^\/(api|media|fonts|js|css|img)\//;
+  // Attention : les noms d'utilisateur peuvent contenir un point (/@alex.martin).
+  const STATIC_PREFIX = /^\/(api|media|fonts|js|css|img|demo)\//;
   const ASSET_EXT = /\.(js|mjs|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i;
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();

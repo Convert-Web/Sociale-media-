@@ -47,6 +47,21 @@ function deleteUpload(ctx, publicPath) {
   ctx.db.run('DELETE FROM media WHERE id = ?', m[1]).catch(() => {});
 }
 
+// Efface plusieurs fichiers l'un après l'autre (attendu : pas d'écritures concurrentes dans la base)
+async function deleteUploads(ctx, urls) {
+  for (const url of urls) {
+    const videoId = require('./videos').idFromUrl(url);
+    if (videoId) {
+      await require('./videos').removeVideo(ctx, videoId).catch(() => {});
+      continue;
+    }
+    const m = typeof url === 'string' && /^\/media\/([a-f0-9]{32})\.\w+$/.exec(url);
+    if (!m) continue;
+    ctx.mediaCache?.delete(m[1]);
+    await ctx.db.run('DELETE FROM media WHERE id = ?', m[1]).catch(() => {});
+  }
+}
+
 // Petit cache mémoire pour éviter de relire les images les plus vues.
 class MediaCache {
   constructor(maxBytes = 48 * 1024 * 1024) {
@@ -131,4 +146,4 @@ function single(field) {
   };
 }
 
-module.exports = { single, photos, saveImage, deleteUpload, detectImage, mediaHandler, MediaCache };
+module.exports = { single, photos, saveImage, deleteUpload, deleteUploads, detectImage, mediaHandler, MediaCache };

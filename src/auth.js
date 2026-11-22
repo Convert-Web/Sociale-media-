@@ -1,11 +1,9 @@
 'use strict';
 const { newToken, sha256 } = require('./security');
 const { fail } = require('./http');
-const { admitMember } = require('./membership');
-const { admissionMode } = require('./admission');
 
-const SESSION_COOKIE = 'aurum_sid';
-const SESSION_TTL = 30 * 24 * 3600 * 1000; // 30 jours
+const SESSION_COOKIE = 'vibz_sid';
+const SESSION_TTL = 60 * 24 * 3600 * 1000; // 60 jours
 
 async function createSession(ctx, res, userId) {
   const token = newToken();
@@ -29,15 +27,7 @@ async function destroySession(ctx, req, res) {
   res.clearCookie(SESSION_COOKIE, { path: '/' });
 }
 
-// Entrée libre (ou compte de la Direction) : un compte non admis l'est à sa visite.
-// Sur invitation, il attend la Direction ou un code. Pendant la phase payante, il reçoit
-// son ticket et entre après le droit d'entrée (aucune écriture une fois le ticket obtenu).
-async function autoAdmit(ctx, row) {
-  if (!row || row.paid_at || row.admission_approved_at) return row;
-  if (row.is_admin || (await admissionMode(ctx)) === 'open') return (await admitMember(ctx, row.id)) || row;
-  return row;
-}
-
+// Charge le compte connecté (ou rien : on peut regarder Vibz sans compte)
 function loadUser(ctx) {
   let lastCleanup = 0;
   return async (req, _res, next) => {
@@ -50,7 +40,8 @@ function loadUser(ctx) {
          WHERE s.id = ? AND s.expires_at > ?`,
         sha256(token), now,
       );
-      if (row) req.user = await autoAdmit(ctx, row);
+      // Compte suspendu par l'administration : plus de session
+      if (row && !row.banned_at && !row.is_bot) req.user = row;
       if (now - lastCleanup > 3600 * 1000) {
         lastCleanup = now;
         ctx.db.run('DELETE FROM sessions WHERE expires_at <= ?', now).catch(() => {});
@@ -60,21 +51,14 @@ function loadUser(ctx) {
   };
 }
 
-const isMember = (user) => Boolean(user && user.paid_at);
-
 function requireAuth(req, _res, next) {
-  if (!req.user) fail(401, 'Veuillez vous connecter.', 'AUTH_REQUIRED');
-  next();
-}
-
-function requireMember(req, _res, next) {
-  if (!req.user) fail(401, 'Veuillez vous connecter.', 'AUTH_REQUIRED');
-  if (!isMember(req.user)) fail(402, "Votre droit d'entrée n'a pas encore été réglé.", 'PAYMENT_REQUIRED');
+  if (!req.user) fail(401, 'Connecte-toi pour continuer.', 'AUTH_REQUIRED');
   next();
 }
 
 function requireAdmin(req, _res, next) {
-  if (!req.user || !req.user.is_admin) fail(403, 'Accès réservé à la direction du cercle.');
+  if (!req.user) fail(401, 'Connecte-toi pour continuer.', 'AUTH_REQUIRED');
+  if (!req.user.is_admin) fail(403, 'Accès réservé à l’administration.');
   next();
 }
 
@@ -82,19 +66,9 @@ function requireAdmin(req, _res, next) {
 // qu'un site tiers ne peut pas ajouter sans déclencher une requête CORS refusée.
 function csrfGuard(req, _res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
-  if (req.get('x-aurum') !== '1') fail(403, 'Requête refusée.');
+  if (req.path === '/billing/webhook') return next();
+  if (req.get('x-vibz') !== '1') fail(403, 'Requête refusée.');
   next();
 }
 
-module.exports = {
-  autoAdmit,
-  SESSION_COOKIE,
-  createSession,
-  destroySession,
-  loadUser,
-  isMember,
-  requireAuth,
-  requireMember,
-  requireAdmin,
-  csrfGuard,
-};
+module.exports = { SESSION_COOKIE, createSession, destroySession, loadUser, requireAuth, requireAdmin, csrfGuard };

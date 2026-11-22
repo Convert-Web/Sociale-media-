@@ -1,19 +1,19 @@
 'use strict';
 const express = require('express');
-const { requireMember } = require('../auth');
+const { requireAuth } = require('../auth');
 const { fail } = require('../http');
 const { vapidKeys, sendPush } = require('../push');
 
 module.exports = function pushRoutes(ctx) {
   const r = express.Router();
   const { db } = ctx;
-  r.use('/push', requireMember);
+  r.use('/push', requireAuth);
 
   r.get('/push/key', async (_req, res) => {
     res.json({ publicKey: (await vapidKeys(ctx)).publicKey });
   });
 
-  // Enregistre l'abonnement de cet appareil (un appareil = un membre à la fois)
+  // Enregistre l'abonnement de cet appareil (un appareil = un compte à la fois)
   r.post('/push/subscribe', async (req, res) => {
     const endpoint = req.body?.endpoint;
     const p256dh = req.body?.keys?.p256dh;
@@ -38,10 +38,10 @@ module.exports = function pushRoutes(ctx) {
     res.json({ ok: true });
   });
 
-  // Notification d'essai sur tous les appareils du membre
+  // Notification d'essai sur tous les appareils du compte
   r.post('/push/test', async (req, res) => {
     const delivered = await sendPush(ctx, req.user.id, {
-      title: 'AURUM',
+      title: ctx.config.appName,
       body: 'Les notifications sont activées sur cet appareil.',
       url: '/reglages',
       tag: 'test',

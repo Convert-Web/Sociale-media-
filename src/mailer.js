@@ -5,7 +5,7 @@ const nodemailer = require('nodemailer');
 
 function parseFrom(from) {
   const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from || '');
-  return m ? { name: m[1].trim() || 'AURUM', email: m[2].trim() } : { name: 'AURUM', email: (from || '').trim() };
+  return m ? { name: m[1].trim() || 'Vibz', email: m[2].trim() } : { name: 'Vibz', email: (from || '').trim() };
 }
 
 function createMailer(config) {
@@ -41,7 +41,7 @@ function createMailer(config) {
     console.log(`\n[courriel] À : ${to}\n[courriel] Objet : ${subject}\n${text}\n`);
   }
 
-  // Envoi groupé (la Lettre du cercle) : une seule requête Brevo pour 500 destinataires
+  // Envoi groupé : une seule requête Brevo pour 500 destinataires
   async function sendBatch(messages) {
     let sent = 0;
     if (provider === 'brevo') {

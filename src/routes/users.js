@@ -1,268 +1,206 @@
 'use strict';
 const express = require('express');
-const { requireMember } = require('../auth');
-const { friendStatus } = require('./friends');
+const { requireAuth } = require('../auth');
 const { fail, intParam } = require('../http');
-const { POST_SELECT, NOT_BLOCKED, PUBLIC_POST, serializePost, publicUser, authorOf, notify, retractNotification, isBlocked } = require('../social');
+const { USER_SELECT, serializeUser, POST_SELECT, serializePost, VISIBLE, VIEWER, BLOCKED_WITH, notify, retractNotification, pushCounters, isBlocked } = require('../social');
+const { learn, SIGNALS } = require('../feed');
 
-// Le premier paramètre de chaque requête USER_LIST est l'identifiant du membre qui consulte.
-const USER_LIST = `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot, u.bio, u.profession, u.city,
-  EXISTS(SELECT 1 FROM follows fx WHERE fx.follower_id = ? AND fx.followee_id = u.id) AS is_following`;
-// Exclut les membres bloqués (dans un sens ou dans l'autre) : deux paramètres, l'identifiant du lecteur.
-const USER_NOT_BLOCKED = `u.id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)`;
+const PAGE = 18;
 
 module.exports = function userRoutes(ctx) {
   const r = express.Router();
   const { db } = ctx;
-  r.use(['/users', '/search', '/suggestions', '/trending', '/members', '/me/progress'], requireMember);
+  const vid = (req) => req.user?.id || 0;
 
-  const listUser = (row, viewer) => ({
-    ...authorOf(ctx, row),
-    bio: row.bio,
-    profession: row.profession,
-    city: row.city,
-    isFollowing: Boolean(row.is_following),
-    isMe: row.user_id === viewer.id,
-  });
-
-  const findMember = async (username) => {
-    const u = typeof username === 'string' && (await db.get('SELECT * FROM users WHERE username = ? AND paid_at IS NOT NULL', username));
-    if (!u) fail(404, 'Ce membre est introuvable.');
+  // Compte par son nom (ligne brute) ; introuvable s'il est suspendu (sauf pour l'administration)
+  async function findUser(req, username = req.params.username) {
+    const name = String(username || '').replace(/^@/, '');
+    const u = name && (await db.get('SELECT * FROM users WHERE username = ? AND is_bot = 0', name));
+    if (!u || (u.banned_at && !req.user?.is_admin)) fail(404, 'Ce compte est introuvable.');
     return u;
-  };
+  }
 
-  // Profil visible : introuvable pour qui a été bloqué par ce membre.
-  const findVisible = async (username, viewer) => {
-    const u = await findMember(username);
-    if (u.id !== viewer.id && (await db.get('SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_id = ?', u.id, viewer.id))) {
-      fail(404, 'Ce membre est introuvable.');
-    }
-    return u;
-  };
+  async function profile(req, u) {
+    const row = await db.get(`${USER_SELECT} WHERE u.id = ?`, vid(req), u.id);
+    return serializeUser(ctx, row, req.user);
+  }
+
+  // Contenus d'un compte privé : réservés à ses abonnés (et à lui-même)
+  async function canSeeContent(req, u) {
+    if (!u.private_account || req.user?.id === u.id || req.user?.is_admin) return true;
+    if (!req.user) return false;
+    return Boolean(await db.get('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?', req.user.id, u.id));
+  }
 
   r.get('/users/:username', async (req, res) => {
-    const u = await findVisible(req.params.username, req.user);
-    const me = req.user.id;
-    const row = await db.get(
-      `SELECT
-         (SELECT COUNT(*) FROM posts WHERE user_id = ? AND groupe_id IS NULL) AS posts,
-         (SELECT COUNT(*) FROM follows f JOIN users x ON x.id = f.follower_id WHERE f.followee_id = ?) AS followers,
-         (SELECT COUNT(*) FROM follows f JOIN users x ON x.id = f.followee_id WHERE f.follower_id = ?) AS following,
-         (SELECT COUNT(*) FROM likes l JOIN posts p ON p.id = l.post_id WHERE p.user_id = ?) AS likes,
-         (SELECT COUNT(*) FROM posts p WHERE p.user_id = ? AND p.image IS NOT NULL AND p.groupe_id IS NULL) AS photos,
-         EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS is_following,
-         EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS follows_you,
-         EXISTS(SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_id = ?) AS blocked,
-         (SELECT COUNT(*) FROM friend_requests WHERE (requester_id = ? OR addressee_id = ?) AND status = 'accepted') AS friends`,
-      u.id, u.id, u.id, u.id, u.id, me, u.id, u.id, me, me, u.id, u.id, u.id,
-    );
-    res.json({
-      user: {
-        ...publicUser(ctx, u),
-        stats: { posts: row.posts, followers: row.followers, following: row.following, likes: row.likes, photos: row.photos, friends: row.friends },
-        friendStatus: u.id === me ? 'self' : await friendStatus(ctx, me, u.id),
-        isMe: u.id === me,
-        isFollowing: Boolean(row.is_following),
-        followsYou: Boolean(row.follows_you),
-        blocked: Boolean(row.blocked),
-        invitedBy: u.invited_by
-          ? await db.get('SELECT username, display_name AS displayName FROM users WHERE id = ? AND paid_at IS NOT NULL', u.invited_by).then((x) => x || null)
-          : null,
-        invitedCount: (await db.get('SELECT COUNT(*) AS n FROM users WHERE invited_by = ? AND paid_at IS NOT NULL', u.id)).n,
-      },
-    });
-  });
-
-  r.get('/users/:username/posts', async (req, res) => {
-    const u = await findVisible(req.params.username, req.user);
-    const before = intParam(req.query.before);
-    const limit = 15;
-    const rows = await db.all(
-      `${POST_SELECT} WHERE p.user_id = ? AND (? IS NULL OR p.id < ?) AND ${NOT_BLOCKED} AND ${PUBLIC_POST} AND (p.video_id IS NULL OR p.created_at > ?) ORDER BY p.id DESC LIMIT ?`,
-      req.user.id, u.id, before, before, require('../videos').liveSince(ctx), limit,
-    );
-    res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)), hasMore: rows.length === limit });
-  });
-
-  // Toutes les photos publiées par un membre (grille du profil)
-  r.get('/users/:username/photos', async (req, res) => {
-    const u = await findVisible(req.params.username, req.user);
-    if (u.id !== req.user.id && (await isBlocked(ctx, req.user.id, u.id))) return res.json({ photos: [] });
-    const rows = await db.all(
-      `SELECT post_id, url FROM (
-         SELECT p.id AS post_id, p.image AS url, p.id * 100 AS k FROM posts p WHERE p.user_id = ? AND p.image IS NOT NULL AND p.groupe_id IS NULL
-         UNION ALL
-         SELECT pm.post_id, pm.url, pm.post_id * 100 + pm.position FROM post_media pm JOIN posts p ON p.id = pm.post_id WHERE p.user_id = ? AND p.groupe_id IS NULL
-       ) ORDER BY k DESC LIMIT 90`,
-      u.id, u.id,
-    );
-    res.json({ photos: rows.map((row) => ({ postId: row.post_id, url: row.url })) });
-  });
-
-  // Vidéos d'un membre (grille du profil, avec le nombre de vues), encore en ligne
-  r.get('/users/:username/videos', async (req, res) => {
-    const u = await findVisible(req.params.username, req.user);
-    const rows = await db.all(
-      `${POST_SELECT} WHERE p.user_id = ? AND p.video_id IS NOT NULL AND p.created_at > ? AND ${NOT_BLOCKED} AND ${PUBLIC_POST} ORDER BY p.id DESC LIMIT 60`,
-      req.user.id, u.id, require('../videos').liveSince(ctx),
-    );
-    res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)) });
-  });
-
-  r.get('/users/:username/:relation', async (req, res) => {
-    const { relation } = req.params;
-    if (relation !== 'followers' && relation !== 'following') fail(404, 'Introuvable.');
-    const u = await findVisible(req.params.username, req.user);
-    const me = req.user.id;
-    const rows =
-      relation === 'followers'
-        ? await db.all(`${USER_LIST} FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.followee_id = ? AND ${USER_NOT_BLOCKED} ORDER BY f.created_at DESC LIMIT 200`, me, u.id, me, me)
-        : await db.all(`${USER_LIST} FROM follows f JOIN users u ON u.id = f.followee_id WHERE f.follower_id = ? AND ${USER_NOT_BLOCKED} ORDER BY f.created_at DESC LIMIT 200`, me, u.id, me, me);
-    res.json({ users: rows.map((row) => listUser(row, req.user)) });
-  });
-
-  r.post('/users/:username/follow', async (req, res) => {
-    const u = await findVisible(req.params.username, req.user);
-    if (u.id === req.user.id) fail(400, 'Vous ne pouvez pas vous suivre vous-même.');
-    if (await isBlocked(ctx, req.user.id, u.id)) fail(403, 'Débloquez ce membre pour le suivre.');
-    const { changes } = await db.run(
-      'INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)',
-      req.user.id, u.id, Date.now(),
-    );
-    if (changes) await notify(ctx, { userId: u.id, actorId: req.user.id, type: 'follow' });
-    res.json({ following: true });
-  });
-
-  r.delete('/users/:username/follow', async (req, res) => {
-    const u = await findMember(req.params.username);
-    const { changes } = await db.run('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?', req.user.id, u.id);
-    if (changes) await retractNotification(ctx, { userId: u.id, actorId: req.user.id, type: 'follow' });
-    res.json({ following: false });
-  });
-
-  // Bloquer : plus d'abonnement dans un sens ni dans l'autre, contenus masqués, messages impossibles.
-  r.post('/users/:username/block', async (req, res) => {
-    const u = await findMember(req.params.username);
-    if (u.id === req.user.id) fail(400, 'Vous ne pouvez pas vous bloquer vous-même.');
-    const me = req.user.id;
-    await db.transaction(async (t) => {
-      await t.run('INSERT OR IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)', me, u.id, Date.now());
-      await t.run('DELETE FROM follows WHERE (follower_id = ? AND followee_id = ?) OR (follower_id = ? AND followee_id = ?)', me, u.id, u.id, me);
-      await t.run('DELETE FROM notifications WHERE (user_id = ? AND actor_id = ?) OR (user_id = ? AND actor_id = ?)', me, u.id, u.id, me);
-      await t.run('DELETE FROM friend_requests WHERE (requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?)', me, u.id, u.id, me);
-    });
-    res.json({ blocked: true });
-  });
-
-  r.delete('/users/:username/block', async (req, res) => {
-    const u = await findMember(req.params.username);
-    await db.run('DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?', req.user.id, u.id);
-    res.json({ blocked: false });
-  });
-
-  // Membres bloqués (réglages)
-  r.get('/me/blocked', requireMember, async (req, res) => {
-    const rows = await db.all(
-      `SELECT u.id AS user_id, u.username, u.display_name, u.avatar, u.member_number, u.verified_at, u.is_bot
-       FROM blocks b JOIN users u ON u.id = b.blocked_id WHERE b.blocker_id = ? ORDER BY b.created_at DESC`,
-      req.user.id,
-    );
-    res.json({ users: rows.map((row) => authorOf(ctx, row)) });
-  });
-
-  // Étapes d'accueil des nouveaux membres
-  r.get('/me/progress', async (req, res) => {
-    const me = req.user.id;
-    const row = await db.get(
-      `SELECT (SELECT COUNT(*) FROM follows WHERE follower_id = ?) AS following,
-              (SELECT COUNT(*) FROM posts WHERE user_id = ? AND groupe_id IS NULL) AS posts,
-              (SELECT COUNT(*) FROM invitations WHERE inviter_id = ?) AS invites,
-              (SELECT COUNT(*) FROM users u WHERE u.paid_at IS NOT NULL AND u.is_bot = 0 AND u.id != ?
-                 AND u.id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)) AS members`,
-      me, me, me, me, me, me,
-    );
-    res.json({
-      avatar: Boolean(req.user.avatar),
-      bio: Boolean(req.user.bio),
-      following: row.following,
-      posts: row.posts,
-      invites: row.invites,
-      // Autres membres que l'on peut suivre (l'étape « Suivre » s'adapte quand le cercle est petit)
-      members: row.members,
-    });
-  });
-
-  r.get('/search', async (req, res) => {
-    const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 60) : '';
-    if (!q) return res.json({ users: [], posts: [] });
-    const me = req.user.id;
-    const like = `%${q.replace(/^[@#]/, '').replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-    const users = q.startsWith('#')
-      ? []
-      : await db.all(
-          `${USER_LIST} FROM users u
-           WHERE u.paid_at IS NOT NULL AND ${USER_NOT_BLOCKED}
-             AND (u.username LIKE ? ESCAPE '\\' OR u.display_name LIKE ? ESCAPE '\\'
-                  OR u.profession LIKE ? ESCAPE '\\' OR u.city LIKE ? ESCAPE '\\')
-           ORDER BY u.member_number ASC LIMIT 20`,
-          me, me, me, like, like, like, like,
-        );
-    if (req.query.only === 'users') return res.json({ users: users.map((row) => listUser(row, req.user)), posts: [] });
-    const postLike = q.startsWith('#') ? `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : like;
-    const posts = await db.all(
-      `${POST_SELECT} WHERE p.body LIKE ? ESCAPE '\\' AND ${NOT_BLOCKED} AND ${PUBLIC_POST} ORDER BY p.id DESC LIMIT 30`,
-      me, postLike,
-    );
-    res.json({
-      users: users.map((row) => listUser(row, req.user)),
-      posts: posts.map((row) => serializePost(ctx, row, req.user)),
-    });
-  });
-
-  r.get('/suggestions', async (req, res) => {
-    const limit = Math.min(intParam(req.query.limit) || 5, 30);
-    const me = req.user.id;
-    // Page Amis : ni les amis, ni les demandes en cours (dans un sens ou dans l'autre)
-    const friendsMode = req.query.exclude === 'friends';
-    const rows = await db.all(
-      `${USER_LIST},
-         (SELECT COUNT(*) FROM follows f WHERE f.followee_id = u.id) AS followers
-       FROM users u
-       WHERE u.paid_at IS NOT NULL AND u.is_bot = 0 AND u.id != ? AND ${USER_NOT_BLOCKED}
-         AND ${friendsMode
-           ? `u.id NOT IN (SELECT addressee_id FROM friend_requests WHERE requester_id = ? AND status IN ('pending', 'accepted')
-                           UNION SELECT requester_id FROM friend_requests WHERE addressee_id = ? AND status IN ('pending', 'accepted'))`
-           : 'u.id NOT IN (SELECT followee_id FROM follows WHERE follower_id = ?)'}
-       ORDER BY followers DESC, RANDOM() LIMIT ?`,
-      ...(friendsMode ? [me, me, me, me, me, me, limit] : [me, me, me, me, me, limit]),
-    );
-    res.json({ users: rows.map((row) => listUser(row, req.user)) });
-  });
-
-  r.get('/members', async (req, res) => {
-    const me = req.user.id;
-    const rows = await db.all(
-      `${USER_LIST} FROM users u WHERE u.paid_at IS NOT NULL AND u.is_bot = 0 AND ${USER_NOT_BLOCKED} ORDER BY u.paid_at DESC LIMIT 30`,
-      me, me, me,
-    );
-    res.json({ users: rows.map((row) => listUser(row, req.user)) });
-  });
-
-  r.get('/trending', async (req, res) => {
-    const since = Date.now() - 14 * 24 * 3600 * 1000;
-    const rows = await db.all("SELECT body FROM posts WHERE created_at > ? AND groupe_id IS NULL AND body LIKE '%#%' ORDER BY id DESC LIMIT 1000", since);
-    const counts = new Map();
-    for (const { body } of rows) {
-      const tags = new Set();
-      for (const m of body.matchAll(/(^|\s)#([\p{L}\p{N}_]{2,40})/gu)) tags.add(m[2].toLowerCase());
-      for (const tag of tags) counts.set(tag, (counts.get(tag) || 0) + 1);
+    const u = await findUser(req);
+    const user = await profile(req, u);
+    if (user.blockedBy) {
+      // Bloqué par ce compte : seulement le nom
+      return res.json({ user: { ...user, bio: '', website: '', counts: { followers: 0, following: 0, likes: 0, posts: 0 }, locked: true } });
     }
-    const tags = [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([tag, count]) => ({ tag, count }));
-    res.json({ tags });
+    res.json({ user });
+  });
+
+  // Grille du profil : vidéos épinglées d'abord, puis de la plus récente à la plus ancienne
+  r.get('/users/:username/posts', async (req, res) => {
+    const u = await findUser(req);
+    if (!(await canSeeContent(req, u)) || (await isBlocked(ctx, vid(req), u.id))) return res.json({ posts: [], locked: true, cursor: null });
+    const before = intParam(req.query.cursor);
+    const pinned = before
+      ? []
+      : await db.all(`${POST_SELECT} WHERE p.user_id = ? AND p.pinned_at IS NOT NULL AND ${VISIBLE} ORDER BY p.pinned_at DESC LIMIT 3`, vid(req), u.id);
+    const rows = await db.all(
+      `${POST_SELECT} WHERE p.user_id = ? AND p.pinned_at IS NULL AND (? IS NULL OR p.id < ?) AND ${VISIBLE} ORDER BY p.id DESC LIMIT ?`,
+      vid(req), u.id, before, before, PAGE,
+    );
+    res.json({
+      posts: [...pinned, ...rows].map((row) => serializePost(ctx, row, req.user)),
+      cursor: rows.length === PAGE ? rows[rows.length - 1].id : null,
+    });
+  });
+
+  // Republications du compte
+  r.get('/users/:username/reposts', async (req, res) => {
+    const u = await findUser(req);
+    if (!(await canSeeContent(req, u))) return res.json({ posts: [], locked: true, cursor: null });
+    const before = intParam(req.query.cursor);
+    const rows = await db.all(
+      `${POST_SELECT} JOIN reposts rr ON rr.post_id = p.id AND rr.user_id = ? WHERE (? IS NULL OR rr.created_at < ?) AND ${VISIBLE}
+       ORDER BY rr.created_at DESC LIMIT ?`,
+      vid(req), u.id, before, before, PAGE,
+    );
+    const times = rows.length
+      ? await db.all(`SELECT post_id, created_at FROM reposts WHERE user_id = ? AND post_id IN (${rows.map(() => '?').join(',')})`, u.id, ...rows.map((x) => x.id))
+      : [];
+    const last = times.reduce((m, t) => Math.min(m, t.created_at), Infinity);
+    res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)), cursor: rows.length === PAGE ? last : null });
+  });
+
+  // Vidéos aimées : privées par défaut (réglage « Vidéos aimées visibles »)
+  r.get('/users/:username/liked', async (req, res) => {
+    const u = await findUser(req);
+    const mine = req.user?.id === u.id;
+    if (!mine && (!u.show_liked || !(await canSeeContent(req, u)))) return res.json({ posts: [], hidden: true, cursor: null });
+    const before = intParam(req.query.cursor);
+    const rows = await db.all(
+      `${POST_SELECT} JOIN likes ll ON ll.post_id = p.id AND ll.user_id = ? WHERE (? IS NULL OR ll.created_at < ?) AND ${VISIBLE}
+       ORDER BY ll.created_at DESC LIMIT ?`,
+      vid(req), u.id, before, before, PAGE,
+    );
+    let cursor = null;
+    if (rows.length === PAGE) {
+      const t = await db.get(`SELECT MIN(created_at) AS m FROM likes WHERE user_id = ? AND post_id IN (${rows.map(() => '?').join(',')})`, u.id, ...rows.map((x) => x.id));
+      cursor = t.m;
+    }
+    res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)), cursor });
+  });
+
+  // S'abonner (ou demander à s'abonner à un compte privé)
+  r.post('/users/:username/follow', requireAuth, async (req, res) => {
+    const u = await findUser(req);
+    if (u.id === req.user.id) fail(400, 'Tu ne peux pas t’abonner à toi-même.');
+    if (await isBlocked(ctx, req.user.id, u.id)) fail(403, 'Impossible de s’abonner à ce compte.');
+    const already = await db.get('SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?', req.user.id, u.id);
+    if (!already) {
+      if (u.private_account) {
+        const { changes } = await db.run('INSERT OR IGNORE INTO follow_requests (requester_id, target_id, created_at) VALUES (?, ?, ?)', req.user.id, u.id, Date.now());
+        if (changes) {
+          await notify(ctx, { userId: u.id, actorId: req.user.id, type: 'follow_request' });
+          await pushCounters(ctx, u.id);
+        }
+      } else {
+        await db.run('INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)', req.user.id, u.id, Date.now());
+        await notify(ctx, { userId: u.id, actorId: req.user.id, type: 'follow' });
+        await learn(ctx, req.user.id, { author: u.id, tags: [] }, SIGNALS.follow);
+      }
+    }
+    res.json({ user: await profile(req, u) });
+  });
+
+  // Se désabonner (ou annuler sa demande)
+  r.delete('/users/:username/follow', requireAuth, async (req, res) => {
+    const u = await findUser(req);
+    await db.run('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?', req.user.id, u.id);
+    const { changes } = await db.run('DELETE FROM follow_requests WHERE requester_id = ? AND target_id = ?', req.user.id, u.id);
+    await retractNotification(ctx, { userId: u.id, actorId: req.user.id, type: 'follow' });
+    if (changes) await retractNotification(ctx, { userId: u.id, actorId: req.user.id, type: 'follow_request' });
+    res.json({ user: await profile(req, u) });
+  });
+
+  // Retirer un abonné de ses abonnés
+  r.delete('/users/:username/follower', requireAuth, async (req, res) => {
+    const u = await findUser(req);
+    await db.run('DELETE FROM follows WHERE follower_id = ? AND followee_id = ?', u.id, req.user.id);
+    res.json({ user: await profile(req, u) });
+  });
+
+  // Listes : abonnés, abonnements, amis
+  async function list(req, res, kind) {
+    const u = await findUser(req);
+    if (!(await canSeeContent(req, u))) return res.json({ users: [], locked: true, cursor: null });
+    const before = intParam(req.query.cursor);
+    const limit = 30;
+    const where = {
+      followers: 'u.id IN (SELECT follower_id FROM follows WHERE followee_id = ?)',
+      following: 'u.id IN (SELECT followee_id FROM follows WHERE follower_id = ?)',
+      friends: 'u.id IN (SELECT a.followee_id FROM follows a JOIN follows b ON b.follower_id = a.followee_id AND b.followee_id = a.follower_id WHERE a.follower_id = ?)',
+    }[kind];
+    const order = {
+      followers: '(SELECT created_at FROM follows WHERE follower_id = u.id AND followee_id = ?)',
+      following: '(SELECT created_at FROM follows WHERE followee_id = u.id AND follower_id = ?)',
+      friends: '(SELECT created_at FROM follows WHERE followee_id = u.id AND follower_id = ?)',
+    }[kind];
+    const rows = await db.all(
+      `SELECT * FROM (${USER_SELECT.replace('SELECT u.*,', `SELECT u.*, ${order} AS since,`)} WHERE ${where} AND u.banned_at IS NULL AND NOT ${BLOCKED_WITH('u.id')})
+       WHERE (? IS NULL OR since < ?) ORDER BY since DESC LIMIT ?`,
+      u.id, vid(req), u.id, before, before, limit,
+    );
+    res.json({ users: rows.map((row) => serializeUser(ctx, row, req.user)), cursor: rows.length === limit ? rows[rows.length - 1].since : null });
+  }
+  r.get('/users/:username/followers', (req, res) => list(req, res, 'followers'));
+  r.get('/users/:username/following', (req, res) => list(req, res, 'following'));
+  r.get('/users/:username/friends', (req, res) => list(req, res, 'friends'));
+
+  // Bloquer : plus d'abonnement dans aucun sens, plus de messages, contenus masqués
+  r.post('/users/:username/block', requireAuth, async (req, res) => {
+    const u = await findUser(req);
+    if (u.id === req.user.id) fail(400, 'Tu ne peux pas te bloquer toi-même.');
+    await db.run('INSERT OR IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)', req.user.id, u.id, Date.now());
+    await db.run('DELETE FROM follows WHERE (follower_id = ? AND followee_id = ?) OR (follower_id = ? AND followee_id = ?)', req.user.id, u.id, u.id, req.user.id);
+    await db.run('DELETE FROM follow_requests WHERE (requester_id = ? AND target_id = ?) OR (requester_id = ? AND target_id = ?)', req.user.id, u.id, u.id, req.user.id);
+    res.json({ user: await profile(req, u) });
+  });
+
+  r.delete('/users/:username/block', requireAuth, async (req, res) => {
+    const u = await findUser(req);
+    await db.run('DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?', req.user.id, u.id);
+    res.json({ user: await profile(req, u) });
+  });
+
+  // Comptes suggérés : amis d'amis, puis créateurs populaires (jamais soi-même, ni déjà suivis)
+  r.get('/suggestions', async (req, res) => {
+    const limit = Math.min(30, intParam(req.query.limit) || 10);
+    const rows = await db.all(
+      `${USER_SELECT}
+       WHERE u.id != v.id AND u.banned_at IS NULL AND u.is_bot = 0
+         AND u.id NOT IN (SELECT followee_id FROM follows WHERE follower_id = v.id)
+         AND u.id NOT IN (SELECT target_id FROM follow_requests WHERE requester_id = v.id)
+         AND NOT ${BLOCKED_WITH('u.id')}
+       ORDER BY
+         (SELECT COUNT(*) FROM follows ff WHERE ff.followee_id = u.id AND ff.follower_id IN (SELECT followee_id FROM follows WHERE follower_id = v.id)) DESC,
+         EXISTS(SELECT 1 FROM follows fb WHERE fb.follower_id = u.id AND fb.followee_id = v.id) DESC,
+         followers_count DESC, likes_count DESC, u.id DESC
+       LIMIT ?`,
+      vid(req), limit,
+    );
+    const users = rows.map((row) => serializeUser(ctx, row, req.user));
+    // Raison affichée sous le nom (comme « Suit ton compte », « Populaire »)
+    for (const u of users) u.reason = u.followsYou ? 'Abonné à ton compte' : u.counts.followers > 0 ? `${u.counts.followers} abonné${u.counts.followers > 1 ? 's' : ''}` : 'Nouveau sur Vibz';
+    res.json({ users });
   });
 
   return r;
 };
+
+module.exports.VIEWER = VIEWER;
