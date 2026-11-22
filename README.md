@@ -114,7 +114,8 @@ intéressé »), Abonnements et Amis, J'aime, favoris, republications, vues et t
 commentaires (réponses, épinglage), les demandes d'abonnement, les blocages, les messages, la
 recherche, les sons, Duo, le profil, le LIVE (signalisation, chat, cœurs, cadeaux, bilan), le
 portefeuille, le studio, la modération, la suppression de compte, le mot de passe oublié, le contenu
-de démonstration, les adresses des pages et la reprise d’Ne base AURUM (y compris des membres arrivés après une première ouverture).
+de démonstration, les adresses des pages et la reprise d’une base AURUM (y compris des membres
+arrivés après une première ouverture).
 
 ## Architecture
 
