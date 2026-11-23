@@ -3,7 +3,7 @@
 import { api, enc } from '../api.js';
 import { store, isPolling, fastPoll } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, spinner, emptyState, timeAgo, clock, dayLabel, richText, autosize, toast, modal, debounce, verifiedMark, short } from '../dom.js';
+import { h, icon, avatar, spinner, emptyState, clock, dayLabel, richText, autosize, toast, modal, debounce, verifiedMark, short } from '../dom.js';
 import { translateLink, myLang } from '../components/translate.js';
 import { sensitive } from '../components/sensitive.js';
 import { reportDialog } from '../components/report.js';

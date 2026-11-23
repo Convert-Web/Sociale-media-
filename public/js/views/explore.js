@@ -2,7 +2,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, short, count, skeletonGrid } from '../dom.js';
+import { h, icon, count, skeletonGrid } from '../dom.js';
 import { videoGrid } from '../components/grid.js';
 
 export function searchBar(value = '', { autofocus = false } = {}) {
