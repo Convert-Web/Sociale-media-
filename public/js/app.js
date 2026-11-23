@@ -406,6 +406,12 @@ document.addEventListener('click', (e) => {
   if (url.pathname === location.pathname && url.search === location.search && url.hash) return;
   e.preventDefault();
   unlockPlayer(); // le lecteur vidéo garde le son pour la suite de la visite
+  // Toucher l'onglet de l'écran déjà ouvert (Accueil…) : l'écran se rafraîchit lui-même
+  if (url.pathname === location.pathname && url.search === location.search) {
+    const again = new CustomEvent('vibz:again', { cancelable: true });
+    document.dispatchEvent(again);
+    if (again.defaultPrevented) return;
+  }
   navigate(url.pathname + url.search + url.hash);
 });
 

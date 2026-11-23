@@ -70,8 +70,12 @@ const AUDIO = {
 const audioInput = (name, d) => ['-f', 'lavfi', '-i', `aevalsrc=exprs='${AUDIO[name][0]}|${AUDIO[name][1]}':s=44100:d=${d}`];
 // Texte posé sur la vidéo (apostrophes et deux-points échappés pour drawtext)
 const esc = (s) => s.replace(/\\/g, '\\\\').replace(/'/g, '’').replace(/:/g, '\\:').replace(/%/g, '\\%');
+// Largeur approchée du texte (DejaVu Sans Bold, en « em ») : sert à le garder dans la zone sûre
+// (80 % de la largeur), visible même quand un téléphone très haut recadre un peu les côtés.
+const units = (s) => [...s].reduce((n, c) => n + (c === ' ' ? 0.35 : /[A-ZÀ-Ý]/.test(c) ? 0.77 : /[a-zà-ÿ]/.test(c) ? 0.65 : /\d/.test(c) ? 0.7 : 0.62), 0);
+const fitSize = (s, size, box) => Math.min(size, Math.floor((0.8 * W - (box ? 44 : 0)) / units(s)));
 const text = (s, { y = 'h*0.12', size = 54, from = 0, to = 999, box = true, color = 'white' } = {}) =>
-  `drawtext=fontfile=${FONT}:text='${esc(s)}':fontsize=${size}:fontcolor=${color}:x=(w-text_w)/2:y=${y}:enable='between(t,${from},${to})'` +
+  `drawtext=fontfile=${FONT}:text='${esc(s)}':fontsize=${fitSize(s, size, box)}:fontcolor=${color}:x=(w-text_w)/2:y=${y}:enable='between(t,${from},${to})'` +
   (box ? ':box=1:boxcolor=black@0.38:boxborderw=22' : ':shadowcolor=black@0.6:shadowx=3:shadowy=3');
 const slides = (list, { start = 0, step = 3, size = 50, y = 'h*0.42' } = {}) =>
   list.map((line, i) => text(line, { y, size, from: start + i * step, to: start + (i + 1) * step - 0.05 })).join(',');

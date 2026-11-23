@@ -143,8 +143,21 @@ module.exports = function messageRoutes(ctx) {
     }
     const { seen } = await db.get('SELECT COALESCE(MAX(id), 0) AS seen FROM messages WHERE sender_id = ? AND recipient_id = ? AND read_at IS NOT NULL', me, other.id);
     const posts = await previews(rows, req.user);
+    // En tête d'une conversation : qui est la personne (abonnés, relation)
+    const rel = before || after
+      ? null
+      : await db.get(
+          `SELECT (SELECT COUNT(*) FROM follows WHERE followee_id = ?) AS followers,
+                  EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS following,
+                  EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS followed_by`,
+          other.id, me, other.id, other.id, me,
+        );
     res.json({
-      user: { ...authorOf({ ...other, user_id: other.id }), online: ctx.hub.isOnline(other.id) },
+      user: {
+        ...authorOf({ ...other, user_id: other.id }),
+        online: ctx.hub.isOnline(other.id),
+        ...(rel ? { followers: rel.followers, isFollowing: !!rel.following, followsMe: !!rel.followed_by } : {}),
+      },
       messages: rows.reverse().map((m) => serializeMessage(m, posts)),
       hasMore: !after && rows.length === limit,
       seenUpTo: seen,

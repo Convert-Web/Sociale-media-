@@ -23,7 +23,7 @@ function pages(d) {
   const p = (...kids) => h('p', null, ...kids);
   const ul = (...items) => h('ul', null, items.map((t) => h('li', null, t)));
   const h2 = (t, id) => h('h2', id ? { id } : null, t);
-  const table = (head, rows) => h('div', { class: 'legal-table' }, h('table', null, h('thead', null, h('tr', null, head.map((c) => h('th', null, c)))), h('tbody', null, rows.map((r) => h('tr', null, r.map((c) => h('td', null, c)))))));
+  const table = (head, rows) => h('div', { class: 'legal-table' }, h('table', null, h('thead', null, h('tr', null, head.map((c) => h('th', null, c)))), h('tbody', null, rows.map((r) => h('tr', null, r.map((c, i) => h('td', { 'data-label': head[i] }, c)))))));
   const editor = () => [v('editorName'), L.legalForm ? `, ${L.legalForm}` : '', L.capital ? ` au capital de ${L.capital}` : ''];
 
   return {

@@ -27,7 +27,7 @@ export function welcomeView(ctx) {
     } catch (err) {
       toast(err.message, 'error');
     }
-    root.replaceChildren(h('div', { class: 'welcome-step' }, h('h1', null, 'Suis des créateurs'), h('p', { class: 'auth-sub' }, 'Leurs vidéos apparaîtront dans « Abonnements ».'), suggestionsPanel(), h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', onclick: () => navigate(next, { replace: true }) }, 'C’est parti !')));
+    root.replaceChildren(h('div', { class: 'welcome-step' }, h('h1', null, 'Suis des créateurs'), h('p', { class: 'auth-sub' }, 'Leurs vidéos apparaîtront dans « Abonnements ».'), suggestionsPanel(), h('div', { class: 'welcome-go' }, h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', onclick: () => navigate(next, { replace: true }) }, 'C’est parti !'))));
   }
   go.addEventListener('click', () => finish([...picked]));
   return root;

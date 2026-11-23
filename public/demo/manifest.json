@@ -14,7 +14,7 @@
     "file": "d02.mp4",
     "poster": "d02.jpg",
     "audio": "chip",
-    "size": 1142303,
+    "size": 1142291,
     "duration": 10,
     "width": 720,
     "height": 1280
@@ -24,7 +24,7 @@
     "file": "d03.mp4",
     "poster": "d03.jpg",
     "audio": "chip",
-    "size": 542923,
+    "size": 546861,
     "duration": 10,
     "width": 720,
     "height": 1280
@@ -34,7 +34,7 @@
     "file": "d04.mp4",
     "poster": "d04.jpg",
     "audio": "chill",
-    "size": 315660,
+    "size": 302006,
     "duration": 12,
     "width": 720,
     "height": 1280
@@ -44,7 +44,7 @@
     "file": "d05.mp4",
     "poster": "d05.jpg",
     "audio": "lofi",
-    "size": 850285,
+    "size": 847098,
     "duration": 10,
     "width": 720,
     "height": 1280
@@ -54,7 +54,7 @@
     "file": "d06.mp4",
     "poster": "d06.jpg",
     "audio": "synth",
-    "size": 626190,
+    "size": 621798,
     "duration": 12,
     "width": 720,
     "height": 1280
@@ -64,7 +64,7 @@
     "file": "d07.mp4",
     "poster": "d07.jpg",
     "audio": "bells",
-    "size": 221753,
+    "size": 217707,
     "duration": 10,
     "width": 720,
     "height": 1280
@@ -74,7 +74,7 @@
     "file": "d08.mp4",
     "poster": "d08.jpg",
     "audio": "drone",
-    "size": 1706421,
+    "size": 1701947,
     "duration": 10,
     "width": 720,
     "height": 1280
@@ -84,7 +84,7 @@
     "file": "d09.mp4",
     "poster": "d09.jpg",
     "audio": "synth",
-    "size": 221114,
+    "size": 211960,
     "duration": 12,
     "width": 720,
     "height": 1280
@@ -94,7 +94,7 @@
     "file": "d10.mp4",
     "poster": "d10.jpg",
     "audio": "beat",
-    "size": 214080,
+    "size": 210047,
     "duration": 11,
     "width": 720,
     "height": 1280
@@ -104,7 +104,7 @@
     "file": "d11.mp4",
     "poster": "d11.jpg",
     "audio": "lofi",
-    "size": 218081,
+    "size": 209560,
     "duration": 12,
     "width": 720,
     "height": 1280
@@ -114,7 +114,7 @@
     "file": "d12.mp4",
     "poster": "d12.jpg",
     "audio": "chill",
-    "size": 329209,
+    "size": 322634,
     "duration": 12,
     "width": 720,
     "height": 1280
@@ -124,7 +124,7 @@
     "file": "d13.mp4",
     "poster": "d13.jpg",
     "audio": "beat",
-    "size": 480700,
+    "size": 480490,
     "duration": 11,
     "width": 720,
     "height": 1280
@@ -134,7 +134,7 @@
     "file": "d14.mp4",
     "poster": "d14.jpg",
     "audio": "beat",
-    "size": 566134,
+    "size": 551825,
     "duration": 12,
     "width": 720,
     "height": 1280

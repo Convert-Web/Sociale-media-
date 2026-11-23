@@ -6,7 +6,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, richText, short, toast, emptyState, spinner, onTaps, heartBurst, verifiedMark, timeAgo, confirmDialog } from '../dom.js';
+import { h, icon, avatar, richText, short, count, toast, emptyState, spinner, onTaps, heartBurst, verifiedMark, timeAgo, confirmDialog } from '../dom.js';
 import {
   sound, reelsPlayer, preloadVideo, preloadStart, localVideo, sameVideo, setSource, PRIO, preloadEta, cancelPreload, holdPreloads, releasePreloads,
   clockLabel, canProgressive, progressiveReady, progressiveCheck, playProgressive, disableProgressive, downloadedBytes, relaxPreload, reportVideoIssue, videoBlob,
@@ -15,7 +15,7 @@ import { fxLayer, filterCss, fitFor } from './fx.js';
 import { toggleLike, toggleSave, needLogin, follow, postPath } from './actions.js';
 import { openComments } from './comments.js';
 import { openShare, downloadPost } from './share.js';
-import { openSheet, closeSheet } from './sheet.js';
+import { openSheet, closeSheet, sidePanelOpen } from './sheet.js';
 import { reportDialog } from './report.js';
 import { translateLink, myLang } from './translate.js';
 
@@ -131,7 +131,7 @@ function slide(post) {
   const shareBtn = railButton('shareFill', 'Partager', short(post.shareCount), 'share');
   shareBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    openShare(post, { onShared: () => (shareBtn.__count.textContent = short(post.shareCount)) });
+    openShare(post, { onShared: () => (shareBtn.__count.textContent = short(post.shareCount)), onOptions: () => box.__options?.() });
   });
 
   // Photo du créateur, avec « + » pour s'abonner sans quitter la vidéo
@@ -161,41 +161,70 @@ function slide(post) {
   const rail = h('div', { class: 'rail' }, who, likeBtn, commentBtn, saveBtn, shareBtn, post.kind === 'video' ? disc : null);
 
   // Informations en bas : auteur, date, description dépliable, Duo/Stitch, son
-  let text = null;
-  if (post.body && post.kind !== 'text') {
-    const inner = h('span', { class: 'info-text-inner' }, richText(post.body));
-    const tr = post.lang && post.lang !== myLang() && store.user
-      ? translateLink([post.body], post.lang, { small: true, show: ([t]) => inner.replaceChildren(richText(t)), hide: () => inner.replaceChildren(richText(post.body)) })
-      : null;
-    text = h('div', { class: 'info-text' }, inner, tr);
-    text.addEventListener('click', (e) => {
-      if (e.target.closest('a, button')) return;
-      e.stopPropagation();
-      text.classList.toggle('open');
-    });
-  }
-  const chips = [];
-  if (post.duetOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.duetOf.username)}/video/${post.duetOf.id}` }, icon('duet', 'icon-xs'), `Duo avec @${post.duetOf.username}`));
-  if (post.stitchOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.stitchOf.username)}/video/${post.stitchOf.id}` }, icon('scissors', 'icon-xs'), `Stitch avec @${post.stitchOf.username}`));
-  if (post.privacy !== 'public') chips.push(h('span', { class: 'info-chip' }, icon(post.privacy === 'private' ? 'lock' : 'friends', 'icon-xs'), post.privacy === 'private' ? 'Moi uniquement' : 'Amis'));
-  const soundLine = post.sound
-    ? h('a', { class: 'info-sound', href: `/son/${post.sound.id}` }, icon('music', 'icon-xs'), h('span', { class: 'marquee' }, h('span', null, `${post.sound.title}  ·  ${post.sound.title}`)))
-    : null;
+  // (reconstruites quand la publication est modifiée : description, confidentialité, épinglage)
   const views = h('span', { class: 'info-views' });
   box.__paintViews = () => {
-    views.textContent = post.kind === 'video' && (post.mine || post.viewCount > 0) ? `${short(post.viewCount)} vues` : '';
+    views.textContent = post.kind === 'video' && (post.mine || post.viewCount > 0) ? count(post.viewCount, 'vue') : '';
   };
   box.__paintViews();
-  const info = h(
-    'div',
-    { class: 'info' },
-    post.repostedBy ? h('a', { class: 'info-repost', href: `/@${enc(post.repostedBy.username)}` }, icon('repost', 'icon-xs'), `${post.repostedBy.displayName} a republié`) : null,
-    post.pinned ? h('span', { class: 'info-pinned' }, 'Épinglée') : null,
-    h('div', { class: 'info-who' }, h('a', { href: `/@${enc(post.author.username)}`, class: 'info-user' }, h('b', null, post.author.displayName), post.author.verified ? verifiedMark() : null), h('span', { class: 'info-date' }, `· ${timeAgo(post.createdAt)}`), views),
-    text,
-    chips.length ? h('div', { class: 'info-chips' }, chips) : null,
-    soundLine,
-  );
+  const buildInfo = () => {
+    let text = null;
+    if (post.body && post.kind !== 'text') {
+      const inner = h('span', { class: 'info-text-inner' }, richText(post.body));
+      const tr = post.lang && post.lang !== myLang() && store.user
+        ? translateLink([post.body], post.lang, { small: true, show: ([t]) => inner.replaceChildren(richText(t)), hide: () => inner.replaceChildren(richText(post.body)) })
+        : null;
+      // Deux lignes, puis « plus » si la description est plus longue (comme dans le fil d'origine)
+      const moreBtn = h('button', { type: 'button', class: 'info-more', hidden: true }, 'plus');
+      const textBox = h('div', { class: 'info-text' }, inner);
+      const toggleOpen = () => {
+        const open = textBox.classList.toggle('open');
+        moreBtn.textContent = open ? 'moins' : 'plus';
+      };
+      moreBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleOpen();
+      });
+      textBox.addEventListener('click', (e) => {
+        if (e.target.closest('a, button')) return;
+        e.stopPropagation();
+        if (!moreBtn.hidden || textBox.classList.contains('open')) toggleOpen();
+      });
+      // La place réelle n'est connue qu'une fois la vidéo à l'écran
+      const measure = () => {
+        if (!textBox.isConnected || textBox.classList.contains('open')) return;
+        moreBtn.hidden = inner.scrollHeight <= inner.clientHeight + 2;
+      };
+      if (typeof ResizeObserver === 'function') new ResizeObserver(measure).observe(inner);
+      text = h('div', { class: 'info-desc' }, textBox, h('div', { class: 'info-desc-actions' }, moreBtn, tr));
+    }
+    const chips = [];
+    if (post.duetOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.duetOf.username)}/video/${post.duetOf.id}` }, icon('duet', 'icon-xs'), `Duo avec @${post.duetOf.username}`));
+    if (post.stitchOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.stitchOf.username)}/video/${post.stitchOf.id}` }, icon('scissors', 'icon-xs'), `Stitch avec @${post.stitchOf.username}`));
+    if (post.privacy !== 'public') chips.push(h('span', { class: 'info-chip' }, icon(post.privacy === 'private' ? 'lock' : 'friends', 'icon-xs'), post.privacy === 'private' ? 'Moi uniquement' : 'Amis'));
+    const soundLine = post.sound
+      ? h('a', { class: 'info-sound', href: `/son/${post.sound.id}` }, icon('music', 'icon-xs'), h('span', { class: 'marquee' }, h('span', null, `${post.sound.title}  ·  ${post.sound.title}`)))
+      : null;
+    return h(
+      'div',
+      { class: 'info' },
+      post.repostedBy ? h('a', { class: 'info-repost', href: `/@${enc(post.repostedBy.username)}` }, icon('repost', 'icon-xs'), `${post.repostedBy.displayName} a republié`) : null,
+      post.pinned ? h('span', { class: 'info-pinned' }, 'Épinglée') : null,
+      h('div', { class: 'info-who' }, h('a', { href: `/@${enc(post.author.username)}`, class: 'info-user' }, h('b', null, post.author.displayName), post.author.verified ? verifiedMark() : null), h('span', { class: 'info-date' }, `· ${timeAgo(post.createdAt)}`), views),
+      text,
+      chips.length ? h('div', { class: 'info-chips' }, chips) : null,
+      soundLine,
+    );
+  };
+  let info = buildInfo();
+  box.__paintInfo = () => {
+    const next = buildInfo();
+    info.replaceWith(next);
+    info = next;
+    if (post.kind === 'text') media.querySelector('p').textContent = post.body;
+    commentBtn.__count.textContent = short(post.commentCount);
+    shareBtn.__count.textContent = short(post.shareCount);
+  };
 
   const progress = post.kind === 'video' ? null : h('div', { class: 'slide-progress' });
   box.append(...[media, h('div', { class: 'slide-shade' }), h('span', { class: 'slide-play', hidden: true }, icon('play')), rail, info, progress].filter(Boolean));
@@ -209,7 +238,7 @@ function slide(post) {
 // Le fil
 // load(seenIds) → { posts, more } : page suivante
 // ---------------------------------------------------------------------------
-export function verticalFeed({ load, initial = [], more: initialMore = true, startId = null, emptyView = null, onActive = null }) {
+export function verticalFeed({ load, initial = [], more: initialMore = true, startId = null, emptyView = null, onActive = null, onRefresh = null }) {
   const player = reelsPlayer();
   const track = h('div', { class: 'feed-track' });
   const hint = h('button', { class: 'feed-unmute', type: 'button', hidden: true }, icon('mute', 'icon-sm'), 'Activer le son');
@@ -223,13 +252,59 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
   const bar = h('div', { class: 'scrub-bar' }, fill, knob);
   const scrub = h('div', { class: 'scrub no-taps', role: 'slider', 'aria-label': 'Position dans la vidéo', tabindex: '0' }, bar);
   const timeLabel = h('div', { class: 'scrub-time', 'aria-hidden': 'true' });
-  const root = h('div', { class: 'feed' }, track, hint, soundBtn, upBtn, downBtn, timeLabel, scrub);
+  // Tirer vers le bas, tout en haut du fil : nouvelles vidéos (téléphone)
+  const ptr = h('div', { class: 'feed-ptr', 'aria-hidden': 'true' }, icon('refresh', 'icon-sm'), h('span', null, 'Tirer pour actualiser'));
+  const root = h('div', { class: 'feed' }, track, ptr, hint, soundBtn, upBtn, downBtn, timeLabel, scrub);
+  if (onRefresh) {
+    let pull = null;
+    const PULL = 72;
+    const resetPtr = () => {
+      ptr.style.transform = '';
+      ptr.style.opacity = '';
+      ptr.classList.remove('ready', 'pulling');
+    };
+    track.addEventListener('touchstart', (e) => {
+      pull = track.scrollTop <= 0 && e.touches.length === 1 ? { y: e.touches[0].clientY, x: e.touches[0].clientX, d: 0 } : null;
+    }, { passive: true });
+    track.addEventListener('touchmove', (e) => {
+      if (!pull) return;
+      const dy = e.touches[0].clientY - pull.y;
+      const dx = Math.abs(e.touches[0].clientX - pull.x);
+      // Le doigt remonte, part de côté, ou le fil défile : ce n'est pas un « tirer pour actualiser »
+      if (dy < -8 || dx > Math.max(24, dy) || track.scrollTop > 0) {
+        pull = null;
+        return resetPtr();
+      }
+      if (dy <= 0) return;
+      pull.d = Math.min(130, dy * 0.55);
+      ptr.classList.add('pulling');
+      ptr.classList.toggle('ready', pull.d >= PULL);
+      ptr.lastChild.textContent = pull.d >= PULL ? 'Relâcher pour actualiser' : 'Tirer pour actualiser';
+      ptr.style.transform = `translate(-50%, ${pull.d}px)`;
+      ptr.style.opacity = String(Math.min(1, pull.d / PULL));
+    }, { passive: true });
+    const endPull = () => {
+      const go = pull && pull.d >= PULL;
+      pull = null;
+      if (!go) return resetPtr();
+      ptr.lastChild.textContent = 'Actualisation…';
+      ptr.classList.add('loading');
+      navigator.vibrate?.(10);
+      setTimeout(() => onRefresh(), 250);
+    };
+    track.addEventListener('touchend', endPull);
+    track.addEventListener('touchcancel', () => {
+      pull = null;
+      resetPtr();
+    });
+  }
 
   let active = null;
   let userPaused = false;
   let actToken = 0;
   let watch = null;
   let destroyed = false;
+  let sleeping = null;
   const paintSound = () => soundBtn.replaceChildren(icon(player.muted ? 'mute' : 'sound'));
   const unmute = () => {
     sound.set(true);
@@ -342,8 +417,38 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     watch = null;
   }
 
+  // Mémoire du téléphone : les images des publications loin de l'écran sont libérées pendant
+  // une longue session, puis rechargées quand on y revient
+  const withImages = new Set();
+  const releaseImages = (box) => {
+    for (const img of box.querySelectorAll('img.slide-poster, .carousel-item img')) {
+      const src = img.getAttribute('src');
+      if (!src) continue;
+      img.dataset.src = src;
+      img.removeAttribute('src');
+    }
+    withImages.delete(box);
+  };
+  const restoreImages = (box) => {
+    for (const img of box.querySelectorAll('img[data-src]')) {
+      img.src = img.dataset.src;
+      delete img.dataset.src;
+    }
+    withImages.add(box);
+  };
+  function keepNear(box) {
+    const near = new Set([box]);
+    let el = box.previousElementSibling;
+    for (let i = 0; i < 3 && el; i++, el = el.previousElementSibling) if (el.__post) near.add(el);
+    el = box.nextElementSibling;
+    for (let i = 0; i < 6 && el; i++, el = el.nextElementSibling) if (el.__post) near.add(el);
+    for (const x of near) if (!withImages.has(x)) restoreImages(x);
+    for (const x of [...withImages]) if (!near.has(x)) releaseImages(x);
+  }
+
   function activate(box) {
     if (active === box || !box?.__post || destroyed) return;
+    keepNear(box);
     if (active?.__post?.video && box.__post.video && active.__post.video.url !== box.__post.video.url) relaxPreload(active.__post.video);
     active?.classList.remove('is-active', 'is-ready');
     endWatch();
@@ -352,9 +457,12 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     box.classList.add('is-active');
     userPaused = false;
     pendingSeek = null;
+    setBuffering(box.__post.kind === 'video');
     const post = box.__post;
     onActive?.(post);
     box.__fit?.();
+    // Panneau des commentaires ouvert (grand écran) : il suit la vidéo à l'écran
+    if (sidePanelOpen()) openComments(post);
     // Photos et textes : pas de lecteur
     if (post.kind !== 'video') {
       stopProgressive();
@@ -440,6 +548,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     releasePreloads();
   };
   const onPaused = () => {
+    if (player.paused) setBuffering(false);
     if (watch?.playing) {
       watch.ms += performance.now() - watch.since;
       watch.playing = false;
@@ -456,8 +565,6 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       /* réessayé à l'événement suivant */
     }
   };
-  player.addEventListener('loadedmetadata', applySeek);
-  player.addEventListener('canplay', applySeek);
   const onTime = () => {
     if (!scrubbing) paintTime();
     const post = active?.__post;
@@ -488,8 +595,18 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     classic(active.__post.video, actToken);
     if (at > 0.5) pendingSeek = at;
   };
+  // Indicateur d'attente : seulement si l'attente dure (pas de clignotement)
+  let bufferTimer = 0;
+  const setBuffering = (on) => {
+    clearTimeout(bufferTimer);
+    if (!on) return root.classList.remove('is-buffering');
+    bufferTimer = setTimeout(() => {
+      if (active?.__post.kind === 'video' && !player.paused && player.readyState < 3) root.classList.add('is-buffering');
+    }, 450);
+  };
   let stallTimer = 0;
   const onWaiting = () => {
+    setBuffering(true);
     clearTimeout(stallTimer);
     if (!progressive || !active) return;
     const token = actToken;
@@ -511,15 +628,27 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     };
     stallTimer = setTimeout(check, 6000);
   };
-  const onFlowing = () => clearTimeout(stallTimer);
-  player.addEventListener('error', onError);
-  player.addEventListener('waiting', onWaiting);
-  player.addEventListener('playing', onFlowing);
-  player.addEventListener('playing', onPlaying);
-  player.addEventListener('timeupdate', onTime);
-  player.addEventListener('pause', onPaused);
-  player.addEventListener('play', onPaused);
-  player.addEventListener('canplaythrough', onReady);
+  const onFlowing = () => {
+    clearTimeout(stallTimer);
+    setBuffering(false);
+  };
+  // Le lecteur est partagé entre les fils : seul le fil à l'écran l'écoute
+  const PLAYER_EVENTS = [
+    ['loadedmetadata', applySeek],
+    ['canplay', applySeek],
+    ['error', onError],
+    ['waiting', onWaiting],
+    ['playing', onFlowing],
+    ['playing', onPlaying],
+    ['timeupdate', onTime],
+    ['pause', onPaused],
+    ['play', onPaused],
+    ['canplaythrough', onReady],
+  ];
+  const bindPlayer = (on) => {
+    for (const [ev, fn] of PLAYER_EVENTS) player[on ? 'addEventListener' : 'removeEventListener'](ev, fn);
+  };
+  bindPlayer(true);
 
   // Glisser sur la barre : la vidéo suit le doigt, le temps s'affiche en grand
   let wasPlaying = false;
@@ -612,9 +741,13 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     e.stopImmediatePropagation();
     e.preventDefault();
   };
-  document.addEventListener('click', swallow, true);
+  // Clic droit (ordinateur) : les mêmes options que l'appui long
   track.addEventListener('contextmenu', (e) => {
-    if (e.target.closest('.slide-media')) e.preventDefault();
+    if (!e.target.closest('.slide-media') || e.target.closest('a, button')) return;
+    e.preventDefault();
+    if (e.pointerType === 'touch' || longPressed || Date.now() < swallowUntil) return;
+    const slide = e.target.closest('.slide');
+    if (slide?.__post) openOptions(slide);
   });
 
   function removeSlides(test) {
@@ -668,6 +801,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
           if (post.pinned) await api.del(`/api/posts/${post.id}/pin`);
           else await api.post(`/api/posts/${post.id}/pin`);
           post.pinned = !post.pinned;
+          document.dispatchEvent(new CustomEvent('vibz:post', { detail: post }));
           toast(post.pinned ? 'Épinglée en haut de ton profil' : 'Désépinglée');
         } catch (err) {
           toast(err.message, 'error');
@@ -708,7 +842,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
         }
       }, true),
     ].filter(Boolean);
-    const stats = post.mine ? h('p', { class: 'opt-stats' }, `${short(post.viewCount)} vues · ${short(post.likeCount)} J’aime · ${short(post.shareCount)} partages`) : null;
+    const stats = post.mine ? h('p', { class: 'opt-stats' }, `${count(post.viewCount, 'vue')} · ${short(post.likeCount)} J’aime · ${count(post.shareCount, 'partage')}`) : null;
     openSheet({ title: 'Options', body: h('div', { class: 'opt-list' }, stats, speeds ? h('p', { class: 'opt-label' }, 'Vitesse de lecture') : null, speeds, ...items) });
   }
 
@@ -748,6 +882,8 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       seen.add(p.id);
       all.push(p);
       const s = slide(p);
+      s.__options = () => openOptions(s);
+      withImages.add(s);
       track.append(s);
       io.observe(s);
     }
@@ -787,7 +923,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
 
   // Clavier (ordinateur) : flèches haut / bas, espace, M pour le son, L pour aimer
   const onKey = (e) => {
-    if (document.querySelector('.sheet-backdrop, .modal-backdrop') || e.target.closest?.('input, textarea, [contenteditable]')) return;
+    if (document.querySelector('.sheet-backdrop:not(.side), .modal-backdrop') || e.target.closest?.('input, textarea, [contenteditable]')) return;
     if (!root.isConnected) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
@@ -803,7 +939,6 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       active.__like();
     }
   };
-  document.addEventListener('keydown', onKey);
 
   // Onglet masqué : pause ; de retour : reprise
   const onVisibility = () => {
@@ -816,22 +951,29 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       player.play().catch(() => {});
     }
   };
-  document.addEventListener('visibilitychange', onVisibility);
   const onPageHide = () => endWatch();
-  addEventListener('pagehide', onPageHide);
 
   // Une publication modifiée ailleurs (feuille de partage, commentaires…) : mise à jour de l'écran
   const onPostChange = (e) => {
     for (const el of track.querySelectorAll('.slide')) {
-      if (el.__post?.id !== e.detail.id || el.__post === e.detail) continue;
-      Object.assign(el.__post, e.detail);
+      if (el.__post?.id !== e.detail.id) continue;
+      if (el.__post !== e.detail) Object.assign(el.__post, e.detail);
       el.__paintLike?.(false);
       el.__paintSave?.();
+      el.__paintInfo?.();
     }
   };
   document.addEventListener('vibz:post', onPostChange);
   const onResize = () => active?.__fit?.();
-  addEventListener('resize', onResize);
+  const bindGlobal = (on) => {
+    const m = on ? 'addEventListener' : 'removeEventListener';
+    document[m]('click', swallow, true);
+    document[m]('keydown', onKey);
+    document[m]('visibilitychange', onVisibility);
+    window[m]('pagehide', onPageHide);
+    window[m]('resize', onResize);
+  };
+  bindGlobal(true);
 
   // Premières publications
   add(initial);
@@ -850,50 +992,89 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     get active() {
       return active?.__post || null;
     },
-    pause() {
+    // On quitte l'écran sans détruire le fil : il garde sa place, sa vidéo et l'instant atteint
+    suspend() {
+      if (destroyed || sleeping) return;
+      const v = active?.__post.video;
+      const at = v && sameVideo(player, v) ? player.currentTime || 0 : 0;
+      sleeping = { box: active, at };
       endWatch();
+      setBuffering(false);
+      clearTimeout(pressTimer);
+      clearTimeout(stallTimer);
+      // Lecture progressive : sa source ne survit pas à la pause, elle sera rechargée au retour
+      if (progressive) {
+        stopProgressive();
+        player.dataset.v = '';
+      }
       player.pause();
+      player.remove();
+      player.style.filter = '';
+      releasePreloads();
+      bindPlayer(false);
+      bindGlobal(false);
+      active?.classList.remove('is-active', 'is-ready', 'paused');
+      active = null;
+      actToken++;
     },
-    resume() {
-      if (active?.__post.kind === 'video' && !userPaused) start();
+    // Retour sur l'écran : même vidéo, au même instant
+    wake() {
+      if (destroyed || !sleeping) return;
+      const { box, at } = sleeping;
+      sleeping = null;
+      bindPlayer(true);
+      bindGlobal(true);
+      if (!box?.isConnected) return;
+      track.scrollTop = box.offsetTop;
+      activate(box);
+      const v = box.__post.video;
+      if (v && at > 0.3) {
+        if (sameVideo(player, v) && player.readyState >= 1) {
+          try {
+            player.currentTime = at;
+          } catch {
+            pendingSeek = at;
+          }
+        } else {
+          pendingSeek = at;
+        }
+      }
+    },
+    // Fil en veille (gardé en mémoire, hors de l'écran) ?
+    get sleeping() {
+      return Boolean(sleeping);
     },
     prepend(post) {
       if (seen.has(post.id)) return;
       seen.add(post.id);
       all.unshift(post);
       const s = slide(post);
+      s.__options = () => openOptions(s);
+      withImages.add(s);
       track.prepend(s);
       io.observe(s);
       track.scrollTop = 0;
     },
     destroy() {
+      const wasSleeping = Boolean(sleeping);
       destroyed = true;
-      endWatch();
-      closeSheet();
+      sleeping = null;
       io.disconnect();
+      clearTimeout(bufferTimer);
       clearTimeout(pressTimer);
       clearTimeout(stallTimer);
+      document.removeEventListener('vibz:post', onPostChange);
+      // En veille, le lecteur et l'écran appartiennent déjà à un autre fil : on n'y touche pas
+      if (wasSleeping) return;
+      endWatch();
+      closeSheet();
       stopProgressive();
       player.pause();
       player.remove();
-      player.removeEventListener('playing', onPlaying);
-      player.removeEventListener('timeupdate', onTime);
-      player.removeEventListener('pause', onPaused);
-      player.removeEventListener('play', onPaused);
-      player.removeEventListener('canplaythrough', onReady);
-      player.removeEventListener('error', onError);
-      player.removeEventListener('waiting', onWaiting);
-      player.removeEventListener('loadedmetadata', applySeek);
-      player.removeEventListener('canplay', applySeek);
-      player.removeEventListener('playing', onFlowing);
       player.style.filter = '';
+      bindPlayer(false);
+      bindGlobal(false);
       releasePreloads();
-      document.removeEventListener('click', swallow, true);
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('visibilitychange', onVisibility);
-      document.removeEventListener('vibz:post', onPostChange);
-      removeEventListener('pagehide', onPageHide);
-      removeEventListener('resize', onResize);
     },
   };
 }

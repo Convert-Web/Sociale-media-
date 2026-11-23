@@ -66,7 +66,7 @@ export async function downloadPost(post) {
   }
 }
 
-export function openShare(post, { onShared } = {}) {
+export function openShare(post, { onShared, onOptions } = {}) {
   const url = `${location.origin}${postPath(post)}`;
   const title = `${post.author.displayName} sur Vibz`;
   const text = post.body ? post.body.slice(0, 120) : title;
@@ -177,7 +177,9 @@ export function openShare(post, { onShared } = {}) {
       await api.post(`/api/posts/${post.id}/not-interested`).catch(() => {});
       toast('Tu verras moins de vidéos comme celle-ci');
     }) : null,
+    post.mine ? action('pen', 'Modifier', () => document.dispatchEvent(new CustomEvent('vibz:edit-post', { detail: post }))) : null,
     !post.mine ? action('flag', 'Signaler', () => !needLogin('Connecte-toi pour signaler.') && reportDialog('post', post.id, 'Signaler la vidéo'), 'danger') : null,
+    onOptions ? action('moreH', post.mine ? 'Épingler, supprimer…' : 'Plus d’options', onOptions) : null,
   ].filter(Boolean);
 
   openSheet({

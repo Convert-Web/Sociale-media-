@@ -1,9 +1,9 @@
 // Messagerie : conversations et discussion en temps réel (« Vu », « écrit… »), vidéos partagées,
 // émojis, signalement d'un message, blocage.
 import { api, enc } from '../api.js';
-import { store, isPolling } from '../store.js';
+import { store, isPolling, fastPoll } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, spinner, emptyState, timeAgo, clock, dayLabel, richText, autosize, toast, modal, debounce, verifiedMark } from '../dom.js';
+import { h, icon, avatar, spinner, emptyState, clock, dayLabel, richText, autosize, toast, modal, debounce, verifiedMark, short } from '../dom.js';
 import { translateLink, myLang } from '../components/translate.js';
 import { sensitive } from '../components/sensitive.js';
 import { reportDialog } from '../components/report.js';
@@ -78,6 +78,7 @@ export async function messagesView(ctx) {
   }
   loadList();
 
+  ctx.onCleanup(fastPoll());
   if (!username) {
     threadHost.append(emptyState('send', 'Tes messages', 'Choisis une conversation, ou écris à quelqu’un.', h('button', { type: 'button', class: 'btn btn-primary', onclick: () => newBtn.click() }, 'Nouveau message')));
     const off = store.on('rt:message', loadList);
@@ -95,12 +96,23 @@ export async function messagesView(ctx) {
   }
   const other = data.user;
   const meId = store.user.id;
+  // Sur téléphone, la discussion occupe tout l'écran (sans la barre d'onglets)
+  document.body.classList.add('in-chat');
+  ctx.onCleanup(() => document.body.classList.remove('in-chat'));
   ctx.title = `${other.displayName} — Messages`;
   const scroller = h('div', { class: 'dm-scroll' });
   const msgs = h('div', { class: 'dm-msgs' });
   const seenEl = h('div', { class: 'dm-seen', hidden: true }, 'Vu');
   const typing = h('div', { class: 'dm-typing', hidden: true }, avatar(other, 'xs'), h('span', { class: 'dots' }, h('i'), h('i'), h('i')));
-  scroller.append(msgs, seenEl, typing);
+  // Début de la conversation : la personne, ses abonnés, votre relation
+  const relation = other.isFollowing && other.followsMe ? 'Vous vous suivez mutuellement' : other.followsMe ? 'Te suit' : other.isFollowing ? 'Tu suis ce compte' : null;
+  const intro = h('div', { class: 'dm-intro', hidden: data.hasMore },
+    avatar(other, 'xl'),
+    h('b', null, other.displayName, other.verified ? verifiedMark() : null),
+    h('small', null, `@${other.username}${other.followers !== undefined ? ` · ${short(other.followers)} abonné${other.followers > 1 ? 's' : ''}` : ''}`),
+    relation ? h('small', { class: 'dm-intro-rel' }, relation) : null,
+    h('a', { href: `/@${enc(other.username)}`, class: 'btn btn-ghost btn-sm' }, 'Voir le profil'));
+  scroller.append(intro, msgs, seenEl, typing);
   let lastDay = '';
   let lastId = 0;
   let firstId = null;
@@ -141,6 +153,7 @@ export async function messagesView(ctx) {
     for (const m of [...d.messages].reverse()) appendMsg(m, { top: true });
     firstId = d.messages[0]?.id || firstId;
     more = d.hasMore;
+    intro.hidden = more;
     scroller.scrollTop = scroller.scrollHeight - h0;
   });
 
@@ -225,7 +238,8 @@ export async function messagesView(ctx) {
   };
   const offs = [
     store.on('rt:message', ({ message }) => {
-      if (message.senderId === other.id || message.recipientId === other.id) fetchNew();
+      // Sans détail (rafraîchissement régulier) : on relit la discussion par précaution
+      if (!message || message.senderId === other.id || message.recipientId === other.id) fetchNew();
       loadList();
     }),
     store.on('rt:read', ({ by }) => {
