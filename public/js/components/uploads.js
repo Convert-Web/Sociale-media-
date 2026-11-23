@@ -85,7 +85,14 @@ function paint() {
     end.firstChild?.style?.setProperty?.('--p', p.toFixed(3));
   }
   d.hidden = jobs.size === 0;
+  // Les messages flottants s'affichent sous les pastilles d'envoi, sans les cacher
+  document.documentElement.style.setProperty('--dock-h', d.hidden ? '0px' : `${d.offsetHeight + 8}px`);
+  document.dispatchEvent(new CustomEvent('vibz:uploads'));
 }
+
+// Envois en cours, pour les vignettes du profil
+export const uploadList = () => [...jobs].map((j) => ({ job: j, poster: j.poster, title: j.title, state: j.state, label: label(j), p: overall(j) }));
+export const tapUpload = (j) => tap(j);
 
 function tap(j) {
   if (j.state === 'done') {
@@ -139,6 +146,8 @@ function run(j) {
       j.state = 'done';
       j.href = res?.href || null;
       forgetReels(); // la liste « Pour toi » gardée d'avance est rechargée
+      // Le profil (et tout écran intéressé) affiche aussitôt la nouvelle vidéo
+      if (res?.post) document.dispatchEvent(new CustomEvent('vibz:published', { detail: res.post }));
       paint();
       toast(res?.message || 'Ta vidéo est en ligne !');
       setTimeout(() => jobs.has(j) && j.state === 'done' && remove(j), 8000);

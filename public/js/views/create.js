@@ -920,7 +920,7 @@ export async function createView(ctx) {
         title: S.body.trim().slice(0, 40) || 'Ta vidéo',
         finish: async (video) => {
           const { post } = await api.post('/api/posts', { ...payload, videoId: video.id });
-          return { href: `/@${me.username}/video/${post.id}`, message: 'Ta vidéo est en ligne !' };
+          return { href: `/@${me.username}/video/${post.id}`, message: 'Ta vidéo est en ligne !', post };
         },
       });
       await done();

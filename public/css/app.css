@@ -1412,6 +1412,34 @@ input[type='range'] {
 .feed.scrubbing .scrub-bar {
   height: 4px;
 }
+/* Vidéo en attente du réseau : un trait lumineux parcourt la barre */
+.feed.is-buffering .scrub-bar {
+  overflow: hidden;
+}
+.feed.is-buffering .scrub-bar i,
+.feed.is-buffering .scrub-bar b {
+  visibility: hidden;
+}
+.feed.is-buffering .scrub-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.95), transparent);
+  animation: buffering 0.9s ease-in-out infinite;
+}
+@keyframes buffering {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feed.is-buffering .scrub-bar::after {
+    animation-duration: 2.4s;
+  }
+}
 .scrub:hover .scrub-bar b,
 .feed.scrubbing .scrub-bar b {
   opacity: 1;
@@ -1869,7 +1897,8 @@ input[type='range'] {
 #toasts {
   position: fixed;
   z-index: 200;
-  top: calc(12px + var(--safe-t));
+  top: calc(12px + var(--safe-t) + var(--dock-h, 0px));
+  transition: top 0.2s;
   left: 50%;
   transform: translateX(-50%);
   display: grid;
@@ -2798,6 +2827,46 @@ input[type='range'] {
 }
 .tile > span {
   z-index: 1;
+}
+/* Vidéo en cours d'envoi, en tête de son profil */
+.upload-tiles {
+  margin-bottom: 2px;
+}
+.upload-tiles[hidden] {
+  display: none;
+}
+.upload-tile {
+  cursor: pointer;
+}
+.upload-tile img {
+  filter: brightness(0.55);
+}
+.upload-tile-info {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 8px;
+  text-align: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 12.5px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.upload-ring.big {
+  width: 38px;
+  height: 38px;
+  mask: radial-gradient(circle, transparent 14px, #000 15px);
+}
+.upload-tile.error .upload-ring {
+  background: var(--heart);
+}
+@media (min-width: 900px) {
+  .upload-tiles {
+    margin-bottom: 10px;
+  }
 }
 .tile-pin {
   position: absolute;

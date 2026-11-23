@@ -60,12 +60,34 @@ export const isPolling = () => store.config?.realtime === 'poll';
 
 async function poll() {
   if (document.hidden || !store.user) return;
+  const before = { ...store.counters };
   try {
-    store.setCounters(await api.get('/api/counters'));
+    const c = await api.get('/api/counters');
+    store.setCounters(c);
+    // Ce qui est arrivé depuis le dernier tour : les pages ouvertes se mettent à jour comme avec
+    // le temps réel (liste des conversations, activité, demandes d'abonnement)
+    if (c.messages > (before.messages || 0)) store.emit('rt:message', { message: null });
+    if (c.notifications > (before.notifications || 0)) store.emit('rt:notification', null);
+    if (c.requests !== before.requests) store.emit('rt:requests', c);
   } catch {
     /* nouvel essai au prochain tour */
   }
   store.emit('rt:tick');
+}
+
+// Pages où l'on attend une réponse (boîte de réception, messages) : relecture plus fréquente.
+// Renvoie la fonction qui remet le rythme normal.
+let fast = 0;
+export function fastPoll() {
+  if (!isPolling()) return () => {};
+  fast++;
+  if (pollTimer) schedule();
+  let undone = false;
+  return () => {
+    if (undone) return;
+    undone = true;
+    fast = Math.max(0, fast - 1);
+  };
 }
 
 function onVisible() {
@@ -81,7 +103,7 @@ function schedule() {
   pollTimer = setTimeout(async () => {
     await poll();
     if (pollTimer) schedule();
-  }, idle ? 60000 : 15000);
+  }, fast && !idle ? 5000 : idle ? 60000 : 15000);
 }
 
 export function connectRealtime() {

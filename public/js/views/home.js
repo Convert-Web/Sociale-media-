@@ -20,6 +20,54 @@ function darkTop(ctx) {
   });
 }
 
+// Fils gardés en mémoire : en revenant sur l'accueil (après un profil, les messages…), on retrouve
+// la même vidéo, au même instant. Toucher l'onglet de l'écran ouvert charge de nouvelles vidéos.
+const kept = new Map();
+const KEEP_MS = 45 * 60 * 1000;
+const owner = () => store.user?.id || 0;
+function takeKept(key) {
+  const k = kept.get(key);
+  kept.delete(key);
+  if (!k) return null;
+  if (Date.now() - k.at > KEEP_MS || k.owner !== owner()) {
+    k.feed.destroy();
+    return null;
+  }
+  return k;
+}
+// Autre compte (connexion, déconnexion) : les fils gardés ne sont plus les bons
+let keptFor = owner();
+store.on('user', () => {
+  if (owner() === keptFor) return;
+  keptFor = owner();
+  for (const k of kept.values()) k.feed.destroy();
+  kept.clear();
+});
+
+// Écran de fil réutilisable : build() fabrique le fil ; il est gardé en quittant l'écran,
+// reconstruit (nouvelles vidéos) quand on touche à nouveau l'onglet.
+function keptScreen(ctx, key, top, build) {
+  const k = takeKept(key);
+  let feed = k?.feed || build();
+  const page = k?.el || h('div', { class: 'feed-page' }, top, feed.el);
+  if (k) requestAnimationFrame(() => feed.wake());
+  const again = (e) => {
+    e.preventDefault();
+    const old = feed;
+    feed = build();
+    old.el.replaceWith(feed.el);
+    old.destroy();
+  };
+  document.addEventListener('vibz:again', again);
+  ctx.onCleanup(() => {
+    document.removeEventListener('vibz:again', again);
+    if (!page.isConnected && !feed.el.isConnected) return feed.destroy();
+    feed.suspend();
+    kept.set(key, { el: page, feed, at: Date.now(), owner: owner() });
+  });
+  return page;
+}
+
 // Bandeau des LIVE en cours (en haut de « Pour toi »)
 async function liveBadge(btn) {
   try {
@@ -35,7 +83,6 @@ export async function homeView(ctx) {
   const followingTab = ctx.route.path === '/abonnements';
   const tab = (href, label, on) => h('a', { href, class: `top-tab${on ? ' on' : ''}`, 'aria-current': on ? 'page' : null }, label);
   const liveBtn = h('a', { href: '/live', class: 'top-icon live-link', 'aria-label': 'LIVE' }, icon('live'));
-  liveBadge(liveBtn);
   const top = h(
     'header',
     { class: 'feed-top' },
@@ -44,29 +91,36 @@ export async function homeView(ctx) {
     h('a', { href: '/recherche', class: 'top-icon', 'aria-label': 'Rechercher' }, icon('search')),
   );
 
-  let feed;
+  ctx.title = followingTab ? 'Abonnements — Vibz' : 'Vibz — Pour toi';
+  ctx.description = 'Regarde des vidéos courtes qui te ressemblent, crée les tiennes et partage-les avec tes amis.';
   if (followingTab) {
     if (!store.user) {
       setTimeout(() => needLogin('Connecte-toi pour voir les vidéos des comptes que tu suis.'), 50);
       return h('div', { class: 'feed-page' }, top, h('div', { class: 'feed-gate' }, emptyState('friends', 'Les vidéos de tes abonnements', 'Connecte-toi pour voir ici les vidéos des comptes que tu suis.', h('button', { class: 'btn btn-primary', onclick: () => needLogin('Connecte-toi pour continuer.') }, 'Se connecter'))));
     }
-    let cursor = null;
-    feed = verticalFeed({
-      load: async () => {
-        const d = await api.get(`/api/feed/following${cursor ? `?cursor=${cursor}` : ''}`);
-        cursor = d.cursor;
-        return { posts: d.posts, more: Boolean(d.cursor) };
-      },
-      emptyView: () => emptyState('friends', 'Aucune vidéo pour l’instant', 'Abonne-toi à des créateurs pour voir ici leurs vidéos.', h('a', { href: '/', class: 'btn btn-primary' }, 'Découvrir « Pour toi »')),
-    });
-  } else {
-    // Liste préparée dès l'ouverture de l'application (démarrage instantané)
-    let first = takeReels();
+    return withLive(keptScreen(ctx, 'following', top, () => {
+      let cursor = null;
+      return verticalFeed({
+        load: async () => {
+          const d = await api.get(`/api/feed/following${cursor ? `?cursor=${cursor}` : ''}`);
+          cursor = d.cursor;
+          return { posts: d.posts, more: Boolean(d.cursor) };
+        },
+        emptyView: () => emptyState('friends', 'Aucune vidéo pour l’instant', 'Abonne-toi à des créateurs pour voir ici leurs vidéos.', h('a', { href: '/', class: 'btn btn-primary' }, 'Découvrir « Pour toi »')),
+      });
+    }));
+  }
+  // Liste préparée dès l'ouverture de l'application (démarrage instantané)
+  let first = null;
+  if (!kept.has('foryou')) {
+    first = takeReels();
     if (!first && pendingReels()) {
       await pendingReels();
       first = takeReels();
     }
-    feed = verticalFeed({
+  }
+  return withLive(keptScreen(ctx, 'foryou', top, () => {
+    const feed = verticalFeed({
       initial: first?.posts || [],
       more: first ? first.hasMore : true,
       load: async (seen) => {
@@ -75,11 +129,16 @@ export async function homeView(ctx) {
       },
       emptyView: () => emptyState('video', 'Aucune vidéo pour l’instant', 'Sois la première personne à publier !', h('a', { href: '/creer', class: 'btn btn-primary' }, 'Créer une vidéo')),
     });
-  }
-  ctx.onCleanup(() => feed.destroy());
-  ctx.title = followingTab ? 'Abonnements — Vibz' : 'Vibz — Pour toi';
-  ctx.description = 'Regarde des vidéos courtes qui te ressemblent, crée les tiennes et partage-les avec tes amis.';
-  return h('div', { class: 'feed-page' }, top, feed.el);
+    first = null; // une liste préparée ne sert qu'une fois
+    return feed;
+  }));
+}
+
+// L'icône LIVE (en haut à gauche) s'allume quand quelqu'un est en direct
+function withLive(page) {
+  const btn = page.querySelector('.live-link');
+  if (btn) liveBadge(btn);
+  return page;
 }
 
 // Une vidéo ouverte par son lien : elle d'abord, puis la liste d'où l'on vient (profil, hashtag…)
@@ -132,19 +191,19 @@ export async function friendsView(ctx) {
     return h('div', { class: 'page' }, h('header', { class: 'page-head' }, h('h1', null, 'Amis')), emptyState('friends', 'Retrouve tes amis', 'Connecte-toi pour voir les vidéos de tes amis et découvrir des comptes à suivre.', h('button', { class: 'btn btn-primary', onclick: () => needLogin('Connecte-toi pour voir tes amis.') }, 'Se connecter')));
   }
   darkTop(ctx);
-  let cursor = null;
   const top = h('header', { class: 'feed-top' }, h('a', { href: '/activite?type=followers', class: 'top-icon', 'aria-label': 'Nouveaux abonnés' }, icon('userPlus')), h('nav', { class: 'top-tabs' }, h('span', { class: 'top-tab on' }, 'Amis')), h('a', { href: '/recherche', class: 'top-icon', 'aria-label': 'Rechercher' }, icon('search')));
-  const feed = verticalFeed({
-    load: async () => {
-      const d = await api.get(`/api/feed/friends${cursor ? `?cursor=${cursor}` : ''}`);
-      cursor = d.cursor;
-      return { posts: d.posts, more: Boolean(d.cursor) };
-    },
-    emptyView: () => suggestionsPanel(),
-  });
-  ctx.onCleanup(() => feed.destroy());
   ctx.title = 'Amis — Vibz';
-  return h('div', { class: 'feed-page' }, top, feed.el);
+  return keptScreen(ctx, 'friends', top, () => {
+    let cursor = null;
+    return verticalFeed({
+      load: async () => {
+        const d = await api.get(`/api/feed/friends${cursor ? `?cursor=${cursor}` : ''}`);
+        cursor = d.cursor;
+        return { posts: d.posts, more: Boolean(d.cursor) };
+      },
+      emptyView: () => suggestionsPanel(),
+    });
+  });
 }
 
 // Comptes suggérés (quand on n'a pas encore d'amis)

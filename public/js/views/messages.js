@@ -1,7 +1,7 @@
 // Messagerie : conversations et discussion en temps réel (« Vu », « écrit… »), vidéos partagées,
 // émojis, signalement d'un message, blocage.
 import { api, enc } from '../api.js';
-import { store, isPolling } from '../store.js';
+import { store, isPolling, fastPoll } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, spinner, emptyState, timeAgo, clock, dayLabel, richText, autosize, toast, modal, debounce, verifiedMark, short } from '../dom.js';
 import { translateLink, myLang } from '../components/translate.js';
@@ -78,6 +78,7 @@ export async function messagesView(ctx) {
   }
   loadList();
 
+  ctx.onCleanup(fastPoll());
   if (!username) {
     threadHost.append(emptyState('send', 'Tes messages', 'Choisis une conversation, ou écris à quelqu’un.', h('button', { type: 'button', class: 'btn btn-primary', onclick: () => newBtn.click() }, 'Nouveau message')));
     const off = store.on('rt:message', loadList);
@@ -237,7 +238,8 @@ export async function messagesView(ctx) {
   };
   const offs = [
     store.on('rt:message', ({ message }) => {
-      if (message.senderId === other.id || message.recipientId === other.id) fetchNew();
+      // Sans détail (rafraîchissement régulier) : on relit la discussion par précaution
+      if (!message || message.senderId === other.id || message.recipientId === other.id) fetchNew();
       loadList();
     }),
     store.on('rt:read', ({ by }) => {

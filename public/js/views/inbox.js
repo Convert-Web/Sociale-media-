@@ -1,6 +1,6 @@
 // Boîte de réception (nouveaux abonnés, activité, demandes, conversations) et page Activité (filtres).
 import { api, enc } from '../api.js';
-import { store } from '../store.js';
+import { store, fastPoll } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, timeAgo, emptyState, spinner, toast, verifiedMark } from '../dom.js';
 import { followButton } from '../components/userlist.js';
@@ -81,8 +81,20 @@ export async function inboxView(ctx) {
   } catch (err) {
     convs.replaceChildren(emptyState('alert', 'Messages indisponibles', err.message));
   }
-  const off = store.on('rt:message', () => api.get('/api/conversations').then(({ conversations }) => convs.replaceChildren(...conversations.map(convRow))).catch(() => {}));
+  const off = store.on('rt:message', () => api.get('/api/conversations').then(({ conversations }) => conversations.length && convs.replaceChildren(...conversations.map(convRow))).catch(() => {}));
+  // Pastilles « Activité » et « Demandes » tenues à jour
+  const offCounters = store.on('counters', (n) => {
+    const act = root.querySelector('a[href="/activite"]');
+    if (act) act.replaceWith(row('/activite', 'bell', 'pink', 'Activité', 'J’aime, commentaires, mentions…', n.notifications));
+    const req = root.querySelector('a[href="/activite?type=demandes"]');
+    const fresh = n.requests ? row('/activite?type=demandes', 'userPlus', 'violet', 'Demandes d’abonnement', `${n.requests} en attente`, n.requests) : null;
+    if (req && fresh) req.replaceWith(fresh);
+    else if (req) req.remove();
+    else if (fresh) root.querySelector('a[href="/activite"]')?.after(fresh);
+  });
   ctx.onCleanup(off);
+  ctx.onCleanup(offCounters);
+  ctx.onCleanup(fastPoll());
   return root;
 }
 
@@ -175,8 +187,17 @@ export async function activityView(ctx) {
   // Ouverte : tout est lu
   api.post('/api/notifications/read').then(() => store.setCounters({ notifications: 0 })).catch(() => {});
   const off = store.on('rt:notification', (n) => {
-    if (!type) list.prepend(notifRow(n));
+    if (n && !type) {
+      list.querySelector(':scope > .empty')?.remove();
+      list.prepend(notifRow(n));
+    } else if (!n) {
+      // Rafraîchissement régulier : la première page est relue
+      before = null;
+      more = true;
+      load().then(() => api.post('/api/notifications/read').then(() => store.setCounters({ notifications: 0 })).catch(() => {}));
+    }
   });
   ctx.onCleanup(off);
+  ctx.onCleanup(fastPoll());
   return root;
 }

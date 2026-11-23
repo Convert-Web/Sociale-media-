@@ -259,6 +259,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
   let actToken = 0;
   let watch = null;
   let destroyed = false;
+  let sleeping = null;
   const paintSound = () => soundBtn.replaceChildren(icon(player.muted ? 'mute' : 'sound'));
   const unmute = () => {
     sound.set(true);
@@ -381,6 +382,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     box.classList.add('is-active');
     userPaused = false;
     pendingSeek = null;
+    setBuffering(box.__post.kind === 'video');
     const post = box.__post;
     onActive?.(post);
     box.__fit?.();
@@ -469,6 +471,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     releasePreloads();
   };
   const onPaused = () => {
+    if (player.paused) setBuffering(false);
     if (watch?.playing) {
       watch.ms += performance.now() - watch.since;
       watch.playing = false;
@@ -485,8 +488,6 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       /* réessayé à l'événement suivant */
     }
   };
-  player.addEventListener('loadedmetadata', applySeek);
-  player.addEventListener('canplay', applySeek);
   const onTime = () => {
     if (!scrubbing) paintTime();
     const post = active?.__post;
@@ -517,8 +518,18 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     classic(active.__post.video, actToken);
     if (at > 0.5) pendingSeek = at;
   };
+  // Indicateur d'attente : seulement si l'attente dure (pas de clignotement)
+  let bufferTimer = 0;
+  const setBuffering = (on) => {
+    clearTimeout(bufferTimer);
+    if (!on) return root.classList.remove('is-buffering');
+    bufferTimer = setTimeout(() => {
+      if (active?.__post.kind === 'video' && !player.paused && player.readyState < 3) root.classList.add('is-buffering');
+    }, 450);
+  };
   let stallTimer = 0;
   const onWaiting = () => {
+    setBuffering(true);
     clearTimeout(stallTimer);
     if (!progressive || !active) return;
     const token = actToken;
@@ -540,15 +551,27 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     };
     stallTimer = setTimeout(check, 6000);
   };
-  const onFlowing = () => clearTimeout(stallTimer);
-  player.addEventListener('error', onError);
-  player.addEventListener('waiting', onWaiting);
-  player.addEventListener('playing', onFlowing);
-  player.addEventListener('playing', onPlaying);
-  player.addEventListener('timeupdate', onTime);
-  player.addEventListener('pause', onPaused);
-  player.addEventListener('play', onPaused);
-  player.addEventListener('canplaythrough', onReady);
+  const onFlowing = () => {
+    clearTimeout(stallTimer);
+    setBuffering(false);
+  };
+  // Le lecteur est partagé entre les fils : seul le fil à l'écran l'écoute
+  const PLAYER_EVENTS = [
+    ['loadedmetadata', applySeek],
+    ['canplay', applySeek],
+    ['error', onError],
+    ['waiting', onWaiting],
+    ['playing', onFlowing],
+    ['playing', onPlaying],
+    ['timeupdate', onTime],
+    ['pause', onPaused],
+    ['play', onPaused],
+    ['canplaythrough', onReady],
+  ];
+  const bindPlayer = (on) => {
+    for (const [ev, fn] of PLAYER_EVENTS) player[on ? 'addEventListener' : 'removeEventListener'](ev, fn);
+  };
+  bindPlayer(true);
 
   // Glisser sur la barre : la vidéo suit le doigt, le temps s'affiche en grand
   let wasPlaying = false;
@@ -641,7 +664,6 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     e.stopImmediatePropagation();
     e.preventDefault();
   };
-  document.addEventListener('click', swallow, true);
   // Clic droit (ordinateur) : les mêmes options que l'appui long
   track.addEventListener('contextmenu', (e) => {
     if (!e.target.closest('.slide-media') || e.target.closest('a, button')) return;
@@ -839,7 +861,6 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       active.__like();
     }
   };
-  document.addEventListener('keydown', onKey);
 
   // Onglet masqué : pause ; de retour : reprise
   const onVisibility = () => {
@@ -852,9 +873,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       player.play().catch(() => {});
     }
   };
-  document.addEventListener('visibilitychange', onVisibility);
   const onPageHide = () => endWatch();
-  addEventListener('pagehide', onPageHide);
 
   // Une publication modifiée ailleurs (feuille de partage, commentaires…) : mise à jour de l'écran
   const onPostChange = (e) => {
@@ -868,7 +887,15 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
   };
   document.addEventListener('vibz:post', onPostChange);
   const onResize = () => active?.__fit?.();
-  addEventListener('resize', onResize);
+  const bindGlobal = (on) => {
+    const m = on ? 'addEventListener' : 'removeEventListener';
+    document[m]('click', swallow, true);
+    document[m]('keydown', onKey);
+    document[m]('visibilitychange', onVisibility);
+    window[m]('pagehide', onPageHide);
+    window[m]('resize', onResize);
+  };
+  bindGlobal(true);
 
   // Premières publications
   add(initial);
@@ -887,12 +914,57 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     get active() {
       return active?.__post || null;
     },
-    pause() {
+    // On quitte l'écran sans détruire le fil : il garde sa place, sa vidéo et l'instant atteint
+    suspend() {
+      if (destroyed || sleeping) return;
+      const v = active?.__post.video;
+      const at = v && sameVideo(player, v) ? player.currentTime || 0 : 0;
+      sleeping = { box: active, at };
       endWatch();
+      setBuffering(false);
+      clearTimeout(pressTimer);
+      clearTimeout(stallTimer);
+      // Lecture progressive : sa source ne survit pas à la pause, elle sera rechargée au retour
+      if (progressive) {
+        stopProgressive();
+        player.dataset.v = '';
+      }
       player.pause();
+      player.remove();
+      player.style.filter = '';
+      releasePreloads();
+      bindPlayer(false);
+      bindGlobal(false);
+      active?.classList.remove('is-active', 'is-ready', 'paused');
+      active = null;
+      actToken++;
     },
-    resume() {
-      if (active?.__post.kind === 'video' && !userPaused) start();
+    // Retour sur l'écran : même vidéo, au même instant
+    wake() {
+      if (destroyed || !sleeping) return;
+      const { box, at } = sleeping;
+      sleeping = null;
+      bindPlayer(true);
+      bindGlobal(true);
+      if (!box?.isConnected) return;
+      track.scrollTop = box.offsetTop;
+      activate(box);
+      const v = box.__post.video;
+      if (v && at > 0.3) {
+        if (sameVideo(player, v) && player.readyState >= 1) {
+          try {
+            player.currentTime = at;
+          } catch {
+            pendingSeek = at;
+          }
+        } else {
+          pendingSeek = at;
+        }
+      }
+    },
+    // Fil en veille (gardé en mémoire, hors de l'écran) ?
+    get sleeping() {
+      return Boolean(sleeping);
     },
     prepend(post) {
       if (seen.has(post.id)) return;
@@ -905,33 +977,25 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       track.scrollTop = 0;
     },
     destroy() {
+      const wasSleeping = Boolean(sleeping);
       destroyed = true;
-      endWatch();
-      closeSheet();
+      sleeping = null;
       io.disconnect();
+      clearTimeout(bufferTimer);
       clearTimeout(pressTimer);
       clearTimeout(stallTimer);
+      document.removeEventListener('vibz:post', onPostChange);
+      // En veille, le lecteur et l'écran appartiennent déjà à un autre fil : on n'y touche pas
+      if (wasSleeping) return;
+      endWatch();
+      closeSheet();
       stopProgressive();
       player.pause();
       player.remove();
-      player.removeEventListener('playing', onPlaying);
-      player.removeEventListener('timeupdate', onTime);
-      player.removeEventListener('pause', onPaused);
-      player.removeEventListener('play', onPaused);
-      player.removeEventListener('canplaythrough', onReady);
-      player.removeEventListener('error', onError);
-      player.removeEventListener('waiting', onWaiting);
-      player.removeEventListener('loadedmetadata', applySeek);
-      player.removeEventListener('canplay', applySeek);
-      player.removeEventListener('playing', onFlowing);
       player.style.filter = '';
+      bindPlayer(false);
+      bindGlobal(false);
       releasePreloads();
-      document.removeEventListener('click', swallow, true);
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('visibilitychange', onVisibility);
-      document.removeEventListener('vibz:post', onPostChange);
-      removeEventListener('pagehide', onPageHide);
-      removeEventListener('resize', onResize);
     },
   };
 }

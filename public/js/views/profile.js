@@ -11,6 +11,7 @@ import { followLabel, userRow } from '../components/userlist.js';
 import { reportDialog } from '../components/report.js';
 import { cropImage } from '../components/cropper.js';
 import { logout } from './auth.js';
+import { uploadList, tapUpload } from '../components/uploads.js';
 
 const backBtn = () => h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => (history.length > 1 ? history.back() : navigate('/')) }, icon('back'));
 
@@ -176,8 +177,45 @@ export async function profileView(ctx) {
       liked: emptyState('heart', 'Aucune vidéo aimée', me ? 'Les vidéos que tu aimes apparaîtront ici (visibles de toi seul, sauf réglage contraire).' : null),
     };
     grid = videoGrid({ fetchPage: (cursor) => api.get(`${url}${cursor ? `?cursor=${cursor}` : ''}`), empty: empties[current], showLikes: current === 'liked' });
-    content.replaceChildren(grid.el);
+    content.replaceChildren(...(me && current === 'videos' ? [uploadsStrip] : []), grid.el);
+    paintUploads();
   }
+
+  // Ses vidéos en cours d'envoi, en tête de la grille ; elles prennent leur place une fois en ligne
+  const uploadsStrip = h('div', { class: 'grid cols-3 upload-tiles', hidden: true });
+  const uploadTiles = new Map();
+  function paintUploads() {
+    if (!me) return;
+    const list = uploadList().filter((u) => u.state !== 'done');
+    for (const [job, el] of uploadTiles) {
+      if (list.some((u) => u.job === job)) continue;
+      el.remove();
+      uploadTiles.delete(job);
+    }
+    for (const u of list) {
+      let el = uploadTiles.get(u.job);
+      if (!el) {
+        const ring = h('span', { class: 'upload-ring big' });
+        const label = h('small');
+        el = h('button', { type: 'button', class: 'tile upload-tile', onclick: () => tapUpload(u.job) }, u.poster ? h('img', { src: u.poster, alt: '' }) : null, h('span', { class: 'upload-tile-info' }, ring, label));
+        el._parts = { ring, label };
+        uploadTiles.set(u.job, el);
+        uploadsStrip.append(el);
+      }
+      el.classList.toggle('error', u.state === 'error');
+      el._parts.ring.style.setProperty('--p', u.p.toFixed(3));
+      el._parts.label.textContent = u.state === 'error' ? 'Toucher pour réessayer' : u.label;
+    }
+    uploadsStrip.hidden = !list.length || current !== 'videos';
+  }
+  const onUploads = () => paintUploads();
+  const onPublished = () => me && current === 'videos' && mountGrid();
+  document.addEventListener('vibz:uploads', onUploads);
+  document.addEventListener('vibz:published', onPublished);
+  ctx.onCleanup(() => {
+    document.removeEventListener('vibz:uploads', onUploads);
+    document.removeEventListener('vibz:published', onPublished);
+  });
 
   function render() {
     paintActions();
