@@ -19,10 +19,12 @@ const newId = () => crypto.randomBytes(16).toString('hex');
 const videoUrl = (id, ext) => `/media/v/${id}.${ext}`;
 const idFromUrl = (url) => (typeof url === 'string' && /^\/media\/v\/([a-f0-9]{32})\.(mp4|webm)$/.exec(url)?.[1]) || null;
 
-// Signature du fichier : MP4/QuickTime (« ftyp » à l'octet 4) ou WebM (en-tête EBML)
+// Signature du fichier : MP4 / QuickTime (première boîte « ftyp », ou, pour certains fichiers
+// QuickTime d'iPhone et d'appareils photo, « wide », « moov », « mdat », « free »…) ou WebM (EBML)
+const MP4_FIRST_BOXES = new Set(['ftyp', 'moov', 'mdat', 'wide', 'free', 'skip', 'pnot', 'uuid']);
 function looksLikeVideo(buf) {
   if (!buf || buf.length < 12) return false;
-  if (buf.subarray(4, 8).toString('ascii') === 'ftyp') return true;
+  if (MP4_FIRST_BOXES.has(buf.subarray(4, 8).toString('latin1'))) return true;
   return buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3;
 }
 

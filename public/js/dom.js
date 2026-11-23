@@ -161,28 +161,25 @@ function hash(str) {
   return x;
 }
 export function initials(name = '') {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const letters = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : (parts[0] || '?').slice(0, 2);
+  // Par caractères entiers (un émoji ou une lettre accentuée composée ne sont jamais coupés en deux)
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  const first = (w) => [...w][0] || '';
+  const letters = parts.length > 1 ? first(parts[0]) + first(parts[parts.length - 1]) : [...(parts[0] || '?')].slice(0, 2).join('');
   return letters.toUpperCase();
 }
 
 export function avatar(user, size = '', { presence = false, live = false } = {}) {
   const cls = ['avatar', size && `avatar-${size}`, live && user?.live ? 'avatar-live' : ''].filter(Boolean).join(' ');
   const el = h('span', { class: cls });
+  const hue = hash(user?.username || 'x') % 360;
+  const letters = () => h('span', { class: 'avatar-initials', style: { '--h': String(hue) } }, initials(user?.displayName));
   if (user?.avatar) {
-    el.append(h('img', { src: user.avatar, alt: '', loading: 'lazy', decoding: 'async' }));
+    // Image introuvable (ancienne adresse, fichier retiré) : les initiales, jamais une image cassée
+    const img = h('img', { src: user.avatar, alt: '', loading: 'lazy', decoding: 'async' });
+    img.addEventListener('error', () => img.replaceWith(letters()), { once: true });
+    el.append(img);
   } else {
-    const hue = hash(user?.username || 'x') % 360;
-    el.append(
-      h(
-        'span',
-        {
-          class: 'avatar-initials',
-          style: { '--h': String(hue) },
-        },
-        initials(user?.displayName),
-      ),
-    );
+    el.append(letters());
   }
   if (presence && user?.online) el.append(h('span', { class: 'presence', title: 'En ligne' }));
   if (live && user?.live) el.append(h('span', { class: 'live-chip' }, 'LIVE'));
@@ -454,12 +451,16 @@ export function autosize(textarea) {
 }
 
 // Défilement infini : appelle loadMore quand la sentinelle devient visible.
+// Cadre qui défile (zone principale de l'application, ou toute la page) : repère des listes
+// infinies, pour charger la suite un peu avant d'arriver en bas
+export const scrollRoot = () => document.querySelector('.shell > .main') || document.getElementById('app');
+
 export function infinite(sentinel, loadMore) {
   const io = new IntersectionObserver(
     (entries) => {
       if (entries.some((e) => e.isIntersecting)) loadMore();
     },
-    { rootMargin: '600px 0px' },
+    { root: scrollRoot(), rootMargin: '600px 0px' },
   );
   io.observe(sentinel);
   return () => io.disconnect();

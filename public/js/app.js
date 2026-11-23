@@ -290,6 +290,26 @@ function match(pathname) {
   return { route: null, params: {} };
 }
 
+// Cadre qui défile : la zone principale de l'application, ou toute la page (connexion, création…)
+const scroller = () => (shell?.main?.isConnected ? shell.main : appEl);
+// Retour en arrière : la position est retrouvée, même si le contenu arrive un peu après (grilles)
+function restoreScroll(target) {
+  const el = scroller();
+  const token = renderToken;
+  let tries = 0;
+  let userMoved = false;
+  const stop = () => (userMoved = true);
+  el.addEventListener('wheel', stop, { once: true, passive: true });
+  el.addEventListener('touchstart', stop, { once: true, passive: true });
+  const attempt = () => {
+    if (userMoved || token !== renderToken || !el.isConnected) return;
+    el.scrollTop = target;
+    if (Math.abs(el.scrollTop - target) < 2 || ++tries > 15) return;
+    setTimeout(attempt, 120);
+  };
+  requestAnimationFrame(attempt);
+}
+
 async function render(opts = {}) {
   const token = ++renderToken;
   closeModal();
@@ -304,7 +324,7 @@ async function render(opts = {}) {
   }
 
   const url = new URL(location.href);
-  if (lastLocation && !opts.same) scrollPos.set(lastLocation, window.scrollY);
+  if (lastLocation && !opts.same) scrollPos.set(lastLocation, scroller().scrollTop);
   if (scrollPos.size > 60) scrollPos.delete(scrollPos.keys().next().value);
   lastLocation = url.pathname + url.search;
   const { route, params } = match(url.pathname);
@@ -352,9 +372,9 @@ async function render(opts = {}) {
   if (!el) return;
   const back = opts.pop ? scrollPos.get(lastLocation) : undefined;
   container.replaceChildren(el);
-  if (back) requestAnimationFrame(() => window.scrollTo(0, back));
+  if (back) restoreScroll(back);
   else if (location.hash) setTimeout(() => document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView(), 50);
-  else if (!opts.same) window.scrollTo(0, 0);
+  else if (!opts.same) scroller().scrollTop = 0;
   baseTitle = ctx.title || 'Vibz';
   paintTitle();
   const desc = document.querySelector('meta[name="description"]');

@@ -2,7 +2,7 @@
 // image, et les sons mélangés par la carte audio ; l'enregistreur du navigateur en fait un nouveau
 // fichier. Sert à ajouter un son à une vidéo importée, à monter un Duo (côte à côte) et un Stitch
 // (un extrait de l'originale, puis la suite). Le montage dure le temps de la vidéo.
-import { videoBlob } from './video.js';
+import { videoBlob, hiddenVideo, grabFrame, within } from './video.js';
 
 const CHUNK = 1024 * 1024;
 
@@ -30,34 +30,77 @@ export async function loadVideoBlob(video, onProgress) {
   return new Blob(parts, { type: video.url.endsWith('.webm') ? 'video/webm' : 'video/mp4' });
 }
 
+// Lecteur pour le montage. Les vidéos sont posées dans la page (invisibles) : Safari (iPhone) ne
+// décode pas une vidéo hors de la page. release() les retire une fois le montage fini.
 export function mediaFor(src, { video = true } = {}) {
-  const el = document.createElement(video ? 'video' : 'audio');
-  el.src = src instanceof Blob ? URL.createObjectURL(src) : src;
-  el.preload = 'auto';
-  el.playsInline = true;
-  el.setAttribute('playsinline', '');
+  const url = src instanceof Blob ? URL.createObjectURL(src) : src;
+  let el;
+  if (video) {
+    el = hiddenVideo(null);
+    el.muted = false;
+    el.defaultMuted = false;
+    el.removeAttribute('muted');
+  } else {
+    el = document.createElement('audio');
+    el.preload = 'auto';
+  }
   el.crossOrigin = 'anonymous';
+  el.src = url;
   return el;
 }
+// Le même lecteur, affiché à l'écran (Duo, Stitch) : il quitte son emplacement invisible
+export function onScreen(el) {
+  el.style.cssText = '';
+  return el;
+}
+export function release(...els) {
+  for (const el of els) {
+    if (!el) continue;
+    try {
+      el.pause();
+    } catch {
+      /* déjà arrêté */
+    }
+    if (String(el.src).startsWith('blob:')) URL.revokeObjectURL(el.src);
+    el.remove();
+  }
+}
 
-export const ready = (el) =>
+// Prêt à être lu. Sur iPhone, le chargement ne démarre souvent qu'à la lecture : un début de
+// lecture muette le déclenche. Jamais d'attente sans fin.
+export const ready = (el, ms = 15000) =>
   new Promise((resolve, reject) => {
-    if (el.readyState >= 3) return resolve();
+    if (el.readyState >= 2) return resolve();
+    let kick = 0;
+    let limit = 0;
     const ok = () => {
       cleanup();
       resolve();
     };
-    const ko = () => {
+    const ko = (msg) => {
       cleanup();
-      reject(new Error('Média illisible sur cet appareil.'));
+      reject(new Error(typeof msg === 'string' ? msg : 'Média illisible sur cet appareil.'));
     };
     const cleanup = () => {
+      clearTimeout(kick);
+      clearTimeout(limit);
       el.removeEventListener('canplay', ok);
+      el.removeEventListener('loadeddata', ok);
       el.removeEventListener('error', ko);
     };
     el.addEventListener('canplay', ok);
+    el.addEventListener('loadeddata', ok);
     el.addEventListener('error', ko);
-    el.load?.();
+    kick = setTimeout(() => {
+      const muted = el.muted;
+      el.muted = true;
+      el.play?.().then(() => {
+        el.pause();
+        el.muted = muted;
+      }).catch(() => (el.muted = muted));
+    }, 1200);
+    limit = setTimeout(() => (el.readyState >= 1 ? ok() : ko('Ce média met trop de temps à s’ouvrir sur cet appareil.')), ms);
+    if (el.readyState === 0 && el.networkState === 0) el.load?.();
   });
 
 async function seek(el, t) {
@@ -96,7 +139,14 @@ export function drawContain(g, el, x, y, w, hgt) {
 
 // scenes : [{ duration, media: [{ el, volume, from }], draw(g, t) }]
 // ac : contexte audio créé pendant le toucher de l'utilisateur (obligatoire sur iPhone)
-export async function render({ width, height, scenes, ac, onProgress, bitrate = 6_000_000 }) {
+export async function render(opts) {
+  try {
+    return await renderScenes(opts);
+  } finally {
+    release(...new Set(opts.scenes.flatMap((s) => s.media.map((m) => m.el))));
+  }
+}
+async function renderScenes({ width, height, scenes, ac, onProgress, bitrate = 6_000_000 }) {
   const mime = recorderMime();
   if (mime === null) throw new Error('Ce navigateur ne sait pas enregistrer de vidéo. Essaie avec Chrome, Edge, Firefox ou Safari récent.');
   const canvas = document.createElement('canvas');
@@ -225,17 +275,13 @@ export async function stitch({ originalBlob, from, length, camFile, camDuration,
 
 // Image d'une vidéo à un instant donné (couverture)
 export async function frameAt(file, t, { maxDim = 1080 } = {}) {
-  const v = mediaFor(file);
-  v.muted = true;
-  await ready(v);
-  await v.play().catch(() => {});
-  v.pause();
-  await seek(v, Math.max(0, Math.min(t, (v.duration || t) - 0.05)));
-  const s = Math.min(1, maxDim / Math.max(v.videoWidth, v.videoHeight));
-  const c = document.createElement('canvas');
-  c.width = Math.round(v.videoWidth * s);
-  c.height = Math.round(v.videoHeight * s);
-  c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-  URL.revokeObjectURL(v.src);
-  return new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
+  const v = hiddenVideo(URL.createObjectURL(file));
+  try {
+    await within(ready(v), 15000);
+    const blob = await grabFrame(v, t, { maxDim, budget: 8000 });
+    if (!blob) throw new Error('Image impossible à prendre sur cet appareil : la couverture reste celle du début.');
+    return blob;
+  } finally {
+    release(v);
+  }
 }

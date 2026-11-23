@@ -74,13 +74,26 @@
 html {
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  height: 100%;
 }
+/* Le document lui-même ne défile jamais : chaque écran défile dans son propre cadre (#app, ou la
+   zone principale de l'application). Sur iPhone (iOS 26), une page qui défile en entier voit le haut
+   de l'écran flouté sous la barre d'état, titres compris. */
 body {
   margin: 0;
+  height: 100%;
   font: 15px/1.45 var(--font);
   background: var(--bg);
   color: var(--fg);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+#app {
+  height: 100%;
   overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 html.feed-mode,
 html.feed-mode body {
@@ -90,6 +103,20 @@ html.feed-mode body {
 a {
   color: inherit;
   text-decoration: none;
+}
+/* Invisible mais présent (champs de fichier ouverts par une étiquette, textes pour lecteurs d'écran) */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  opacity: 0;
 }
 img,
 video {
@@ -392,9 +419,14 @@ input[type='range'] {
   flex: none;
   background: var(--bg-3);
 }
+/* L'image remplit exactement le rond, quelle que soit sa forme d'origine (Safari dimensionnait
+   la grille d'après une photo en hauteur : avatar ovale) */
 .avatar img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  max-width: none;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -512,10 +544,14 @@ input[type='range'] {
    Coquille : barre du bas (téléphone), barre latérale (ordinateur)
    --------------------------------------------------------------------------- */
 .shell {
-  min-height: 100dvh;
+  height: 100%;
 }
 .main {
-  min-height: 100dvh;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
   padding-bottom: calc(var(--tab-h) + var(--safe-b));
 }
 .shell.is-feed .main {
@@ -1411,6 +1447,24 @@ input[type='range'] {
 .scrub:hover .scrub-bar,
 .feed.scrubbing .scrub-bar {
   height: 4px;
+}
+/* Vidéo illisible sur cet appareil */
+.slide.is-broken .slide-media::after {
+  content: 'Cette vidéo ne peut pas être lue sur cet appareil.';
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: max-content;
+  max-width: 78%;
+  text-align: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
 }
 /* Tirer pour actualiser */
 .feed-ptr {
@@ -3629,6 +3683,10 @@ input[type='range'] {
   body.in-chat .dm {
     height: 100dvh;
   }
+  body.in-chat .main {
+    padding-bottom: 0;
+    overflow: hidden;
+  }
   body.in-chat .dm-compose {
     padding-bottom: calc(8px + var(--safe-b));
   }
@@ -5234,6 +5292,8 @@ input[type='range'] {
   background: rgba(255, 255, 255, 0.2);
 }
 .cam-import {
+  cursor: pointer;
+  position: relative;
   display: grid;
   justify-items: center;
   gap: 3px;
@@ -5284,6 +5344,26 @@ input[type='range'] {
     height: min(calc(100dvh - 32px), calc(100vw / var(--ar)));
     border-radius: 16px;
   }
+}
+/* Montage : la vidéo démarre muette (exigence de Safari), un toucher rétablit le son */
+.edit-unmute {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  top: calc(64px + var(--safe-t));
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+}
+.edit-unmute[hidden] {
+  display: none;
 }
 .edit-media,
 .edit-media video {
