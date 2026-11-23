@@ -6,14 +6,14 @@ import { h, icon, onTaps } from '../dom.js';
 
 // Durée maximale d'une vidéo, fixée par le serveur (VIDEO_MAX_SECONDS, 3 minutes par défaut)
 export const maxSeconds = () => store.config?.videoMaxSeconds || 180;
-const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
+const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v', 'video/3gpp'];
 // Poids maximal d'une vidéo, fixé par le serveur (VIDEO_MAX_MB, 250 Mo par défaut)
 export const maxVideoBytes = () => store.config?.videoMaxBytes || 250 * 1024 * 1024;
 const megas = (n) => Math.ceil(n / 1048576);
 const tooBig = (size) =>
   `Vidéo trop lourde (${megas(size)} Mo) : ${megas(maxVideoBytes())} Mo au maximum. Raccourcis-la, ou filme en 1080p.`;
 
-export const isVideoFile = (f) => Boolean(f && (VIDEO_TYPES.includes(f.type) || /\.(mp4|mov|m4v|webm)$/i.test(f.name || '')));
+export const isVideoFile = (f) => Boolean(f && (VIDEO_TYPES.includes(f.type) || String(f.type || '').startsWith('video/') || /\.(mp4|mov|qt|m4v|webm|3gp)$/i.test(f.name || '')));
 export const clockLabel = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 
 const once = (el, ev) => new Promise((resolve, reject) => {
@@ -22,23 +22,174 @@ const once = (el, ev) => new Promise((resolve, reject) => {
   el.addEventListener(ev, ok, { once: true });
   el.addEventListener('error', ko, { once: true });
 });
-const fileMime = (f) => (VIDEO_TYPES.includes(f.type) ? f.type : /\.webm$/i.test(f.name) ? 'video/webm' : /\.mov$/i.test(f.name) ? 'video/quicktime' : 'video/mp4');
+// Format annoncé au serveur : WebM, QuickTime (iPhone) ou MP4 (tout le reste de la famille MP4)
+const fileMime = (f) => {
+  const t = String(f.type || '').toLowerCase();
+  if (t === 'video/webm' || /\.webm$/i.test(f.name || '')) return 'video/webm';
+  if (t === 'video/quicktime' || /\.(mov|qt)$/i.test(f.name || '')) return 'video/quicktime';
+  return 'video/mp4';
+};
 
-// Durée, dimensions et image d'aperçu (prise à 0,5 s). La vidéo elle-même n'est jamais modifiée :
-// elle sera publiée telle qu'elle a été filmée.
-export async function readVideoInfo(file, { knownDuration = 0 } = {}) {
-  if (file.size > maxVideoBytes()) throw new Error(tooBig(file.size));
-  const url = URL.createObjectURL(file);
+// ---------------------------------------------------------------------------
+// Lecture fiable d'une vidéo du téléphone (iPhone compris) : chaque attente est bornée dans le
+// temps, rien ne peut rester bloqué
+// ---------------------------------------------------------------------------
+const TIMEOUT = 'Délai dépassé.';
+export const within = (p, ms) => Promise.race([Promise.resolve(p), new Promise((_, reject) => setTimeout(() => reject(new Error(TIMEOUT)), ms))]);
+
+// Lecteur posé dans la page, invisible : Safari (iPhone) ne charge pas une vidéo hors de la page
+export function hiddenVideo(src) {
   const v = document.createElement('video');
   v.muted = true;
+  v.defaultMuted = true;
   v.playsInline = true;
   v.setAttribute('playsinline', '');
+  v.setAttribute('muted', '');
   v.preload = 'auto';
-  v.src = url;
+  v.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1';
+  document.body.append(v);
+  if (src) v.src = src;
+  return v;
+}
+
+// Image de la vidéo vers l'instant t (JPEG), ou null si l'appareil n'en livre pas à temps
+export async function grabFrame(v, t, { maxDim = 1080, budget = 7000 } = {}) {
+  const end = Date.now() + budget;
+  const left = (cap) => Math.max(150, Math.min(cap, end - Date.now()));
+  const shoot = async (at) => {
+    // Safari ne décode une image qu'après un début de lecture (muette : toujours permise)
+    await within(v.play(), left(2500)).catch(() => {});
+    v.pause();
+    const target = Math.max(0, Math.min(at, (Number.isFinite(v.duration) ? v.duration : at) - 0.05));
+    if (Math.abs(v.currentTime - target) > 0.04) {
+      const seeked = once(v, 'seeked');
+      v.currentTime = target;
+      await within(seeked, left(3000)).catch(() => {});
+    }
+    if (v.readyState < 2) await within(once(v, 'loadeddata'), left(2000)).catch(() => {});
+    if (!v.videoWidth || !v.videoHeight || v.readyState < 2) return null;
+    const s = Math.min(1, maxDim / Math.max(v.videoWidth, v.videoHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(v.videoWidth * s);
+    c.height = Math.round(v.videoHeight * s);
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    // Image toute noire : souvent rien de décodé encore (ou un fondu au noir)
+    const tiny = document.createElement('canvas');
+    tiny.width = 8;
+    tiny.height = 8;
+    const tg = tiny.getContext('2d');
+    tg.drawImage(c, 0, 0, 8, 8);
+    const px = tg.getImageData(0, 0, 8, 8).data;
+    let max = 0;
+    for (let i = 0; i < px.length; i += 4) max = Math.max(max, px[i], px[i + 1], px[i + 2]);
+    return { c, dark: max < 8 };
+  };
   try {
-    await once(v, 'loadedmetadata');
+    if (v.readyState < 1) await within(once(v, 'loadedmetadata'), left(4000));
+    let shot = await shoot(t);
+    if (shot?.dark && Date.now() < end - 1000) shot = (await shoot(Math.min(2, (v.duration || 2) * 0.3))) || shot;
+    if (!shot) return null;
+    return await within(new Promise((r) => shot.c.toBlob(r, 'image/jpeg', 0.85)), left(3000)).catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
+// En-tête d'un fichier MP4 / MOV (boîtes « moov », « mvhd », « tkhd ») : durée et dimensions à
+// l'affichage (rotation des vidéos filmées en hauteur comprise), sans dépendre du lecteur
+export async function probeMp4(file) {
+  const read = async (start, len) => new DataView(await file.slice(start, start + len).arrayBuffer());
+  const tag = (dv, o) => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+  let pos = 0;
+  let moov = null;
+  for (let i = 0; i < 64 && pos + 8 <= file.size; i++) {
+    const hd = await read(pos, 16);
+    if (hd.byteLength < 8) break;
+    let size = hd.getUint32(0);
+    let head = 8;
+    if (size === 1 && hd.byteLength >= 16) {
+      size = Number(hd.getBigUint64(8));
+      head = 16;
+    } else if (size === 0) {
+      size = file.size - pos;
+    }
+    if (size < head) break;
+    if (tag(hd, 4) === 'moov') {
+      moov = { start: pos + head, end: Math.min(file.size, pos + size) };
+      break;
+    }
+    pos += size;
+  }
+  if (!moov || moov.end - moov.start > 64 * 1048576) return null;
+  const dv = await read(moov.start, moov.end - moov.start);
+  let duration = 0;
+  let width = 0;
+  let height = 0;
+  let codec = null;
+  const walk = (start, end) => {
+    let o = start;
+    while (o + 8 <= end) {
+      let size = dv.getUint32(o);
+      let head = 8;
+      if (size === 1) {
+        size = Number(dv.getBigUint64(o + 8));
+        head = 16;
+      } else if (size === 0) {
+        size = end - o;
+      }
+      if (size < head || o + size > end) break;
+      const type = tag(dv, o + 4);
+      const body = o + head;
+      if (type === 'mvhd') {
+        const v1 = dv.getUint8(body) === 1;
+        const scale = dv.getUint32(body + (v1 ? 20 : 12));
+        const dur = v1 ? Number(dv.getBigUint64(body + 24)) : dv.getUint32(body + 16);
+        if (scale) duration = dur / scale;
+      } else if (type === 'tkhd' && !width) {
+        const m = body + (dv.getUint8(body) === 1 ? 52 : 40);
+        const w = dv.getUint32(m + 36) / 65536;
+        const hgt = dv.getUint32(m + 40) / 65536;
+        if (w > 0 && hgt > 0) {
+          const a = dv.getInt32(m) / 65536;
+          const b = dv.getInt32(m + 4) / 65536;
+          const quarter = Math.abs(Math.round((Math.atan2(b, a) * 180) / Math.PI)) % 180 === 90;
+          width = Math.round(quarter ? hgt : w);
+          height = Math.round(quarter ? w : hgt);
+        }
+      } else if (type === 'stsd' && !codec) {
+        const format = tag(dv, body + 12);
+        if (/^(avc|hvc|hev|vp0|av01|mp4v|dvh|apc|ap4)/.test(format)) codec = format;
+      } else if (['trak', 'mdia', 'minf', 'stbl'].includes(type)) {
+        walk(body, o + size);
+      }
+      o += size;
+    }
+  };
+  walk(0, dv.byteLength);
+  return duration > 0 || width ? { duration, width, height, codec } : null;
+}
+
+// Durée, dimensions et image d'aperçu (prise vers 0,5 s). La vidéo elle-même n'est jamais modifiée :
+// elle sera publiée telle qu'elle a été filmée. Sur iPhone, l'en-tête du fichier donne la durée et
+// les dimensions même si Safari tarde à ouvrir la vidéo ; l'aperçu est facultatif.
+export async function readVideoInfo(file, { knownDuration = 0 } = {}) {
+  if (file.size > maxVideoBytes()) throw new Error(tooBig(file.size));
+  const webm = fileMime(file) === 'video/webm';
+  const probe = webm ? null : await within(probeMp4(file), 8000).catch(() => null);
+  const url = URL.createObjectURL(file);
+  const v = hiddenVideo(url);
+  try {
+    let opened = true;
+    try {
+      await within(once(v, 'loadedmetadata'), 12000);
+    } catch (err) {
+      opened = false;
+      if (!probe?.duration && !knownDuration) {
+        throw new Error(err.message === TIMEOUT ? 'Cette vidéo ne s’ouvre pas sur cet appareil. Essaie un autre fichier, ou filme-la directement dans Vibz.' : 'Format de vidéo illisible sur cet appareil. Essaie une vidéo MP4 ou MOV.');
+      }
+    }
     // Vidéo enregistrée par un navigateur (WebM) : la durée n'est connue qu'après un saut à la fin
-    if (!Number.isFinite(v.duration) || v.duration <= 0) {
+    if (opened && (!Number.isFinite(v.duration) || v.duration <= 0) && !probe?.duration) {
       await new Promise((resolve) => {
         const t = setTimeout(resolve, 3000);
         v.addEventListener('durationchange', function f() {
@@ -60,31 +211,30 @@ export async function readVideoInfo(file, { knownDuration = 0 } = {}) {
         /* sans importance */
       }
     }
-    const measured = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
-    const info = { duration: measured || knownDuration || 0, width: v.videoWidth, height: v.videoHeight, poster: null, url };
-    if (!info.duration) throw new Error('Durée de la vidéo illisible.');
-    try {
-      // iOS ne décode une image qu'après un début de lecture (muette : autorisée)
-      await v.play().catch(() => {});
-      v.pause();
-      v.currentTime = Math.min(0.5, (v.duration || 1) / 2);
-      await once(v, 'seeked');
-      const scale = Math.min(1, 1080 / Math.max(v.videoWidth, v.videoHeight));
-      const c = document.createElement('canvas');
-      c.width = Math.round(v.videoWidth * scale);
-      c.height = Math.round(v.videoHeight * scale);
-      c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
-      info.poster = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.82));
-    } catch {
-      /* sans aperçu : la vidéo reste publiable */
-    }
+    const measured = opened && Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+    const duration = measured || probe?.duration || knownDuration || 0;
+    if (!duration) throw new Error('Durée de la vidéo illisible.');
+    const info = {
+      duration,
+      width: (opened && v.videoWidth) || probe?.width || 0,
+      height: (opened && v.videoHeight) || probe?.height || 0,
+      poster: null,
+      url,
+      codec: probe?.codec || null,
+    };
+    if (opened) info.poster = await grabFrame(v, Math.min(0.5, duration / 2));
     return info;
   } catch (err) {
     URL.revokeObjectURL(url);
     throw err;
   } finally {
     v.removeAttribute('src');
-    v.load();
+    try {
+      v.load();
+    } catch {
+      /* déjà libérée */
+    }
+    v.remove();
   }
 }
 
@@ -838,6 +988,23 @@ export function reportVideoIssue(kind, v, detail = {}) {
   }).catch(() => {});
 }
 const idOf = (v) => /\/media\/v\/([a-f0-9]{32})/.exec(v?.url || '')?.[1] || null;
+
+// Import impossible : signalé à l'administration (format, poids, étape, message), sans le fichier
+export function reportImportIssue(file, step, err) {
+  const detail = {
+    etape: step,
+    type: file?.type || '(vide)',
+    extension: /\.([a-z0-9]{1,5})$/i.exec(file?.name || '')?.[1]?.toLowerCase() || null,
+    mo: file ? +(file.size / 1048576).toFixed(1) : null,
+    erreur: String(err?.message || err || '').slice(0, 200),
+  };
+  fetch('/api/client-errors', {
+    method: 'POST',
+    headers: { 'x-vibz': '1', 'content-type': 'application/json' },
+    body: JSON.stringify({ message: `Import vidéo : ${detail.erreur || step}`.slice(0, 300), stack: JSON.stringify(detail).slice(0, 900), path: '/creer', version: store.config?.version || '' }),
+    keepalive: true,
+  }).catch(() => {});
+}
 
 export function disableProgressive() {
   mseOff = true;

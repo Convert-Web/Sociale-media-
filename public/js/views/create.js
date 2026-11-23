@@ -7,10 +7,10 @@ import { store } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, toast, spinner, emptyState, short, duration, shrinkImage, confirmDialog, timeAgo, debounce } from '../dom.js';
 import { openSheet, closeSheet } from '../components/sheet.js';
-import { readVideoInfo, isVideoFile, maxSeconds } from '../components/video.js';
+import { readVideoInfo, isVideoFile, maxSeconds, reportImportIssue } from '../components/video.js';
 import { sendInBackground } from '../components/uploads.js';
 import { FILTERS, filterCss, fxLayer, paintOverlays, TEXT_COLORS, STICKERS } from '../components/fx.js';
-import { recorderMime, extFor, loadVideoBlob, mixSound, duet as composeDuet, stitch as composeStitch, frameAt, mediaFor } from '../components/compose.js';
+import { recorderMime, extFor, loadVideoBlob, mixSound, duet as composeDuet, stitch as composeStitch, frameAt, mediaFor, onScreen } from '../components/compose.js';
 import { attachMentions } from '../components/mentions.js';
 import { toggle, PRIVACY } from '../components/postedit.js';
 import { saveDraft, listDrafts, deleteDraft, getDraft, countDrafts } from '../drafts.js';
@@ -176,7 +176,7 @@ export async function createView(ctx) {
     preview.playsInline = true;
     const camBox = h('div', { class: `cam-box${S.kind === 'duet' ? ' duet' : ''}` }, preview);
     if (S.kind === 'duet') {
-      origEl = mediaFor(S.sourceBlob);
+      origEl = onScreen(mediaFor(S.sourceBlob));
       origEl.className = 'cam-orig';
       camBox.append(origEl);
     }
@@ -345,32 +345,30 @@ export async function createView(ctx) {
 
     const doneBtn = h('button', { type: 'button', class: 'cam-done', 'aria-label': 'Terminer', hidden: true, onclick: finish }, icon('check'));
     const redoBtn = h('button', { type: 'button', class: 'cam-redo', 'aria-label': 'Recommencer', hidden: true, onclick: async () => { if (await confirmDialog('Recommencer ?', 'Tout ce qui a été filmé sera effacé.', 'Recommencer')) reset(); } }, icon('undo'));
-    const fileInput = h('input', { type: 'file', accept: 'video/*,image/*', multiple: true, hidden: true });
+    // Champ de fichier invisible mais présent (pas « display: none ») : le bouton « Importer » est une
+    // étiquette qui l'ouvre nativement, le plus sûr sur iPhone
+    const fileInput = h('input', { type: 'file', accept: 'video/*,image/*', multiple: true, class: 'visually-hidden', tabindex: '-1', 'aria-hidden': 'true' });
     fileInput.addEventListener('change', async () => {
       const files = [...fileInput.files];
       fileInput.value = '';
       if (!files.length) return;
       const vid = files.find(isVideoFile);
-      if (vid && !S.kind) {
+      if (vid) {
+        // Ouverture visible tout de suite (une vidéo d'iPhone peut demander quelques secondes)
+        const wait = busyOverlay('Ouverture de ta vidéo…', 'Quelques secondes pour une longue vidéo.');
         try {
           const info = await readVideoInfo(vid);
-          if (info.duration > maxSeconds() + 1) throw new Error(`Vidéo trop longue : ${duration(maxSeconds())} au maximum.`);
+          if (!S.kind && info.duration > maxSeconds() + 1) throw new Error(`Vidéo trop longue (${duration(info.duration)}) : ${duration(maxSeconds())} au maximum. Coupe-la dans Photos, puis réessaie.`);
           S.file = vid;
           S.info = info;
-          S.soundBaked = false;
+          if (S.kind) S.camDuration = Math.min(info.duration, S.maxDur);
+          else S.soundBaked = false;
           editStep();
         } catch (err) {
-          toast(err.message, 'error');
-        }
-      } else if (vid && S.kind) {
-        try {
-          const info = await readVideoInfo(vid);
-          S.file = vid;
-          S.info = info;
-          S.camDuration = Math.min(info.duration, S.maxDur);
-          editStep();
-        } catch (err) {
-          toast(err.message, 'error');
+          reportImportIssue(vid, 'ouverture', err);
+          toast(err.message || 'Cette vidéo ne peut pas être ouverte.', 'error');
+        } finally {
+          wait.remove();
         }
       } else {
         const imgs = files.filter((f) => f.type.startsWith('image/')).slice(0, MAX_PHOTOS);
@@ -380,7 +378,7 @@ export async function createView(ctx) {
         photoStep();
       }
     });
-    const importBtn = h('button', { type: 'button', class: 'cam-import', onclick: () => fileInput.click() }, h('span', { class: 'cam-import-ic' }, icon('photo')), h('small', null, 'Importer'));
+    const importBtn = h('label', { class: 'cam-import', role: 'button' }, h('span', { class: 'cam-import-ic' }, icon('photo')), h('small', null, 'Importer'), fileInput);
     const draftsBtn = h('button', { type: 'button', class: 'cam-import', hidden: true, onclick: () => openDrafts() }, h('span', { class: 'cam-import-ic' }, icon('pen')), h('small', null, 'Brouillons'));
     countDrafts().then((n) => (draftsBtn.hidden = !n || Boolean(S.kind)));
 
@@ -453,8 +451,7 @@ export async function createView(ctx) {
     const top = h('header', { class: 'cam-top' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Fermer', onclick: leave }, icon('x')), soundChip, h('span', { class: 'icon-btn' }));
     const kindNote = S.kind ? h('div', { class: 'cam-kind' }, icon(S.kind === 'duet' ? 'duet' : 'scissors', 'icon-sm'), S.kind === 'duet' ? `Duo avec @${S.source.author.username}` : `Stitch avec @${S.source.author.username}`, S.kind === 'duet' ? h('small', null, 'Avec des écouteurs, le son de l’original ne se mêle pas au tien.') : null) : null;
     const el = h('div', { class: 'cam' }, camBox, status, countdown, bar, timeEl, top, kindNote, side,
-      h('div', { class: 'cam-bottom' }, h('div', { class: 'cam-row' }, h('span', { class: 'cam-slot' }, draftsBtn), redoBtn, recordBtn, doneBtn, h('span', { class: 'cam-slot' }, importBtn)), modeTabs),
-      fileInput);
+      h('div', { class: 'cam-bottom' }, h('div', { class: 'cam-row' }, h('span', { class: 'cam-slot' }, draftsBtn), redoBtn, recordBtn, doneBtn, h('span', { class: 'cam-slot' }, importBtn)), modeTabs));
     applyFilter();
     paintBar();
     openCamera();
@@ -474,7 +471,7 @@ export async function createView(ctx) {
 
   // Stitch : choisir l'extrait de l'originale (5 secondes au plus)
   function stitchClipStep() {
-    const v = mediaFor(S.sourceBlob);
+    const v = onScreen(mediaFor(S.sourceBlob));
     v.className = 'stitch-video';
     v.loop = false;
     const total = S.source.video.duration || 10;
@@ -509,12 +506,29 @@ export async function createView(ctx) {
   // =========================================================================
   function editStep() {
     const url = URL.createObjectURL(S.file);
-    const v = h('video', { class: 'edit-video', src: url, loop: true, autoplay: true, playsinline: true });
+    // Lecture muette d'abord : Safari (iPhone) refuse de lancer une vidéo sonore sans toucher et
+    // laissait un écran noir. Un toucher rétablit le son.
+    const v = h('video', { class: 'edit-video', src: url, loop: true, autoplay: true, playsinline: true, muted: true });
     v.playsInline = true;
+    v.muted = true;
+    v.defaultMuted = true;
+    const soundHint = h('button', { type: 'button', class: 'edit-unmute' }, icon('mute', 'icon-sm'), h('span', null, 'Activer le son'));
+    const unmute = () => {
+      v.muted = false;
+      soundHint.hidden = true;
+      if (v.paused) v.play().catch(() => {});
+      soundEl?.play().catch(() => {});
+      orig?.play().catch(() => {});
+    };
+    soundHint.addEventListener('click', (e) => {
+      e.stopPropagation();
+      unmute();
+    });
+    requestAnimationFrame(() => v.play().catch(() => {}));
     const ar = S.info.width && S.info.height ? S.info.width / S.info.height : 9 / 16;
     let orig = null;
     if (S.kind === 'duet') {
-      orig = mediaFor(S.sourceBlob);
+      orig = onScreen(mediaFor(S.sourceBlob));
       orig.loop = true;
       orig.className = 'edit-orig';
     }
@@ -545,6 +559,8 @@ export async function createView(ctx) {
     v.addEventListener('seeked', () => { if (soundEl) soundEl.currentTime = v.currentTime % (soundEl.duration || 1e9); if (orig) orig.currentTime = v.currentTime; });
     stage.addEventListener('click', (e) => {
       if (e.target.closest('.fx-item')) return;
+      // Premier toucher : le son revient (la vidéo continue) ; ensuite : pause / lecture
+      if (v.muted) return unmute();
       if (v.paused) v.play().catch(() => {});
       else v.pause();
     });
@@ -632,7 +648,7 @@ export async function createView(ctx) {
       tool('smile', 'Autocollants', () => stickerSheet((emoji) => { S.fx.overlays.push({ kind: 'sticker', emoji, x: 0.5, y: 0.45, size: 0.16, rot: 0 }); applyFx(); })),
       tool('filters', 'Filtres', () => filterSheet(S.fx.filter, (f) => { S.fx.filter = f; applyFx(); })),
       soundTool, volTool);
-    const el = h('div', { class: 'edit' }, stage, trash,
+    const el = h('div', { class: 'edit' }, stage, trash, soundHint,
       h('header', { class: 'cam-top' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: async () => { if (await confirmDialog('Revenir à la caméra ?', 'La vidéo filmée sera effacée.', 'Revenir')) { S.file = null; S.info = null; S.soundBaked = false; S.kind === 'stitch' ? stitchClipStep() : captureStep(); } } }, icon('back')), soundChip, h('span', { class: 'icon-btn' })),
       side,
       h('div', { class: 'edit-bottom' }, h('button', { type: 'button', class: 'btn btn-primary btn-lg', onclick: () => postStep() }, 'Suivant')));
@@ -935,6 +951,13 @@ export async function createView(ctx) {
     if (S.draftId) await deleteDraft(S.draftId);
     S.file = null;
     S.photos = [];
+  }
+
+  // Attente sans avancement mesurable (ouverture d'une vidéo)
+  function busyOverlay(title, sub = '') {
+    const el = h('div', { class: 'progress-overlay', role: 'status' }, h('div', { class: 'progress-card' }, h('p', null, title), spinner(), sub ? h('small', null, sub) : null));
+    document.body.append(el);
+    return { remove: () => el.remove() };
   }
 
   function progressOverlay(title, sub = '') {

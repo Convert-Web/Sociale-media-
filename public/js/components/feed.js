@@ -587,8 +587,19 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     }
   };
   const onReady = () => releasePreloads();
+  // Vidéo vraiment illisible sur cet appareil (format non pris en charge…) : un message plutôt
+  // qu'un écran noir, s'il n'y a toujours rien après quelques secondes
+  let brokenTimer = 0;
   const onError = () => {
     if (active?.__post.video) reportVideoIssue('erreur de lecture', active.__post.video, { mode: player.dataset.mode, err: player.error?.code || null, msg: String(player.error?.message || '').slice(0, 120) });
+    if (!progressive && active) {
+      const box = active;
+      const token = actToken;
+      clearTimeout(brokenTimer);
+      brokenTimer = setTimeout(() => {
+        if (token === actToken && box === active && (player.error || player.readyState < 2)) box.classList.add('is-broken');
+      }, 4000);
+    }
     if (!progressive || !active) return;
     const at = player.currentTime;
     disableProgressive();
@@ -630,6 +641,8 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
   };
   const onFlowing = () => {
     clearTimeout(stallTimer);
+    clearTimeout(brokenTimer);
+    active?.classList.remove('is-broken');
     setBuffering(false);
   };
   // Le lecteur est partagé entre les fils : seul le fil à l'écran l'écoute

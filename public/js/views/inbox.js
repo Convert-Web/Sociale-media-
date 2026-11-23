@@ -2,7 +2,7 @@
 import { api, enc } from '../api.js';
 import { store, fastPoll } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, timeAgo, emptyState, spinner, toast, verifiedMark } from '../dom.js';
+import { h, icon, avatar, timeAgo, emptyState, spinner, toast, verifiedMark, scrollRoot } from '../dom.js';
 import { followButton } from '../components/userlist.js';
 import { pickUser } from './messages.js';
 
@@ -227,7 +227,7 @@ export async function activityView(ctx) {
       loading = false;
     }
   };
-  const io = new IntersectionObserver((e) => e.some((x) => x.isIntersecting) && load(), { rootMargin: '400px' });
+  const io = new IntersectionObserver((e) => e.some((x) => x.isIntersecting) && load(), { root: scrollRoot(), rootMargin: '400px' });
   io.observe(sentinel);
   ctx.onCleanup(() => io.disconnect());
   await load();
