@@ -232,6 +232,14 @@ test('messages : texte, vidéo partagée, lu, réglage « amis seulement »', as
   const conv = await m2.get('/api/conversations/msg1');
   assert.equal(conv.data.messages.length, 2);
   assert.equal(conv.data.messages[1].post.id, post.id);
+  // En tête de conversation : abonnés et relation
+  assert.equal(conv.data.user.followers, 0);
+  assert.equal(conv.data.user.isFollowing, false);
+  await m2.post('/api/users/msg1/follow');
+  const again = await m1.get('/api/conversations/msg2');
+  assert.equal(again.data.user.followsMe, true);
+  assert.equal(again.data.user.isFollowing, false);
+  assert.equal((await m2.get('/api/conversations/msg1')).data.user.followers, 1);
   const list = await m1.get('/api/conversations');
   assert.equal(list.data.conversations[0].user.username, 'msg2');
   assert.equal(list.data.conversations[0].lastMessage.seen, true);

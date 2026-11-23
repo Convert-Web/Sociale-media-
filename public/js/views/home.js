@@ -30,7 +30,7 @@ function takeKept(key) {
   kept.delete(key);
   if (!k) return null;
   if (Date.now() - k.at > KEEP_MS || k.owner !== owner()) {
-    k.feed.destroy();
+    k.holder.feed.destroy();
     return null;
   }
   return k;
@@ -40,30 +40,36 @@ let keptFor = owner();
 store.on('user', () => {
   if (owner() === keptFor) return;
   keptFor = owner();
-  for (const k of kept.values()) k.feed.destroy();
+  for (const k of kept.values()) k.holder.feed.destroy();
   kept.clear();
 });
 
-// Écran de fil réutilisable : build() fabrique le fil ; il est gardé en quittant l'écran,
-// reconstruit (nouvelles vidéos) quand on touche à nouveau l'onglet.
+// Écran de fil réutilisable : build(refresh) fabrique le fil ; il est gardé en quittant l'écran,
+// reconstruit (nouvelles vidéos) quand on touche à nouveau l'onglet ou qu'on tire le fil vers le bas.
 function keptScreen(ctx, key, top, build) {
   const k = takeKept(key);
-  let feed = k?.feed || build();
-  const page = k?.el || h('div', { class: 'feed-page' }, top, feed.el);
-  if (k) requestAnimationFrame(() => feed.wake());
+  const holder = k?.holder || { feed: null };
+  if (!k) {
+    holder.refresh = () => {
+      const old = holder.feed;
+      holder.feed = build(holder.refresh);
+      old.el.replaceWith(holder.feed.el);
+      old.destroy();
+    };
+    holder.feed = build(holder.refresh);
+  }
+  const page = k?.el || h('div', { class: 'feed-page' }, top, holder.feed.el);
+  if (k) requestAnimationFrame(() => holder.feed.wake());
   const again = (e) => {
     e.preventDefault();
-    const old = feed;
-    feed = build();
-    old.el.replaceWith(feed.el);
-    old.destroy();
+    holder.refresh();
   };
   document.addEventListener('vibz:again', again);
   ctx.onCleanup(() => {
     document.removeEventListener('vibz:again', again);
-    if (!page.isConnected && !feed.el.isConnected) return feed.destroy();
-    feed.suspend();
-    kept.set(key, { el: page, feed, at: Date.now(), owner: owner() });
+    if (!page.isConnected) return holder.feed.destroy();
+    holder.feed.suspend();
+    kept.set(key, { el: page, holder, at: Date.now(), owner: owner() });
   });
   return page;
 }
@@ -98,9 +104,10 @@ export async function homeView(ctx) {
       setTimeout(() => needLogin('Connecte-toi pour voir les vidéos des comptes que tu suis.'), 50);
       return h('div', { class: 'feed-page' }, top, h('div', { class: 'feed-gate' }, emptyState('friends', 'Les vidéos de tes abonnements', 'Connecte-toi pour voir ici les vidéos des comptes que tu suis.', h('button', { class: 'btn btn-primary', onclick: () => needLogin('Connecte-toi pour continuer.') }, 'Se connecter'))));
     }
-    return withLive(keptScreen(ctx, 'following', top, () => {
+    return withLive(keptScreen(ctx, 'following', top, (refresh) => {
       let cursor = null;
       return verticalFeed({
+        onRefresh: refresh,
         load: async () => {
           const d = await api.get(`/api/feed/following${cursor ? `?cursor=${cursor}` : ''}`);
           cursor = d.cursor;
@@ -119,8 +126,9 @@ export async function homeView(ctx) {
       first = takeReels();
     }
   }
-  return withLive(keptScreen(ctx, 'foryou', top, () => {
+  return withLive(keptScreen(ctx, 'foryou', top, (refresh) => {
     const feed = verticalFeed({
+      onRefresh: refresh,
       initial: first?.posts || [],
       more: first ? first.hasMore : true,
       load: async (seen) => {
@@ -193,9 +201,10 @@ export async function friendsView(ctx) {
   darkTop(ctx);
   const top = h('header', { class: 'feed-top' }, h('a', { href: '/activite?type=followers', class: 'top-icon', 'aria-label': 'Nouveaux abonnés' }, icon('userPlus')), h('nav', { class: 'top-tabs' }, h('span', { class: 'top-tab on' }, 'Amis')), h('a', { href: '/recherche', class: 'top-icon', 'aria-label': 'Rechercher' }, icon('search')));
   ctx.title = 'Amis — Vibz';
-  return keptScreen(ctx, 'friends', top, () => {
+  return keptScreen(ctx, 'friends', top, (refresh) => {
     let cursor = null;
     return verticalFeed({
+      onRefresh: refresh,
       load: async () => {
         const d = await api.get(`/api/feed/friends${cursor ? `?cursor=${cursor}` : ''}`);
         cursor = d.cursor;

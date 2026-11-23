@@ -238,7 +238,7 @@ function slide(post) {
 // Le fil
 // load(seenIds) → { posts, more } : page suivante
 // ---------------------------------------------------------------------------
-export function verticalFeed({ load, initial = [], more: initialMore = true, startId = null, emptyView = null, onActive = null }) {
+export function verticalFeed({ load, initial = [], more: initialMore = true, startId = null, emptyView = null, onActive = null, onRefresh = null }) {
   const player = reelsPlayer();
   const track = h('div', { class: 'feed-track' });
   const hint = h('button', { class: 'feed-unmute', type: 'button', hidden: true }, icon('mute', 'icon-sm'), 'Activer le son');
@@ -252,7 +252,52 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
   const bar = h('div', { class: 'scrub-bar' }, fill, knob);
   const scrub = h('div', { class: 'scrub no-taps', role: 'slider', 'aria-label': 'Position dans la vidéo', tabindex: '0' }, bar);
   const timeLabel = h('div', { class: 'scrub-time', 'aria-hidden': 'true' });
-  const root = h('div', { class: 'feed' }, track, hint, soundBtn, upBtn, downBtn, timeLabel, scrub);
+  // Tirer vers le bas, tout en haut du fil : nouvelles vidéos (téléphone)
+  const ptr = h('div', { class: 'feed-ptr', 'aria-hidden': 'true' }, icon('refresh', 'icon-sm'), h('span', null, 'Tirer pour actualiser'));
+  const root = h('div', { class: 'feed' }, track, ptr, hint, soundBtn, upBtn, downBtn, timeLabel, scrub);
+  if (onRefresh) {
+    let pull = null;
+    const PULL = 72;
+    const resetPtr = () => {
+      ptr.style.transform = '';
+      ptr.style.opacity = '';
+      ptr.classList.remove('ready', 'pulling');
+    };
+    track.addEventListener('touchstart', (e) => {
+      pull = track.scrollTop <= 0 && e.touches.length === 1 ? { y: e.touches[0].clientY, x: e.touches[0].clientX, d: 0 } : null;
+    }, { passive: true });
+    track.addEventListener('touchmove', (e) => {
+      if (!pull) return;
+      const dy = e.touches[0].clientY - pull.y;
+      const dx = Math.abs(e.touches[0].clientX - pull.x);
+      // Le doigt remonte, part de côté, ou le fil défile : ce n'est pas un « tirer pour actualiser »
+      if (dy < -8 || dx > Math.max(24, dy) || track.scrollTop > 0) {
+        pull = null;
+        return resetPtr();
+      }
+      if (dy <= 0) return;
+      pull.d = Math.min(130, dy * 0.55);
+      ptr.classList.add('pulling');
+      ptr.classList.toggle('ready', pull.d >= PULL);
+      ptr.lastChild.textContent = pull.d >= PULL ? 'Relâcher pour actualiser' : 'Tirer pour actualiser';
+      ptr.style.transform = `translate(-50%, ${pull.d}px)`;
+      ptr.style.opacity = String(Math.min(1, pull.d / PULL));
+    }, { passive: true });
+    const endPull = () => {
+      const go = pull && pull.d >= PULL;
+      pull = null;
+      if (!go) return resetPtr();
+      ptr.lastChild.textContent = 'Actualisation…';
+      ptr.classList.add('loading');
+      navigator.vibrate?.(10);
+      setTimeout(() => onRefresh(), 250);
+    };
+    track.addEventListener('touchend', endPull);
+    track.addEventListener('touchcancel', () => {
+      pull = null;
+      resetPtr();
+    });
+  }
 
   let active = null;
   let userPaused = false;
@@ -372,8 +417,38 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     watch = null;
   }
 
+  // Mémoire du téléphone : les images des publications loin de l'écran sont libérées pendant
+  // une longue session, puis rechargées quand on y revient
+  const withImages = new Set();
+  const releaseImages = (box) => {
+    for (const img of box.querySelectorAll('img.slide-poster, .carousel-item img')) {
+      const src = img.getAttribute('src');
+      if (!src) continue;
+      img.dataset.src = src;
+      img.removeAttribute('src');
+    }
+    withImages.delete(box);
+  };
+  const restoreImages = (box) => {
+    for (const img of box.querySelectorAll('img[data-src]')) {
+      img.src = img.dataset.src;
+      delete img.dataset.src;
+    }
+    withImages.add(box);
+  };
+  function keepNear(box) {
+    const near = new Set([box]);
+    let el = box.previousElementSibling;
+    for (let i = 0; i < 3 && el; i++, el = el.previousElementSibling) if (el.__post) near.add(el);
+    el = box.nextElementSibling;
+    for (let i = 0; i < 6 && el; i++, el = el.nextElementSibling) if (el.__post) near.add(el);
+    for (const x of near) if (!withImages.has(x)) restoreImages(x);
+    for (const x of [...withImages]) if (!near.has(x)) releaseImages(x);
+  }
+
   function activate(box) {
     if (active === box || !box?.__post || destroyed) return;
+    keepNear(box);
     if (active?.__post?.video && box.__post.video && active.__post.video.url !== box.__post.video.url) relaxPreload(active.__post.video);
     active?.classList.remove('is-active', 'is-ready');
     endWatch();
@@ -808,6 +883,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       all.push(p);
       const s = slide(p);
       s.__options = () => openOptions(s);
+      withImages.add(s);
       track.append(s);
       io.observe(s);
     }
@@ -974,6 +1050,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       all.unshift(post);
       const s = slide(post);
       s.__options = () => openOptions(s);
+      withImages.add(s);
       track.prepend(s);
       io.observe(s);
       track.scrollTop = 0;

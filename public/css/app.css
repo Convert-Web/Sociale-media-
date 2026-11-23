@@ -1412,6 +1412,38 @@ input[type='range'] {
 .feed.scrubbing .scrub-bar {
   height: 4px;
 }
+/* Tirer pour actualiser */
+.feed-ptr {
+  position: absolute;
+  z-index: 12;
+  top: calc(8px + var(--safe-t));
+  left: 50%;
+  transform: translate(-50%, 0);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 99px;
+  background: rgba(20, 20, 26, 0.82);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.25s, opacity 0.25s;
+}
+.feed-ptr.pulling {
+  transition: none;
+}
+.feed-ptr .icon {
+  transition: transform 0.2s;
+}
+.feed-ptr.ready .icon {
+  transform: rotate(180deg);
+}
+.feed-ptr.loading .icon {
+  animation: spin 0.8s linear infinite;
+}
 /* Vidéo en attente du réseau : un trait lumineux parcourt la barre */
 .feed.is-buffering .scrub-bar {
   overflow: hidden;
