@@ -311,7 +311,7 @@ export function openComments(post, { onCount, focusId = null } = {}) {
     attachMentions(input, { placement: 'above' });
   }
 
-  sheet = openSheet({ title: label(count), body, footer, tall: true, onClose: () => io.disconnect() });
+  sheet = openSheet({ title: label(count), body, footer, tall: true, side: true, onClose: () => io.disconnect() });
   sheet.el.classList.add('comments-sheet');
   io.observe(sentinel);
   loadMore();

@@ -23,6 +23,53 @@ const TEXTS = {
   gift: 't’a envoyé un cadeau.',
 };
 
+// Regroupement : « Léa et 3 autres personnes ont aimé ta vidéo » (même vidéo, même commentaire,
+// ou nouveaux abonnés du même jour)
+const GROUP_TEXTS = {
+  like: 'ont aimé ta vidéo.',
+  favorite: 'ont ajouté ta vidéo à leurs favoris.',
+  comment_like: 'ont aimé ton commentaire',
+  repost: 'ont republié ta vidéo.',
+  follow: 'ont commencé à te suivre.',
+};
+const dayOf = (ms) => new Date(ms).toDateString();
+function groupKey(n) {
+  if (!GROUP_TEXTS[n.type]) return null;
+  if (n.type === 'follow') return `follow:${dayOf(n.createdAt)}`;
+  if (n.type === 'comment_like') return n.commentId ? `cl:${n.commentId}` : null;
+  return n.post ? `${n.type}:${n.post.id}` : null;
+}
+function groupNotifications(list) {
+  const out = [];
+  const index = new Map();
+  for (const n of list) {
+    const k = groupKey(n);
+    const g = k ? index.get(k) : null;
+    if (g && g[0].createdAt - n.createdAt < 7 * 86400e3) {
+      if (!g.some((x) => x.actor.id === n.actor.id)) g.push(n);
+      continue;
+    }
+    const fresh = [n];
+    out.push(fresh);
+    if (k) index.set(k, fresh);
+  }
+  return out;
+}
+function groupRow(items) {
+  if (items.length === 1) return notifRow(items[0]);
+  const [n, second] = items;
+  const others = items.length - 1;
+  const quote = n.type === 'comment_like' && n.body ? h('span', { class: 'n-quote' }, ` : ${n.body.slice(0, 90)}`) : null;
+  const right = n.post?.image ? h('img', { class: 'n-thumb', src: n.post.image, alt: '' }) : null;
+  return h(
+    'a',
+    { href: n.type === 'follow' ? '/activite?type=followers' : notifLink(n), class: `n-row${items.some((x) => !x.read) ? ' unread' : ''}` },
+    h('span', { class: 'n-stack' }, avatar(second.actor, 'sm'), avatar(n.actor, 'sm')),
+    h('span', { class: 'n-text' }, h('b', null, n.actor.displayName), n.actor.verified ? verifiedMark() : null, ` et ${others} autre${others > 1 ? 's' : ''} personne${others > 1 ? 's' : ''} ${GROUP_TEXTS[n.type]}`, quote, h('small', null, timeAgo(n.createdAt))),
+    right,
+  );
+}
+
 function notifLink(n) {
   if (['follow', 'follow_accept', 'follow_request'].includes(n.type)) return `/@${n.actor.username}`;
   if (n.type === 'live') return `/live/${n.actor.username}`;
@@ -169,7 +216,7 @@ export async function activityView(ctx) {
       if (before) q.set('before', before);
       const d = await api.get(`/api/notifications?${q}`);
       if (!before) list.replaceChildren();
-      for (const n of d.notifications) list.append(notifRow(n));
+      for (const g of groupNotifications(d.notifications)) list.append(groupRow(g));
       if (!before && !d.notifications.length) list.append(emptyState('bell', 'Rien de nouveau', 'Les J’aime, commentaires et nouveaux abonnés apparaîtront ici.'));
       more = d.hasMore;
       before = d.notifications[d.notifications.length - 1]?.id || null;

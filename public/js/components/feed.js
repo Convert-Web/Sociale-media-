@@ -15,7 +15,7 @@ import { fxLayer, filterCss, fitFor } from './fx.js';
 import { toggleLike, toggleSave, needLogin, follow, postPath } from './actions.js';
 import { openComments } from './comments.js';
 import { openShare, downloadPost } from './share.js';
-import { openSheet, closeSheet } from './sheet.js';
+import { openSheet, closeSheet, sidePanelOpen } from './sheet.js';
 import { reportDialog } from './report.js';
 import { translateLink, myLang } from './translate.js';
 
@@ -386,6 +386,8 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     const post = box.__post;
     onActive?.(post);
     box.__fit?.();
+    // Panneau des commentaires ouvert (grand écran) : il suit la vidéo à l'écran
+    if (sidePanelOpen()) openComments(post);
     // Photos et textes : pas de lecteur
     if (post.kind !== 'video') {
       stopProgressive();
@@ -845,7 +847,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
 
   // Clavier (ordinateur) : flèches haut / bas, espace, M pour le son, L pour aimer
   const onKey = (e) => {
-    if (document.querySelector('.sheet-backdrop, .modal-backdrop') || e.target.closest?.('input, textarea, [contenteditable]')) return;
+    if (document.querySelector('.sheet-backdrop:not(.side), .modal-backdrop') || e.target.closest?.('input, textarea, [contenteditable]')) return;
     if (!root.isConnected) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
