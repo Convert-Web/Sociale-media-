@@ -9,6 +9,17 @@ try {
 } catch (e) {
   window.__vibzSession = null;
 }
+// Hauteur réelle de l'écran (iOS 26 peut compter la barre d'état en trop dans les unités vh)
+(function () {
+  var set = function () {
+    document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px');
+  };
+  set();
+  window.addEventListener('resize', set);
+  window.addEventListener('orientationchange', function () {
+    setTimeout(set, 250);
+  });
+})();
 // Thème choisi (Système, Clair, Sombre) appliqué avant le premier affichage
 try {
   var theme = localStorage.getItem('vibz:theme');

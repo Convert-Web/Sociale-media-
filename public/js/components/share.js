@@ -193,6 +193,6 @@ export function openShare(post, { onShared, onOptions, onNotInterested } = {}) {
 
   openSheet({
     title: 'Partager',
-    body: h('div', { class: 'share' }, dmSection, h('section', { class: 'share-section' }, h('h4', null, 'Partager sur'), apps), acts.length ? h('section', { class: 'share-section' }, h('div', { class: 'share-acts' }, acts)) : null),
+    body: h('div', { class: 'share-sheet' }, dmSection, h('section', { class: 'share-section' }, h('h4', null, 'Partager sur'), apps), acts.length ? h('section', { class: 'share-section' }, h('div', { class: 'share-acts' }, acts)) : null),
   });
 }

@@ -48,10 +48,17 @@ before(async () => {
   F = `http://127.0.0.1:${feeds.address().port}`;
   srv = await startServer();
   base = srv.base;
+  // Base reprise d'AURUM : une source anglaise de son Journal (retirée de l'Actu) et une française (gardée)
+  const now = Date.now();
+  await srv.ctx.db.run("INSERT INTO journal_sources (kind, title, url, created_at) VALUES ('article', 'Robb Report', 'https://www.robbreport.com/feed/', ?)", now);
+  await srv.ctx.db.run("INSERT INTO journal_sources (kind, title, url, created_at) VALUES ('video', 'BFM Business', 'https://www.youtube.com/feeds/videos.xml?channel_id=UCUsBMOIUl_ad6JUOC16DpmQ', ?)", now);
   admin = await signup(base, 'admin_actu');
   lea = await signup(base, 'lea_actu');
-  // Les sources réelles proposées au premier lancement sont retirées : seuls les faux médias restent
+  // Sources d'AURUM : l'anglaise est retirée, la française gardée (et rangée dans sa rubrique)
   const s = await admin.get('/api/actu/sources');
+  assert.ok(!s.data.sources.some((x) => /robbreport/.test(x.url)));
+  assert.equal(s.data.sources.find((x) => x.title === 'BFM Business')?.topic, 'eco');
+  // Les sources réelles proposées au premier lancement sont retirées : seuls les faux médias restent
   for (const src of s.data.sources) assert.equal((await admin.del(`/api/actu/sources/${src.id}`)).status, 200);
 });
 after(async () => {
