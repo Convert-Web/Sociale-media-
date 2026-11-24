@@ -125,6 +125,13 @@ module.exports = function postRoutes(ctx) {
       if (key === 'duetOf') duetOf = src.id;
       else stitchOf = src.id;
     }
+    // Réaction à une actualité (« Réagir en vidéo » depuis l'Actu)
+    let journalId = null;
+    if (b.actuId) {
+      const item = await db.get('SELECT id FROM journal_items WHERE id = ?', intParam(b.actuId));
+      if (!item) fail(400, 'Cette actualité n’est plus disponible.');
+      journalId = item.id;
+    }
     // Couverture choisie (image envoyée avant)
     let cover = video?.poster || null;
     if (video && b.cover) {
@@ -136,18 +143,18 @@ module.exports = function postRoutes(ctx) {
     const postId = await db.transaction(async (t) => {
       const { lastInsertRowid: id } = await t.run(
         `INSERT INTO posts (user_id, body, image, video_id, created_at, flagged, privacy, allow_comments, allow_duet, allow_stitch, allow_download,
-                            category, fx, bg, duet_of, stitch_of, sound_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            category, fx, bg, duet_of, stitch_of, sound_id, journal_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         req.user.id, body, video ? cover : images[0] || null, video?.id || null, now, flagged, privacy,
         flag(b.allowComments) ? 1 : 0, flag(b.allowDuet) ? 1 : 0, flag(b.allowStitch) ? 1 : 0, flag(b.allowDownload) ? 1 : 0,
-        category, fx ? JSON.stringify(fx) : null, bg, duetOf, stitchOf, soundId,
+        category, fx ? JSON.stringify(fx) : null, bg, duetOf, stitchOf, soundId, journalId,
       );
       for (let i = 1; i < images.length; i++) await t.run('INSERT INTO post_media (post_id, url, position) VALUES (?, ?, ?)', id, images[i], i);
       for (const tag of extractTags(body)) await t.run('INSERT OR IGNORE INTO post_tags (post_id, tag) VALUES (?, ?)', id, tag);
       if (video && !soundId) {
         const { lastInsertRowid: sid } = await t.run(
           'INSERT INTO sounds (title, author_id, post_id, video_id, duration, cover, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          `son original - ${req.user.display_name}`, req.user.id, id, video.id, video.duration, cover, now,
+          `Son original - ${req.user.display_name}`, req.user.id, id, video.id, video.duration, cover, now,
         );
         await t.run('UPDATE posts SET sound_id = ? WHERE id = ?', sid, id);
       }

@@ -7,12 +7,12 @@ const crypto = require('node:crypto');
 const express = require('express');
 const { requireAuth } = require('../auth');
 const { fail, text, intParam } = require('../http');
-const { moderate } = require('../contentFilter');
+const { moderate, assertClean } = require('../contentFilter');
 const { authorOf, notify, isBlocked, VIEWER, BLOCKED_WITH, NOW_MS } = require('../social');
 const { sendGift, giftById } = require('../wallet');
 
 const BEAT_TIMEOUT = 45e3; // direct terminé si le créateur ne donne plus signe de vie
-const VIEWER_TIMEOUT = 25e3;
+const VIEWER_TIMEOUT = 12e3; // les spectateurs se signalent toutes les 1,3 s (4 s en arrière-plan)
 const MAX_SDP = 20000;
 
 module.exports = function liveRoutes(ctx) {
@@ -103,7 +103,8 @@ module.exports = function liveRoutes(ctx) {
   // Le direct en cours d'un compte (lien /live/nom)
   r.get('/live/user/:username', async (req, res) => {
     await sweep();
-    const u = await db.get('SELECT id FROM users WHERE username = ?', String(req.params.username));
+    const u = await db.get('SELECT id FROM users WHERE username = ? AND banned_at IS NULL', String(req.params.username));
+    if (!u) fail(404, 'Ce compte est introuvable.', 'USER_NOT_FOUND');
     const l = u && (await db.get('SELECT id FROM lives WHERE user_id = ? AND ended_at IS NULL AND last_beat > ? ORDER BY id DESC LIMIT 1', u.id, Date.now() - BEAT_TIMEOUT));
     if (!l) fail(404, 'Ce compte n’est pas en LIVE en ce moment.', 'NOT_LIVE');
     req.params.id = String(l.id);
@@ -119,7 +120,7 @@ module.exports = function liveRoutes(ctx) {
   // Passer en LIVE
   r.post('/live', requireAuth, async (req, res) => {
     const title = text(req.body?.title, { field: 'Titre', max: 80 });
-    if (title) moderate(title);
+    if (title) assertClean('Titre du LIVE', title);
     const now = Date.now();
     await db.run('UPDATE lives SET ended_at = ? WHERE user_id = ? AND ended_at IS NULL', now, req.user.id);
     const { lastInsertRowid: id } = await db.run('INSERT INTO lives (user_id, title, started_at, last_beat) VALUES (?, ?, ?, ?)', req.user.id, title, now, now);
@@ -190,8 +191,10 @@ module.exports = function liveRoutes(ctx) {
     );
     if (!known) {
       const viewers = await viewersOf(live.id);
-      await db.run('UPDATE lives SET viewers_total = viewers_total + 1, peak_viewers = MAX(peak_viewers, ?) WHERE id = ?', viewers, live.id);
-      if (req.user) await addEvent(live.id, req.user.id, 'join');
+      // Un compte qui revient (rechargement, recharge de pièces) ne compte qu'une fois
+      const seen = req.user && (await db.get("SELECT 1 FROM live_events WHERE live_id = ? AND user_id = ? AND type = 'join'", live.id, req.user.id));
+      await db.run(`UPDATE lives SET ${seen ? '' : 'viewers_total = viewers_total + 1, '}peak_viewers = MAX(peak_viewers, ?) WHERE id = ?`, viewers, live.id);
+      if (req.user && !seen) await addEvent(live.id, req.user.id, 'join');
     }
     const last = await db.get('SELECT COALESCE(MAX(id), 0) AS id FROM live_events WHERE live_id = ?', live.id);
     res.json({ peer, iceServers: config.ice, live: await serializeLive(live, req.user), recent: await events(live.id, Math.max(0, last.id - 30)) });

@@ -137,7 +137,7 @@ async function addDemo(ctx, { origin, onlyIfEmpty = false } = {}) {
       const author = USERS.find((u) => u.username === p.author);
       const { lastInsertRowid } = await db.run(
         'INSERT INTO sounds (title, author_id, post_id, video_id, duration, cover, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        p.title || `son original - ${author.name}`, owner, postId, videoId, m.duration, poster, created,
+        p.title || `Son original - ${author.name}`, owner, postId, videoId, m.duration, poster, created,
       );
       soundId = lastInsertRowid;
       soundIds.set(p.file, soundId);

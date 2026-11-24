@@ -40,12 +40,23 @@ export function h(tag, props, ...children) {
   return el;
 }
 
+// Typographie française : espace fine insécable avant « ; : ? ! » et après « « », pour qu'aucun
+// signe ne reste seul en début ou en fin de ligne (tous les textes ajoutés par h()/append())
+export const frenchSpaces = (s) => (/[ «]/.test(s) ? s.replace(/ ([?!;:»])/g, '\u202f$1').replace(/« /g, '«\u202f') : s);
+
 export function append(el, children) {
   for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false || c === true) continue;
-    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    el.append(c instanceof Node ? c : document.createTextNode(typeof c === 'string' ? frenchSpaces(c) : String(c)));
   }
   return el;
+}
+
+// Couleur de la barre du navigateur : celle du fond des pages (claire ou sombre), noire sur le fil
+export function syncThemeColor() {
+  if (document.documentElement.classList.contains('feed-mode')) return;
+  const t = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = t === 'dark' ? '#0e0e13' : '#ffffff';
 }
 
 export function clear(el) {
@@ -63,22 +74,26 @@ export function icon(name, cls = '') {
 // ---------------------------------------------------------------------------
 // Formatage
 // ---------------------------------------------------------------------------
-const rtf = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
 const dateFmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
 const dateFmtY = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 const fullFmt = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'full', timeStyle: 'short' });
 const timeFmt = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
 const monthFmt = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
 
+// Dates relatives, toujours au même format court : « à l’instant », « 5 min », « 3 h », « 2 j »,
+// « 3 sem. », puis la date (« 12 nov. », « 12 nov. 2024 »)
 export function timeAgo(ts) {
-  const diff = (Date.now() - ts) / 1000;
-  if (diff < 45) return "à l'instant";
-  if (diff < 3600) return `${Math.round(diff / 60)} min`;
-  if (diff < 86400) return `${Math.round(diff / 3600)} h`;
-  if (diff < 7 * 86400) return rtf.format(-Math.round(diff / 86400), 'day');
+  const diff = Math.max(0, (Date.now() - ts) / 1000);
+  if (diff < 45) return 'à l’instant';
+  if (diff < 3600) return `${Math.max(1, Math.floor(diff / 60))} min`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} h`;
+  if (diff < 7 * 86400) return `${Math.floor(diff / 86400)} j`;
+  if (diff < 28 * 86400) return `${Math.floor(diff / (7 * 86400))} sem.`;
   const d = new Date(ts);
   return d.getFullYear() === new Date().getFullYear() ? dateFmt.format(d) : dateFmtY.format(d);
 }
+// « de Paul », « d’Alice » (élision devant une voyelle ou un h)
+export const deName = (name) => (/^[aeiouyhàâäéèêëîïôöùûüœæ]/i.test(String(name || '').trim()) ? `d’${name}` : `de ${name}`);
 export const fullDate = (ts) => fullFmt.format(new Date(ts));
 export const clock = (ts) => timeFmt.format(new Date(ts));
 export const monthYear = (ts) => monthFmt.format(new Date(ts));
@@ -86,7 +101,7 @@ export function dayLabel(ts) {
   const d = new Date(ts);
   const today = new Date();
   const yesterday = new Date(Date.now() - 86400000);
-  if (d.toDateString() === today.toDateString()) return "Aujourd'hui";
+  if (d.toDateString() === today.toDateString()) return 'Aujourd’hui';
   if (d.toDateString() === yesterday.toDateString()) return 'Hier';
   return dateFmtY.format(d);
 }
@@ -96,13 +111,19 @@ export function money(cents, currency = 'eur') {
 }
 export const num = (n) => new Intl.NumberFormat('fr-FR').format(n);
 // Compteurs façon réseau social : 987 · 1,2 k · 34 k · 1,5 M
+const shortFmt1 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 });
+const shortFmt0 = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 });
+// « 999 », « 1,2 k », « 12,5 k », « 135 k », « 1 M » (jamais « 1 000 k »)
 export function short(n) {
   n = Number(n) || 0;
-  const fmt = (v) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: v < 10 ? 1 : 0 }).format(v);
   if (n < 1000) return String(n);
-  if (n < 1e6) return `${fmt(n / 1000)} k`;
-  if (n < 1e9) return `${fmt(n / 1e6)} M`;
-  return `${fmt(n / 1e9)} Md`;
+  const steps = [[1e3, 'k'], [1e6, 'M'], [1e9, 'Md']];
+  for (let i = 0; i < steps.length; i++) {
+    const v = n / steps[i][0];
+    const r = v < 100 ? Math.round(v * 10) / 10 : Math.round(v);
+    if (r < 1000 || i === steps.length - 1) return `${(r < 100 ? shortFmt1 : shortFmt0).format(r)}\u202f${steps[i][1]}`;
+  }
+  return String(n);
 }
 export const duration = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -123,7 +144,6 @@ const TOKEN_RE = /(https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]])|@([a-z0-9_][a-z0-9_.
 const WORD = /[\p{L}\p{N}_]/u;
 
 // Typographie française : espace insécable fine avant ? ! ; : » et après «
-const frenchSpaces = (s) => s.replace(/ ([?!;:»])/g, '\u202f$1').replace(/« /g, '«\u202f');
 
 export function richText(str) {
   const frag = document.createDocumentFragment();
@@ -278,14 +298,25 @@ export function emptyState(iconName, title, text, action) {
   return h('div', { class: 'empty' }, h('span', { class: 'empty-icon' }, icon(iconName)), h('h3', null, title), text ? h('p', null, text) : null, action || null);
 }
 
-let openModalEl = null;
-export function modal(title, body, { onClose } = {}) {
-  closeModal();
-  const close = () => closeModal();
-  const backdrop = h(
+// Fenêtres : une à la fois, sauf « stack » (une fenêtre ouverte par-dessus une autre, ex. le
+// recadrage d'une photo depuis « Modifier le profil » : la première reste ouverte dessous)
+const openModals = [];
+function dropModal(el) {
+  const i = openModals.indexOf(el);
+  if (i < 0) return;
+  openModals.splice(i, 1);
+  el.remove();
+  if (!openModals.length) document.body.style.overflow = '';
+  el._onClose?.();
+}
+export function modal(title, body, { onClose, stack = false } = {}) {
+  if (!stack) closeModals();
+  let backdrop = null;
+  const close = () => dropModal(backdrop);
+  backdrop = h(
     'div',
     {
-      class: 'modal-backdrop',
+      class: `modal-backdrop${stack && openModals.length ? ' stacked' : ''}`,
       onmousedown: (e) => {
         if (e.target === backdrop) close();
       },
@@ -302,18 +333,19 @@ export function modal(title, body, { onClose } = {}) {
   if (document.querySelector('.sheet-backdrop')) backdrop.classList.add('over-sheet');
   document.body.append(backdrop);
   document.body.style.overflow = 'hidden';
-  openModalEl = backdrop;
+  openModals.push(backdrop);
   const focusable = backdrop.querySelector('textarea, input, select');
   if (focusable && window.matchMedia('(min-width: 721px)').matches) setTimeout(() => focusable.focus(), 50);
   return { close, el: backdrop };
 }
+export const modalOpen = () => openModals.length > 0;
+// La fenêtre du dessus (Échap, bouton Fermer)
 export function closeModal() {
-  if (!openModalEl) return;
-  const el = openModalEl;
-  openModalEl = null;
-  el.remove();
-  document.body.style.overflow = '';
-  el._onClose?.();
+  if (openModals.length) dropModal(openModals[openModals.length - 1]);
+}
+// Toutes les fenêtres (changement de page)
+export function closeModals() {
+  while (openModals.length) dropModal(openModals[openModals.length - 1]);
 }
 
 // Visionneuse : ouverture zoomée, fermeture d'un geste vers le bas (comme Photos sur iPhone), Échap ou toucher.

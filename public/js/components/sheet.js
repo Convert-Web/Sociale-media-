@@ -8,6 +8,8 @@ let current = null;
 export function closeSheet() {
   current?.close();
 }
+// Une feuille est-elle ouverte (commentaires, partage…) ?
+export const sheetOpen = () => Boolean(current);
 // Panneau latéral ouvert (commentaires sur grand écran) ?
 export const sidePanelOpen = () => Boolean(current?.side);
 // Sur grand écran, side: true ouvre un panneau à droite, à côté de la vidéo (qui reste visible)
@@ -28,8 +30,10 @@ export function openSheet({ title, body, footer = null, onClose, tall = false, s
     footer ? h('div', { class: 'sheet-foot' }, footer) : null,
   );
   const backdrop = h('div', { class: `sheet-backdrop${side ? ' side' : ''}${swap ? ' no-anim' : ''}` }, sheet);
+  // Le clic qui suit le toucher ayant ouvert la feuille tombe sur le fond : ignoré un court instant
+  const openedAt = Date.now();
   backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop) close();
+    if (e.target === backdrop && Date.now() - openedAt > 400) close();
   });
 
   // Clavier de l'iPhone : la feuille reste posée juste au-dessus

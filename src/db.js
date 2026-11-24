@@ -109,6 +109,22 @@ CREATE TABLE IF NOT EXISTS comment_likes (
 );
 CREATE INDEX IF NOT EXISTS idx_comment_likes_user ON comment_likes(user_id);
 
+-- Anciens noms d'utilisateur : les anciens liens mènent encore au compte
+CREATE TABLE IF NOT EXISTS username_history (
+  old_username  TEXT NOT NULL COLLATE NOCASE,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  changed_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_username_history ON username_history(old_username, changed_at);
+
+-- Présence sans connexion permanente (hébergement serverless) : vu pour la dernière fois, « écrit… »
+CREATE TABLE IF NOT EXISTS presence (
+  user_id    INTEGER PRIMARY KEY,
+  seen_at    INTEGER NOT NULL,
+  typing_to  INTEGER,
+  typing_at  INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS follows (
   follower_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   followee_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -355,6 +371,41 @@ CREATE TABLE IF NOT EXISTS settings (
   value  TEXT NOT NULL
 );
 
+-- L'Actu : sources suivies (flux RSS, podcasts, chaînes YouTube) et éléments lus dans ces flux
+-- (titre, court résumé du média, image, lien : jamais l'article lui-même). Mêmes tables que le
+-- Journal d'AURUM : une base reprise garde ses sources.
+CREATE TABLE IF NOT EXISTS journal_sources (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind             TEXT NOT NULL,
+  title            TEXT NOT NULL,
+  url              TEXT NOT NULL UNIQUE,
+  site_url         TEXT,
+  image            TEXT,
+  created_at       INTEGER NOT NULL,
+  last_fetched_at  INTEGER,
+  last_error       TEXT
+);
+CREATE TABLE IF NOT EXISTS journal_items (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id     INTEGER,
+  kind          TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  summary       TEXT NOT NULL DEFAULT '',
+  url           TEXT NOT NULL UNIQUE,
+  image         TEXT,
+  audio_url     TEXT,
+  embed_url     TEXT,
+  duration      INTEGER,
+  site_name     TEXT NOT NULL DEFAULT '',
+  note          TEXT NOT NULL DEFAULT '',
+  author_id     INTEGER,
+  featured_at   INTEGER,
+  published_at  INTEGER NOT NULL,
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_journal_items_kind ON journal_items(kind, published_at);
+CREATE INDEX IF NOT EXISTS idx_journal_items_source ON journal_items(source_id, published_at);
+
 -- Erreurs survenues dans les navigateurs (anonymes) : suivi par l'administration
 CREATE TABLE IF NOT EXISTS client_errors (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -457,6 +508,11 @@ const COLUMNS = [
   ['posts', 'pinned_comment_id', 'INTEGER'],
   ['posts', 'guest_views', 'INTEGER NOT NULL DEFAULT 0'],
   ['posts', 'share_count', 'INTEGER NOT NULL DEFAULT 0'],
+  // Vidéo qui réagit à une actualité (« Réagir en vidéo »)
+  ['posts', 'journal_id', 'INTEGER'],
+  // Rubrique d'une source et de ses éléments (À la une, Monde, Tech…)
+  ['journal_sources', 'topic', 'TEXT'],
+  ['journal_items', 'topic', 'TEXT'],
   // Vues détaillées
   ['video_views', 'plays', 'INTEGER NOT NULL DEFAULT 1'],
   ['video_views', 'watch_ms', 'INTEGER NOT NULL DEFAULT 0'],
@@ -501,6 +557,11 @@ async function migrate(client) {
 // - leurs comptes deviennent privés, une seule fois par compte (ensuite, chacun choisit) ;
 // - les publications des groupes privés et des comptes automatiques restent visibles de leur seul auteur ;
 // - hashtags et sons originaux des vidéos venues d'AURUM sont recensés.
+// Libellés des sons originaux : « Son original - … » (majuscule, comme les autres titres)
+async function tidyLabels(client) {
+  await client.execute("UPDATE sounds SET title = 'S' || substr(title, 2) WHERE substr(title, 1, 12) = 'son original'");
+}
+
 async function upgradeFromAurum(client, have) {
   if (!have.has('users.member_number')) return; // base créée par Vibz : rien à reprendre
   // Un compte venu d'AURUM porte un numéro de membre, une entrée réglée ou une demande d'admission
@@ -534,7 +595,7 @@ async function upgradeFromAurum(client, have) {
   for (const p of vids.rows) {
     const r = await client.execute({
       sql: 'INSERT INTO sounds (title, author_id, post_id, video_id, duration, cover, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      args: [`son original - ${p.display_name}`, p.user_id, p.id, p.video_id, p.duration, p.image, p.created_at],
+      args: [`Son original - ${p.display_name}`, p.user_id, p.id, p.video_id, p.duration, p.image, p.created_at],
     });
     await client.execute({ sql: 'UPDATE posts SET sound_id = ? WHERE id = ? AND sound_id IS NULL', args: [Number(r.lastInsertRowid), p.id] });
   }
@@ -559,8 +620,10 @@ async function openDatabase({ url, authToken }) {
     CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_id) WHERE parent_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_messages_post ON messages(post_id) WHERE post_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_notifications_comment ON notifications(comment_id) WHERE comment_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_posts_journal ON posts(journal_id) WHERE journal_id IS NOT NULL;
   `);
   await upgradeFromAurum(client, have);
+  await tidyLabels(client);
 
   const db = wrap(client);
   // Transaction : fn reçoit un objet { get, all, run } lié à la transaction.

@@ -24,10 +24,10 @@ export function cropImage(file, { aspect = 1, round = false, outWidth = 1000, ti
         { class: 'modal-body crop' },
         stage,
         h('div', { class: 'crop-controls' }, icon('image', 'icon-sm'), zoom, icon('image')),
-        h('p', { class: 'muted small', style: { textAlign: 'center' } }, 'Faites glisser pour placer la photo, pincez ou utilisez le curseur pour zoomer.'),
+        h('p', { class: 'muted small', style: { textAlign: 'center' } }, 'Fais glisser pour placer la photo, pince ou utilise le curseur pour zoomer.'),
         h('div', { class: 'row-end' }, h('button', { class: 'btn btn-ghost', type: 'button', onclick: () => m.close() }, 'Annuler'), save),
       ),
-      { onClose: () => finish(null) },
+      { onClose: () => finish(null), stack: true },
     );
 
     // État : échelle de base (l'image couvre le cadre), zoom, position du coin haut-gauche.

@@ -54,7 +54,7 @@ module.exports = function adminRoutes(ctx) {
 
   // Comptes : recherche, badge vérifié, suspension, administration
   r.get('/admin/users', async (req, res) => {
-    const q = String(req.query.q || '').trim();
+    const q = String(req.query.q || '').trim().replace(/^@+/, '');
     const before = intParam(req.query.cursor);
     const limit = 40;
     const rows = await db.all(
@@ -86,7 +86,6 @@ module.exports = function adminRoutes(ctx) {
     if (u.id === req.user.id && ['ban', 'demote'].includes(req.params.action)) fail(400, 'Tu ne peux pas faire cela sur ton propre compte.');
     await db.run(a[0], ...a.slice(1), u.id);
     if (req.params.action === 'ban') {
-      await db.run('DELETE FROM sessions WHERE user_id = ?', u.id);
       await db.run('UPDATE lives SET ended_at = ? WHERE user_id = ? AND ended_at IS NULL', now, u.id);
     }
     res.json({ ok: true });
@@ -104,13 +103,40 @@ module.exports = function adminRoutes(ctx) {
   r.get('/admin/posts', async (req, res) => {
     const before = intParam(req.query.cursor);
     const limit = 30;
-    const rows = await db.all(`${POST_SELECT} WHERE (? IS NULL OR p.id < ?) ORDER BY p.id DESC LIMIT ?`, req.user.id, before, before, limit);
+    const q = String(req.query.q || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const filter = ['private', 'flagged'].includes(req.query.filtre) ? req.query.filtre : null;
+    const where = [];
+    const args = [];
+    if (q.startsWith('@')) {
+      where.push('u.username LIKE ?');
+      args.push(`${q.slice(1).replace(/[%_\\]/g, '')}%`);
+    } else if (q.startsWith('#')) {
+      where.push('EXISTS (SELECT 1 FROM post_tags pt WHERE pt.post_id = p.id AND pt.tag LIKE ?)');
+      args.push(`${q.slice(1).toLocaleLowerCase('fr').replace(/[%_\\]/g, '')}%`);
+    } else if (q) {
+      where.push('(p.body LIKE ? OR u.username LIKE ? OR u.display_name LIKE ?)');
+      const pat = `%${q.replace(/[%_\\]/g, '')}%`;
+      args.push(pat, pat, pat);
+    }
+    if (filter === 'private') where.push("p.privacy != 'public'");
+    if (filter === 'flagged') where.push('p.flagged IS NOT NULL');
+    const rows = await db.all(
+      `${POST_SELECT} WHERE (? IS NULL OR p.id < ?) ${where.map((w) => `AND ${w}`).join(' ')} ORDER BY p.id DESC LIMIT ?`,
+      req.user.id, before, before, ...args, limit,
+    );
     res.json({ posts: rows.map((row) => serializePost(ctx, row, req.user)), cursor: rows.length === limit ? rows[rows.length - 1].id : null });
   });
 
   r.get('/admin/errors', async (_req, res) => {
-    const rows = await db.all('SELECT * FROM client_errors ORDER BY id DESC LIMIT 100');
-    res.json({ errors: rows });
+    const rows = await db.all('SELECT * FROM client_errors ORDER BY id DESC LIMIT 300');
+    const groups = new Map();
+    for (const e of rows) {
+      const key = String(e.message || '').slice(0, 200);
+      const g = groups.get(key);
+      if (g) g.count++;
+      else groups.set(key, { ...e, count: 1, refused: /^Import vidéo :/.test(e.message || '') });
+    }
+    res.json({ errors: [...groups.values()].slice(0, 100) });
   });
 
   r.get('/admin/analytics', async (_req, res) => {

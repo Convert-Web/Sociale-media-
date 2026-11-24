@@ -38,7 +38,7 @@ test('reprise d’une base AURUM, à chaque démarrage', async () => {
   assert.equal((await db.get("SELECT privacy FROM posts WHERE body = 'Annonce automatique'")).privacy, 'private');
   assert.equal((await db.get("SELECT tag FROM post_tags WHERE post_id = 1")).tag, 'soirée');
   const s = await db.get('SELECT s.title FROM posts p JOIN sounds s ON s.id = p.sound_id WHERE p.id = 1');
-  assert.match(s.title, /son original - Membre/);
+  assert.match(s.title, /^Son original - Membre/);
   // Le membre repasse en public dans Vibz ; un nouveau compte Vibz ; AURUM accueille encore un membre
   await db.run("UPDATE users SET private_account = 0 WHERE username = 'membre'");
   await db.run("INSERT INTO users (username, email, password_hash, display_name, created_at) VALUES ('nouveau', 'n@x.fr', 'h', 'Nouveau', 2)");

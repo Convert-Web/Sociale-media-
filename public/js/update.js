@@ -90,7 +90,7 @@ export async function applyUpdate() {
     return;
   }
   if (navigator.onLine === false) {
-    toast('Pas de connexion : réessayez dès le retour du réseau.', 'error');
+    toast('Pas de connexion : réessaie dès le retour du réseau.', 'error');
     return;
   }
   busy = true;

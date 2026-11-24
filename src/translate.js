@@ -89,7 +89,7 @@ async function myMemory(text, from, to, email) {
     if (email) params.set('de', email);
     const res = await fetch(`https://api.mymemory.translated.net/get?${params}`, { signal: AbortSignal.timeout(10000) });
     const data = await res.json().catch(() => ({}));
-    if (data.quotaFinished || data.responseStatus === 429) throw Object.assign(new Error('Le quota de traduction gratuit du jour est atteint. Réessayez demain.'), { status: 429 });
+    if (data.quotaFinished || data.responseStatus === 429) throw Object.assign(new Error('Le quota de traduction gratuit du jour est atteint. Réessaie demain.'), { status: 429 });
     if (Number(data.responseStatus) !== 200 || !data.responseData?.translatedText) throw new Error('Traduction indisponible pour le moment.');
     pieces.push(lead + unescapeHtml(data.responseData.translatedText) + trail);
   }

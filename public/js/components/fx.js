@@ -30,12 +30,29 @@ export function fxLayer(fx, { ar = 9 / 16, fit = 'contain', editable = false } =
   return layer;
 }
 
+// Clarté d'une couleur (#rrggbb) : texte noir sur une couleur claire, blanc sur une foncée
+function luminance(hex) {
+  const n = parseInt(String(hex).slice(1, 7), 16);
+  if (!Number.isFinite(n)) return 1;
+  const f = (c) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * f((n >> 16) & 255) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255);
+}
+function textColors(o) {
+  const color = o.color || '#ffffff';
+  if (o.style !== 'box') return { '--c': color, '--bgc': 'transparent' };
+  if (color === '#ffffff') return { '--c': '#ffffff', '--bgc': '#000000cc' };
+  return { '--c': luminance(color) > 0.35 ? '#111111' : '#ffffff', '--bgc': color };
+}
+
 export function overlayEl(o, { editable = false } = {}) {
   const style = { left: `${o.x * 100}%`, top: `${o.y * 100}%`, '--rot': `${o.rot || 0}deg`, '--size': String(o.size) };
   if (o.kind === 'sticker') return h('span', { class: `fx-item fx-sticker${editable ? ' editable' : ''}`, style }, o.emoji);
   return h(
     'span',
-    { class: `fx-item fx-text fx-${o.style || 'plain'}${editable ? ' editable' : ''}`, style: { ...style, '--c': o.color || '#ffffff', '--bgc': o.style === 'box' ? (o.color === '#ffffff' ? '#000000cc' : '#ffffffee') : 'transparent' } },
+    { class: `fx-item fx-text fx-${o.style || 'plain'}${editable ? ' editable' : ''}`, style: { ...style, ...textColors(o) } },
     o.text,
   );
 }

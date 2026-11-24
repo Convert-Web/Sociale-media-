@@ -1,9 +1,10 @@
 # Vibz — des vidéos courtes, créées par toi
 
-Application complète de vidéos courtes en plein écran, dans l'esprit des grands réseaux du genre :
-fil « Pour toi » personnalisé par un algorithme, « Abonnements » et « Amis », commentaires, sons
-réutilisables, Duo, Stitch, LIVE avec cadeaux, messagerie, profils, recherche, studio créateur et
-administration. Entièrement en français, pensée d'abord pour le téléphone, installable comme une
+Application complète de vidéos courtes en plein écran, avec ce qui la distingue : **l'Actu**,
+l'actualité du jour des médias (articles, podcasts, vidéos) à laquelle chacun peut **réagir en
+vidéo**. Fil « Pour toi » personnalisé par un algorithme, « Abonnements » et « Amis », commentaires,
+sons réutilisables, Duo, Stitch, LIVE avec cadeaux, messagerie, profils, recherche, studio créateur
+et administration. Entièrement en français, pensée d'abord pour le téléphone, installable comme une
 application.
 
 Vibz a sa propre identité (nom, logo, couleurs) : aucune marque, aucun logo ni aucun contenu d'un
@@ -17,8 +18,9 @@ autre service n'est repris. Les vidéos et musiques de démonstration sont gén�
 | | |
 |---|---|
 | **Fil vertical** | Une vidéo par écran, glisser pour la suivante, lecture immédiate et préchargement des suivantes (téléchargement par morceaux, lecture progressive). Toucher : pause ; double toucher : J'aime avec cœur animé ; appui long : vitesse (×0,5 à ×2), « Pas intéressé », masquer un créateur, enregistrer, copier le lien, signaler. Barre de lecture déplaçable, son activable, flèches et raccourcis clavier sur ordinateur, indicateur d'attente du réseau. En revenant au fil (après un profil, une vidéo, les messages), on retrouve la même vidéo au même instant ; toucher à nouveau Accueil charge de nouvelles vidéos. Photos en carrousel et publications texte sur fond coloré dans le même fil. |
+| **L'Actu** | Onglet dédié : la une (choisie par l'administration ou la plus récente), « Le brief » des titres du moment, « Ça fait réagir » (l'actualité la plus commentée en vidéo), podcasts « À écouter » avec un lecteur qui continue de jouer pendant la navigation (commandes de l'écran verrouillé, reprise là où on s'était arrêté), vidéos des médias « À regarder » (lecteurs intégrés sans cookie), rubriques Monde, Économie, Tech, Sciences, Culture, Sport, Planète. Fiche de chaque actualité : résumé du média, « Lire sur … », partage, et **« Réagir en vidéo »** : la vidéo publiée porte « Réagit à : … » dans les fils et apparaît sur la fiche. Lu dans les flux publics des médias (RSS, chaînes YouTube, podcasts) relus toutes les 20 minutes ; seuls le titre, le court résumé, l'image et le lien sont gardés, jamais l'article. Sources gérées dans l'administration (ajout par adresse, recherche de podcasts, rubrique, retrait). |
 | **« Pour toi »** | Algorithme maison : qualité (J'aime, commentaires, partages, favoris, republications rapportés aux spectateurs), temps regardé, fraîcheur, coup de pouce aux nouvelles vidéos, variété (créateurs et sons), part de découverte, et centres d'intérêt appris de chaque compte (créateurs, hashtags, sons, catégories) qui s'estompent avec le temps. Choix des thèmes à l'inscription, remise à zéro et fil non personnalisé dans les réglages. Ouvert sans compte. |
-| **Abonnements, Amis** | Vidéos et republications des comptes suivis ; onglet Amis (abonnements réciproques) avec comptes suggérés. |
+| **Abonnements, Amis** | Onglets du haut du fil : « Amis » (abonnements réciproques, comptes suggérés), « Abonnements » (vidéos et republications des comptes suivis), « Pour toi ». |
 | **Interactions** | J'aime, commentaires (réponses, J'aime, « Aimé par le créateur », épinglage, suppression, signalement, @mentions et #hashtags suggérés ; sur ordinateur, dans un panneau à côté de la vidéo), favoris privés, republications, partage (message à plusieurs amis, copier le lien, WhatsApp, Facebook, X, e-mail, SMS, partage du téléphone), enregistrement de la vidéo. |
 | **Créer** | Caméra : 15 s, 60 s ou 3 min, en plusieurs prises (toucher ou maintenir), minuteur 3 s / 10 s, filtres, flash, caméra avant/arrière, son ajouté joué pendant le tournage. Import depuis l'appareil (vidéos .MOV d'iPhone comprises, H.264 ou HEVC, filmées debout ou à l'horizontale : durée et dimensions lues dans le fichier lui-même). Montage : textes (couleurs, fond, contour, taille) et autocollants déplaçables au doigt, filtres, son ajouté avec volumes, couverture choisie image par image. Description avec hashtags et mentions, catégorie, « Qui peut voir » (tout le monde, amis, moi), commentaires / Duo / Stitch / téléchargement autorisés ou non, brouillons gardés sur l'appareil. Mode Photo (jusqu'à 20 photos) et mode Texte. Envoi en arrière-plan, en qualité d'origine, reprenable après une coupure, avec sa vignette de progression en tête du profil ; la vidéo y prend sa place dès qu'elle est en ligne. Modifier, épingler ou supprimer une publication depuis le partage, l'appui long ou le clic droit. |
 | **Sons** | Chaque vidéo crée son « son original », réutilisable par tous (« Utiliser ce son ») ; page du son (écoute, favoris, vidéos qui l'utilisent), bibliothèque de sons populaires et favoris. |
@@ -109,7 +111,10 @@ dimensionnés pour une communauté qui démarre :
 npm test
 ```
 
-24 tests couvrent l'inscription (âge, mot de passe, conditions), la connexion, la
+36 tests couvrent l'Actu (lecture des flux, rubriques, « À la une », sources, réactions en vidéo,
+protection contre les adresses internes), les corrections de l'audit (recherche sans accents,
+confidentialité des suggestions, compteurs, anciens noms d'utilisateur, présence sans connexion
+permanente),  l'inscription (âge, mot de passe, conditions), la connexion, la
 publication, la confidentialité (moi, amis, compte privé), le fil « Pour toi » (y compris « Pas
 intéressé »), Abonnements et Amis, J'aime, favoris, republications, vues et temps regardé, les
 commentaires (réponses, épinglage), les demandes d'abonnement, les blocages, les messages, la
@@ -129,8 +134,9 @@ src/
   social.js             Sérialisation, visibilité, notifications
   videos.js             Vidéos en morceaux de 1 Mo, diffusion par plages d'octets
   wallet.js, demo.js    Pièces et cadeaux ; contenu de démonstration
+  journal.js            L'Actu : lecture sûre des flux (RSS, Atom, YouTube, podcasts), lecteurs intégrés
   routes/               API : auth, posts, comments, feed, discover, users, me, messages,
-                        notifications, live, wallet, studio, stories, admin, moderation…
+                        notifications, live, wallet, studio, stories, admin, moderation, actu…
 public/
   index.html, css/      Interface (application monopage, sans étape de compilation)
   js/components/        Fil vertical, lecteur, commentaires, partage, montage, envoi…

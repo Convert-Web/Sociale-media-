@@ -60,10 +60,11 @@ function resetEmail(config, user, link) {
       p(`Bonjour ${esc(firstName(user.display_name))},`) +
       p('Pour choisir un nouveau mot de passe, utilise le bouton ci-dessous. Le lien est valable une heure.') +
       button('Choisir un nouveau mot de passe', link) +
+      muted(`Si le bouton ne fonctionne pas, copie ce lien dans ton navigateur : <a href="${esc(link)}" style="color:#6c4dff;word-break:break-all">${esc(link)}</a>`) +
       muted('Si tu n’es pas à l’origine de cette demande, ignore simplement ce courriel : ton mot de passe reste inchangé.'),
   });
   const text = `Bonjour ${firstName(user.display_name)},\n\nPour choisir un nouveau mot de passe, ouvre ce lien (valable 1 heure) :\n${link}\n\nSi tu n'es pas à l'origine de cette demande, ignore simplement ce courriel.`;
-  return { subject: `${config.appName} — Ton nouveau mot de passe`, html, text };
+  return { subject: `${config.appName} — Choisis un nouveau mot de passe`, html, text };
 }
 
 function testEmail(config, user) {

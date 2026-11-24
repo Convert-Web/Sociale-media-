@@ -33,8 +33,13 @@ module.exports = function notificationRoutes(ctx) {
     res.json({ notifications: rows.map((row) => serializeNotification(ctx, row)), hasMore: rows.length === limit });
   });
 
+  // Filtre ouvert (ex. « Abonnés ») : seules les notifications de ce filtre sont marquées lues
   r.post('/notifications/read', async (req, res) => {
-    await db.run('UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL', Date.now(), req.user.id);
+    const types = FILTERS[req.query.type || req.body?.type] || null;
+    await db.run(
+      `UPDATE notifications SET read_at = ? WHERE user_id = ? AND read_at IS NULL ${types ? `AND type IN (${types.map(() => '?').join(',')})` : ''}`,
+      Date.now(), req.user.id, ...(types || []),
+    );
     await pushCounters(ctx, req.user.id);
     res.json({ ok: true });
   });

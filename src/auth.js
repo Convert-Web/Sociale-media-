@@ -42,6 +42,7 @@ function loadUser(ctx) {
       );
       // Compte suspendu par l'administration : plus de session
       if (row && !row.banned_at && !row.is_bot) req.user = row;
+      else if (row?.banned_at) req.banned = true;
       if (now - lastCleanup > 3600 * 1000) {
         lastCleanup = now;
         ctx.db.run('DELETE FROM sessions WHERE expires_at <= ?', now).catch(() => {});
@@ -51,8 +52,9 @@ function loadUser(ctx) {
   };
 }
 
+const BANNED = 'Ce compte a été suspendu pour non-respect des règles de la communauté.';
 function requireAuth(req, _res, next) {
-  if (!req.user) fail(401, 'Connecte-toi pour continuer.', 'AUTH_REQUIRED');
+  if (!req.user) fail(401, req.banned ? BANNED : 'Connecte-toi pour continuer.', req.banned ? 'BANNED' : 'AUTH_REQUIRED');
   next();
 }
 
@@ -67,6 +69,9 @@ function requireAdmin(req, _res, next) {
 function csrfGuard(req, _res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   if (req.path === '/billing/webhook') return next();
+  // Départ d'un spectateur envoyé à la fermeture de l'onglet (sendBeacon, sans en-tête) : il ne fait
+  // que retirer la connexion dont l'identifiant secret est donné
+  if (/^\/live\/\d+\/leave$/.test(req.path)) return next();
   if (req.get('x-vibz') !== '1') fail(403, 'Requête refusée.');
   next();
 }

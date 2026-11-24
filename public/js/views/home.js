@@ -3,10 +3,10 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, emptyState, toast } from '../dom.js';
+import { h, icon, avatar, emptyState, toast, syncThemeColor } from '../dom.js';
 import { verticalFeed } from '../components/feed.js';
 import { takeReels, pendingReels } from '../components/video.js';
-import { needLogin } from '../components/actions.js';
+import { needLogin, follow } from '../components/actions.js';
 import { openComments } from '../components/comments.js';
 
 function darkTop(ctx) {
@@ -17,6 +17,7 @@ function darkTop(ctx) {
   ctx.onCleanup(() => {
     metas.forEach((m, i) => (m.content = saved[i]));
     document.documentElement.classList.remove('feed-mode');
+    syncThemeColor();
   });
 }
 
@@ -84,18 +85,22 @@ async function liveBadge(btn) {
   }
 }
 
+// Haut des fils : LIVE, onglets « Amis · Abonnements · Pour toi », et la loupe (Explorer et recherche)
+function feedTop(active) {
+  const tab = (href, label, key) => h('a', { href, class: `top-tab${active === key ? ' on' : ''}`, 'aria-current': active === key ? 'page' : null }, label);
+  return h(
+    'header',
+    { class: 'feed-top' },
+    h('a', { href: '/live', class: 'top-icon live-link', 'aria-label': 'LIVE' }, icon('live')),
+    h('nav', { class: 'top-tabs', 'aria-label': 'Fils' }, tab('/amis', 'Amis', 'friends'), tab('/abonnements', 'Abonnements', 'following'), tab('/', 'Pour toi', 'foryou')),
+    h('a', { href: '/explorer', class: 'top-icon', 'aria-label': 'Explorer et rechercher' }, icon('search')),
+  );
+}
+
 export async function homeView(ctx) {
   darkTop(ctx);
   const followingTab = ctx.route.path === '/abonnements';
-  const tab = (href, label, on) => h('a', { href, class: `top-tab${on ? ' on' : ''}`, 'aria-current': on ? 'page' : null }, label);
-  const liveBtn = h('a', { href: '/live', class: 'top-icon live-link', 'aria-label': 'LIVE' }, icon('live'));
-  const top = h(
-    'header',
-    { class: 'feed-top' },
-    liveBtn,
-    h('nav', { class: 'top-tabs', 'aria-label': 'Fils' }, tab('/explorer', 'Explorer', false), tab('/abonnements', 'Abonnements', followingTab), tab('/', 'Pour toi', !followingTab)),
-    h('a', { href: '/recherche', class: 'top-icon', 'aria-label': 'Rechercher' }, icon('search')),
-  );
+  const top = feedTop(followingTab ? 'following' : 'foryou');
 
   ctx.title = followingTab ? 'Abonnements — Vibz' : 'Vibz — Pour toi';
   ctx.description = 'Regarde des vidéos courtes qui te ressemblent, crée les tiennes et partage-les avec tes amis.';
@@ -185,7 +190,8 @@ export async function videoView(ctx) {
   ctx.description = post.body?.slice(0, 160) || `Vidéo de ${post.author.displayName} sur Vibz.`;
   // Lien vers un commentaire précis (notification) : la feuille des commentaires s'ouvre dessus
   const focus = Number(ctx.query.get('commentaire'));
-  if (focus) setTimeout(() => openComments(post, { focusId: focus }), 400);
+  const focusParent = Number(ctx.query.get('fil')) || null;
+  if (focus) setTimeout(() => openComments(post, { focusId: focus, focusParent }), 400);
   return h('div', { class: 'feed-page' }, backBar(), feed.el);
 }
 
@@ -195,13 +201,14 @@ function backBar() {
 
 // Onglet « Amis » : vidéos des abonnements réciproques, et comptes à découvrir
 export async function friendsView(ctx) {
-  if (!store.user) {
-    return h('div', { class: 'page' }, h('header', { class: 'page-head' }, h('h1', null, 'Amis')), emptyState('friends', 'Retrouve tes amis', 'Connecte-toi pour voir les vidéos de tes amis et découvrir des comptes à suivre.', h('button', { class: 'btn btn-primary', onclick: () => needLogin('Connecte-toi pour voir tes amis.') }, 'Se connecter')));
-  }
   darkTop(ctx);
-  const top = h('header', { class: 'feed-top' }, h('a', { href: '/activite?type=followers', class: 'top-icon', 'aria-label': 'Nouveaux abonnés' }, icon('userPlus')), h('nav', { class: 'top-tabs' }, h('span', { class: 'top-tab on' }, 'Amis')), h('a', { href: '/recherche', class: 'top-icon', 'aria-label': 'Rechercher' }, icon('search')));
+  const top = feedTop('friends');
   ctx.title = 'Amis — Vibz';
-  return keptScreen(ctx, 'friends', top, (refresh) => {
+  if (!store.user) {
+    setTimeout(() => needLogin('Connecte-toi pour voir les vidéos de tes amis.'), 50);
+    return withLive(h('div', { class: 'feed-page' }, top, h('div', { class: 'feed-gate' }, emptyState('friends', 'Les vidéos de tes amis', 'Connecte-toi pour voir ici les vidéos des comptes avec qui vous vous suivez mutuellement.', h('button', { class: 'btn btn-primary', onclick: () => needLogin('Connecte-toi pour continuer.') }, 'Se connecter')))));
+  }
+  return withLive(keptScreen(ctx, 'friends', top, (refresh) => {
     let cursor = null;
     return verticalFeed({
       onRefresh: refresh,
@@ -212,28 +219,33 @@ export async function friendsView(ctx) {
       },
       emptyView: () => suggestionsPanel(),
     });
-  });
+  }));
 }
 
-// Comptes suggérés (quand on n'a pas encore d'amis)
-export function suggestionsPanel() {
+// Comptes à suivre ; « Suivre » se défait d'un second toucher. Au premier lancement (welcome),
+// les cartes ne mènent pas au profil : on reste dans le parcours.
+export function suggestionsPanel({ welcome = false } = {}) {
   const list = h('div', { class: 'suggest-cards' });
   api.get('/api/suggestions?limit=12').then(({ users }) => {
     list.replaceChildren(
       ...users.map((u) => {
         const btn = h('button', { type: 'button', class: 'btn btn-primary btn-sm' }, u.followsYou ? 'Suivre en retour' : 'Suivre');
+        let on = false;
+        const paint = (r) => {
+          on = Boolean(r && (r.isFollowing || r.requested));
+          btn.textContent = on ? (r.requested ? 'Demandé' : r.friend ? 'Amis' : 'Abonné') : u.followsYou ? 'Suivre en retour' : 'Suivre';
+          btn.classList.toggle('btn-primary', !on);
+          btn.classList.toggle('btn-ghost', on);
+          btn.setAttribute('aria-pressed', String(on));
+        };
         btn.addEventListener('click', async () => {
           btn.disabled = true;
-          try {
-            const r = await api.post(`/api/users/${enc(u.username)}/follow`);
-            btn.textContent = r.user.requested ? 'Demandé' : r.user.friend ? 'Amis' : 'Abonné';
-            btn.classList.replace('btn-primary', 'btn-ghost');
-          } catch (err) {
-            btn.disabled = false;
-            toast(err.message, 'error');
-          }
+          const r = await follow(u.username, !on);
+          btn.disabled = false;
+          if (r) paint(r);
         });
-        return h('div', { class: 'suggest-card' }, h('a', { href: `/@${enc(u.username)}` }, avatar(u, 'xl'), h('b', null, u.displayName), h('small', null, u.reason)), btn);
+        const who = [avatar(u, 'xl'), h('b', null, u.displayName), h('small', null, u.reason)];
+        return h('div', { class: 'suggest-card' }, welcome ? h('div', { class: 'suggest-who' }, who) : h('a', { href: `/@${enc(u.username)}` }, who), btn);
       }),
     );
   }).catch(() => {});

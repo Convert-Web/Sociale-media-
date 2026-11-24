@@ -14,7 +14,10 @@ const tooBig = (size) =>
   `Vidéo trop lourde (${megas(size)} Mo) : ${megas(maxVideoBytes())} Mo au maximum. Raccourcis-la, ou filme en 1080p.`;
 
 export const isVideoFile = (f) => Boolean(f && (VIDEO_TYPES.includes(f.type) || String(f.type || '').startsWith('video/') || /\.(mp4|mov|qt|m4v|webm|3gp)$/i.test(f.name || '')));
-export const clockLabel = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+export const clockLabel = (s) => {
+  const t = Math.max(0, Math.round(Number(s) || 0));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+};
 
 const once = (el, ev) => new Promise((resolve, reject) => {
   const ok = () => { el.removeEventListener('error', ko); resolve(); };
@@ -242,20 +245,39 @@ export async function readVideoInfo(file, { knownDuration = 0 } = {}) {
 // réseau. Échec réseau : erreur « connexion » (l'envoi reprendra là où il s'est arrêté)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const backOnline = () => (navigator.onLine === false ? new Promise((r) => addEventListener('online', r, { once: true })) : null);
-async function putChunk(id, i, part) {
+// Un morceau, avec l'avancement octet par octet (le pourcentage bouge même sur une connexion lente)
+function sendPart(url, part, onBytes) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', url);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader('x-vibz', '1');
+    xhr.setRequestHeader('content-type', 'application/octet-stream');
+    xhr.upload.onprogress = (e) => onBytes?.(e.loaded);
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      let data = null;
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        /* réponse sans détail */
+      }
+      reject(new ApiError(xhr.status, data?.error || 'Envoi de la vidéo interrompu.'));
+    };
+    xhr.onerror = () => reject(new ApiError(0, 'Connexion perdue pendant l’envoi.'));
+    xhr.ontimeout = xhr.onerror;
+    xhr.send(part);
+  });
+}
+
+async function putChunk(id, i, part, onBytes) {
   for (let tries = 1; ; tries++) {
     try {
       await backOnline();
-      let res;
-      try {
-        res = await fetch(`/api/videos/${id}/chunks/${i}`, { method: 'PUT', headers: { 'x-vibz': '1', 'content-type': 'application/octet-stream' }, credentials: 'same-origin', body: part });
-      } catch {
-        throw new ApiError(0, 'Connexion perdue pendant l’envoi.');
-      }
-      if (res.ok) return;
-      const data = await res.json().catch(() => null);
-      throw new ApiError(res.status, data?.error || 'Envoi de la vidéo interrompu.');
+      await sendPart(`/api/videos/${id}/chunks/${i}`, part, onBytes);
+      return;
     } catch (err) {
+      onBytes?.(0); // ce morceau repart de zéro
       if (tries >= 8 || (err.status < 500 && err.status !== 0 && err.status !== 429)) throw err;
       await sleep(Math.min(4000, 700 * tries));
     }
@@ -263,14 +285,20 @@ async function putChunk(id, i, part) {
 }
 
 // Morceaux envoyés quatre à la fois ; onSent(i, octets) dès que le serveur a reçu un morceau
-async function sendChunks(id, list, onSent) {
+async function sendChunks(id, list, onSent, onPartial) {
   let failed = null;
   let next = 0;
+  const partial = new Map(); // morceau en cours → octets déjà partis
+  const report = () => onPartial?.([...partial.values()].reduce((a, b) => a + b, 0));
   const worker = async () => {
     while (!failed && next < list.length) {
       const { i, part } = list[next++];
       try {
-        await putChunk(id, i, part);
+        await putChunk(id, i, part, (bytes) => {
+          partial.set(i, bytes);
+          report();
+        });
+        partial.delete(i);
         onSent(i, part.size);
       } catch (err) {
         failed = failed || err;
@@ -300,7 +328,7 @@ export async function uploadVideo(file, info, onStep, memo = {}) {
   if (file.size > maxVideoBytes()) throw new Error(tooBig(file.size));
   const t0 = Date.now();
   const mime = fileMime(file);
-  // Fiche technique (diagnostic de la Direction si une vidéo lit mal) : rien de personnel
+  // Fiche technique (diagnostic de l'administration si une vidéo lit mal) : rien de personnel
   const meta = memo.meta || (memo.meta = {
     methode: 'originale',
     appareil: navigator.userAgent.slice(0, 180),
@@ -322,10 +350,14 @@ export async function uploadVideo(file, info, onStep, memo = {}) {
     }
     onStep?.('upload', done / file.size);
     try {
+      let inFlight = 0;
       await sendChunks(up.id, left, (i, n) => {
         up.sent.add(i);
         done += n;
-        onStep?.('upload', done / file.size);
+        onStep?.('upload', (done + inFlight) / file.size);
+      }, (bytes) => {
+        inFlight = bytes;
+        onStep?.('upload', Math.min(0.98, (done + inFlight) / file.size));
       });
       meta.secondes = Math.round((Date.now() - t0) / 100) / 10;
       if (memo.resumed) meta.reprises = memo.resumed;

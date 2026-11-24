@@ -17,12 +17,16 @@ const ROOT = path.join(__dirname, '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const INDEX_HTML = path.join(PUBLIC_DIR, 'index.html');
 
+// Lecteurs intégrés de l'Actu (YouTube sans cookie, Vimeo, Dailymotion, Spotify, Apple, SoundCloud, Deezer)
+const EMBED_ORIGINS = 'https://www.youtube-nocookie.com https://player.vimeo.com https://www.dailymotion.com https://open.spotify.com https://embed.podcasts.apple.com https://w.soundcloud.com https://widget.deezer.com';
+
 function securityHeaders(config) {
   const csp = [
     "default-src 'self'",
-    "img-src 'self' data: blob:",
-    "media-src 'self' blob: data:",
-    "frame-src 'none'",
+    // L'Actu : images des médias, épisodes de podcasts et lecteurs vidéo / audio intégrés
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' blob: data: https:",
+    `frame-src ${EMBED_ORIGINS}`,
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     "script-src 'self'",
@@ -75,7 +79,7 @@ async function createApp(config, overrides = {}) {
   app.use('/api', csrfGuard, loadUser(ctx));
 
   if (config.rateLimit) {
-    const tooMany = { error: 'Trop de tentatives. Patientez quelques minutes.' };
+    const tooMany = { error: 'Trop de tentatives. Patiente quelques minutes.' };
     app.use(
       '/api/auth',
       rateLimit({ windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: 'draft-7', legacyHeaders: false, message: tooMany }),
@@ -99,7 +103,7 @@ async function createApp(config, overrides = {}) {
     );
   }
 
-  const routes = ['auth', 'public', 'wallet', 'videos', 'posts', 'comments', 'feed', 'discover', 'stories', 'live', 'moderation', 'push', 'translate', 'users', 'messages', 'notifications', 'me', 'studio', 'admin'];
+  const routes = ['auth', 'public', 'wallet', 'videos', 'posts', 'comments', 'feed', 'discover', 'stories', 'live', 'moderation', 'push', 'translate', 'users', 'messages', 'notifications', 'me', 'studio', 'admin', 'actu'];
   for (const name of routes) app.use('/api', require(`./routes/${name}`)(ctx));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ressource introuvable.' }));
 
@@ -147,7 +151,7 @@ async function createApp(config, overrides = {}) {
     if (status >= 500) console.error(err);
     if (res.headersSent) return res.end();
     let message = err.message;
-    if (status >= 500) message = 'Une erreur est survenue. Réessayez dans un instant.';
+    if (status >= 500) message = 'Une erreur est survenue. Réessaie dans un instant.';
     else if (err.type) message = 'Requête invalide.';
     if (req.path.startsWith('/api')) return res.status(status).json({ error: message, code: err.code });
     res.status(status).type('text/plain').send(message);

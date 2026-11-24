@@ -3,8 +3,8 @@
 import { api, enc } from './api.js';
 import { store, connectRealtime, disconnectRealtime } from './store.js';
 import { navigate, setRenderer, compile } from './router.js';
-import { h, icon, avatar, spinner, emptyState, closeModal, closeMenu, toast, popMenu, logoMark } from './dom.js';
-import { openSheet, closeSheet } from './components/sheet.js';
+import { h, icon, avatar, spinner, emptyState, closeModal, closeModals, modalOpen, closeMenu, toast, popMenu, logoMark, modal, syncThemeColor } from './dom.js';
+import { openSheet, closeSheet, sheetOpen } from './components/sheet.js';
 import { installFormValidation } from './forms.js';
 import { trackPage, cookieBanner } from './components/cookies.js';
 import { prefetchReels, unlockPlayer } from './components/video.js';
@@ -13,6 +13,7 @@ import { registerServiceWorker, syncPush } from './push.js';
 import { editPost } from './components/postedit.js';
 import { homeView, videoView, friendsView } from './views/home.js';
 import { exploreView } from './views/explore.js';
+import { actuView } from './views/actu.js';
 import { searchView } from './views/search.js';
 import { profileView } from './views/profile.js';
 import { tagView, soundView } from './views/collections.js';
@@ -22,7 +23,7 @@ import { createView } from './views/create.js';
 import { liveListView, liveRoomView } from './views/live.js';
 import { walletView } from './views/wallet.js';
 import { studioView } from './views/studio.js';
-import { settingsView } from './views/settings.js';
+import { settingsView, getTheme, setTheme } from './views/settings.js';
 import { adminView } from './views/admin.js';
 import { loginView, signupView, forgotView, resetView, logout } from './views/auth.js';
 import { welcomeView } from './views/onboarding.js';
@@ -46,6 +47,8 @@ const ROUTES = [
   { path: '/salon', view: () => navigate('/', { replace: true }), layout: 'bare' },
   { path: '/videos', view: () => navigate('/', { replace: true }), layout: 'bare' },
   { path: '/explorer', view: exploreView, layout: 'app', nav: 'explore' },
+  { path: '/actu', view: actuView, layout: 'app', nav: 'actu' },
+  { path: '/actu/:id', view: actuView, layout: 'app', nav: 'actu' },
   { path: '/recherche', view: searchView, layout: 'app', nav: 'explore' },
   { path: '/tag/:tag', view: tagView, layout: 'app', nav: 'explore' },
   { path: '/son/:id', view: soundView, layout: 'app', nav: 'explore' },
@@ -107,26 +110,34 @@ function openLoginSheet(reason) {
   const here = location.pathname + location.search;
   const go = (path) => {
     closeSheet();
-    closeModal();
+    closeModals();
     navigate(`${path}?suite=${enc(here)}`);
   };
-  openSheet({
-    title: 'Connecte-toi à Vibz',
-    body: h(
-      'div',
-      { class: 'login-sheet' },
-      h('div', { class: 'login-logo' }, logoMark()),
-      h('p', null, reason || 'Connecte-toi pour continuer.'),
-      h('p', { class: 'muted small' }, 'Suis des créateurs, aime des vidéos, commente et crée les tiennes.'),
-      h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', onclick: () => go('/inscription') }, 'Créer un compte'),
-      h('button', { type: 'button', class: 'btn btn-ghost btn-lg btn-block', onclick: () => go('/connexion') }, 'J’ai déjà un compte'),
-    ),
-  });
+  const body = h(
+    'div',
+    { class: 'login-sheet' },
+    h('div', { class: 'login-logo' }, logoMark()),
+    h('p', null, reason || 'Connecte-toi pour continuer.'),
+    h('p', { class: 'muted small' }, 'Suis des créateurs, aime des vidéos, commente et crée les tiennes.'),
+    h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', onclick: () => go('/inscription') }, 'Créer un compte'),
+    h('button', { type: 'button', class: 'btn btn-ghost btn-lg btn-block', onclick: () => go('/connexion') }, 'J’ai déjà un compte'),
+  );
+  // Une feuille ou une fenêtre est déjà ouverte (commentaires, liste d'abonnés…) : l'invitation
+  // passe par-dessus, sans la fermer
+  if (sheetOpen() || modalOpen()) modal('Connecte-toi à Vibz', h('div', { class: 'modal-body' }, body), { stack: true });
+  else openSheet({ title: 'Connecte-toi à Vibz', body });
 }
 document.addEventListener('vibz:login', (e) => openLoginSheet(e.detail?.reason));
 document.addEventListener('vibz:edit-post', (e) => editPost(e.detail));
 
 const wordmark = () => h('a', { href: '/', class: 'brand', 'aria-label': 'Vibz, accueil' }, logoMark(34), h('span', { class: 'brand-name' }, 'vibz'));
+
+// Apparence sans compte : le choix est gardé dans ce navigateur
+function themePicker() {
+  const current = getTheme();
+  const opt = (v, label, ic) => h('label', { class: 'set-row' }, h('span', { class: 'set-ic' }, icon(ic)), h('span', { class: 'set-text' }, label), h('input', { type: 'radio', name: 'theme-guest', value: v, checked: current === v, onchange: () => { setTheme(v); toast('Apparence enregistrée'); } }));
+  modal('Apparence', h('div', { class: 'modal-body' }, h('div', { class: 'set-card' }, opt('system', 'Comme l’appareil', 'sliders'), opt('light', 'Clair', 'sun'), opt('dark', 'Sombre', 'moon')), h('p', { class: 'muted small' }, 'Le fil des vidéos reste toujours sombre, pour mieux les voir.')));
+}
 
 // ---------------------------------------------------------------------------
 // Coquille
@@ -134,7 +145,7 @@ const wordmark = () => h('a', { href: '/', class: 'brand', 'aria-label': 'Vibz, 
 function buildShell() {
   const unsub = [];
   const navEls = new Map();
-  const badges = { inbox: [], messages: [] };
+  const badges = { inbox: [], messages: [], activity: [] };
   const register = (key, el) => {
     if (!navEls.has(key)) navEls.set(key, []);
     navEls.get(key).push(el);
@@ -161,7 +172,7 @@ function buildShell() {
   const sideAvatar = h('span', { class: 'side-ic side-avatar' });
   const profileLink = register('profile', h('a', { href: profileHref(), class: 'side-link' }, sideAvatar, h('span', { class: 'side-label' }, 'Profil')));
   const sideAccount = h('div', { class: 'side-account' });
-  const moreBtn = h('button', { type: 'button', class: 'side-link' }, h('span', { class: 'side-ic' }, icon('moreH')), h('span', { class: 'side-label' }, 'Plus'));
+  const moreBtn = register('more', h('button', { type: 'button', class: 'side-link' }, h('span', { class: 'side-ic' }, icon('moreH')), h('span', { class: 'side-label' }, 'Plus')));
   moreBtn.addEventListener('click', () => {
     const items = [
       me() && { icon: 'wallet', label: 'Portefeuille', action: () => navigate('/portefeuille') },
@@ -169,7 +180,7 @@ function buildShell() {
       me() && { icon: 'settings', label: 'Réglages et confidentialité', action: () => navigate('/reglages') },
       me()?.isAdmin && { icon: 'shield', label: 'Administration', action: () => navigate('/admin') },
       { icon: 'help', label: 'Aide', action: () => navigate('/aide') },
-      { icon: 'moon', label: 'Apparence', action: () => navigate(me() ? '/reglages/apparence' : '/aide#apparence') },
+      { icon: 'moon', label: 'Apparence', action: () => (me() ? navigate('/reglages/apparence') : themePicker()) },
       me() && { icon: 'logout', label: 'Se déconnecter', action: logout, danger: true },
     ].filter(Boolean);
     popMenu(moreBtn, items);
@@ -180,30 +191,35 @@ function buildShell() {
     wordmark(),
     searchForm,
     side('home', '/', 'home', 'homeFill', 'Pour toi'),
+    side('actu', '/actu', 'newspaper', 'newspaper', 'Actu'),
     side('explore', '/explorer', 'compass', 'compass', 'Explorer'),
     side('following', '/abonnements', 'userCheck', 'userCheck', 'Abonnements', { onclick: (e) => guard(e, 'Connecte-toi pour voir les vidéos des comptes que tu suis.') }),
     side('friends', '/amis', 'friends', 'friendsFill', 'Amis', { onclick: (e) => guard(e, 'Connecte-toi pour voir tes amis.') }),
     side('live', '/live', 'live', 'live', 'LIVE'),
     side('messages', '/messages', 'send', 'send', 'Messages', { badge: badge('messages'), onclick: (e) => guard(e, 'Connecte-toi pour envoyer des messages.') }),
-    side('inbox', '/activite', 'bell', 'bellRing', 'Activité', { badge: badge('inbox'), onclick: (e) => guard(e, 'Connecte-toi pour voir ton activité.') }),
+    side('inbox', '/activite', 'bell', 'bellRing', 'Activité', { badge: badge('activity'), onclick: (e) => guard(e, 'Connecte-toi pour voir ton activité.') }),
     side('create', '/creer', 'plus', 'plus', 'Créer', { onclick: (e) => guard(e, 'Connecte-toi pour publier une vidéo.') }),
     profileLink,
     moreBtn,
     sideAccount,
-    h('footer', { class: 'side-foot' }, h('a', { href: '/aide' }, 'Aide'), h('a', { href: '/regles' }, 'Règles'), h('a', { href: '/cgu' }, 'CGU'), h('a', { href: '/confidentialite' }, 'Confidentialité'), h('a', { href: '/mentions-legales' }, 'Mentions légales'), h('span', null, `© ${new Date().getFullYear()} Vibz`)),
+    h('footer', { class: 'side-foot' }, h('a', { href: '/aide' }, 'Aide'), h('a', { href: '/regles' }, 'Règles'), h('a', { href: '/cgu' }, 'CGU'), h('a', { href: '/cgv' }, 'CGV'), h('a', { href: '/confidentialite' }, 'Confidentialité'), h('a', { href: '/mentions-legales' }, 'Mentions légales'), h('span', null, `© ${new Date().getFullYear()} Vibz`)),
   );
 
   // Barre du bas (téléphone)
   const tabAvatar = h('span', { class: 'tab-ic tab-avatar' });
   const tab = (key, href, ic, icOn, label, extra = {}) =>
     register(key, h('a', { href, class: 'tab', onclick: extra.onclick }, h('span', { class: 'tab-ic' }, h('span', { class: 'ic-off' }, icon(ic)), h('span', { class: 'ic-on' }, icon(icOn)), extra.badge || null), h('span', { class: 'tab-label' }, label)));
+  // Accueil : actif aussi sur « Amis » et « Abonnements » (onglets du haut du fil)
+  const homeTab = tab('home', '/', 'home', 'homeFill', 'Accueil', { onclick: () => unlockPlayer() });
+  register('friends', homeTab);
+  register('following', homeTab);
   const tabbar = h(
     'nav',
     { class: 'tabbar', 'aria-label': 'Navigation' },
-    tab('home', '/', 'home', 'homeFill', 'Accueil', { onclick: () => unlockPlayer() }),
-    tab('friends', '/amis', 'friends', 'friendsFill', 'Amis'),
+    homeTab,
+    tab('actu', '/actu', 'newspaper', 'newspaper', 'Actu'),
     h('a', { href: '/creer', class: 'tab tab-create', 'aria-label': 'Créer', onclick: (e) => guard(e, 'Connecte-toi pour publier une vidéo.') }, h('span', { class: 'create-btn' }, icon('plus'))),
-    tab('inbox', '/boite', 'inbox', 'inboxFill', 'Boîte', { badge: badge('inbox'), onclick: (e) => guard(e, 'Connecte-toi pour voir tes messages et ton activité.') }),
+    register('messages', tab('inbox', '/boite', 'inbox', 'inboxFill', 'Boîte', { badge: badge('inbox'), onclick: (e) => guard(e, 'Connecte-toi pour voir tes messages et ton activité.') })),
     register('profile', h('a', { href: profileHref(), class: 'tab tab-profile', onclick: (e) => guard(e, 'Connecte-toi pour voir ton profil.') }, tabAvatar, h('span', { class: 'tab-label' }, 'Profil'))),
   );
   // Un toucher sur l'onglet « Profil » quand on a déjà un compte : son profil
@@ -225,7 +241,7 @@ function buildShell() {
   const el = h('div', { class: 'shell' }, sidebar, main, tabbar);
 
   const paintBadges = (c) => {
-    const values = { inbox: (c.notifications || 0) + (c.requests || 0) + (c.messages || 0), messages: c.messages || 0 };
+    const values = { inbox: (c.notifications || 0) + (c.requests || 0) + (c.messages || 0), messages: c.messages || 0, activity: (c.notifications || 0) + (c.requests || 0) };
     for (const kind of Object.keys(badges)) {
       for (const b of badges[kind]) {
         const v = values[kind] || 0;
@@ -304,15 +320,15 @@ function restoreScroll(target) {
   const attempt = () => {
     if (userMoved || token !== renderToken || !el.isConnected) return;
     el.scrollTop = target;
-    if (Math.abs(el.scrollTop - target) < 2 || ++tries > 15) return;
-    setTimeout(attempt, 120);
+    if (Math.abs(el.scrollTop - target) < 2 || ++tries > 30) return;
+    setTimeout(attempt, 150);
   };
   requestAnimationFrame(attempt);
 }
 
 async function render(opts = {}) {
   const token = ++renderToken;
-  closeModal();
+  closeModals();
   closeMenu();
   closeSheet();
   for (const fn of cleanups.splice(0)) {
@@ -334,12 +350,15 @@ async function render(opts = {}) {
   if (route) {
     if (route.access === 'guest' && u) return navigate(url.searchParams.get('suite') || '/', { replace: true });
     if ((route.access === 'auth' || route.access === 'admin') && !u) return navigate(`/connexion?suite=${enc(here)}`, { replace: true });
-    if (route.access === 'admin' && !u.isAdmin) return navigate('/', { replace: true });
+    if (route.access === 'admin' && !u.isAdmin) {
+      toast('Cette page est réservée à l’administration.', 'error');
+      return navigate('/', { replace: true });
+    }
   }
 
   const layout = !route ? 'app' : route.layout === 'auto' ? 'app' : route.layout;
   const mine = [];
-  const ctx = { params, query: url.searchParams, route, title: null, description: null, onCleanup: (fn) => typeof fn === 'function' && mine.push(fn) };
+  const ctx = { params, query: url.searchParams, route, pop: Boolean(opts.pop), title: null, description: null, onCleanup: (fn) => typeof fn === 'function' && mine.push(fn) };
 
   let container;
   if (layout === 'app' || layout === 'feed') {
@@ -386,6 +405,8 @@ async function render(opts = {}) {
 // Liens internes, historique, session
 // ---------------------------------------------------------------------------
 installFormValidation();
+syncThemeColor();
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', syncThemeColor);
 
 const offlineBar = h('div', { class: 'offline-bar', role: 'status', hidden: navigator.onLine !== false }, icon('wifiOff', 'icon-sm'), 'Hors connexion');
 document.body.append(offlineBar);
@@ -435,6 +456,10 @@ document.addEventListener('click', (e) => {
   navigate(url.pathname + url.search + url.hash);
 });
 
+window.addEventListener('vibz:url', () => {
+  lastLocation = location.pathname + location.search;
+});
+
 window.addEventListener('popstate', () => {
   if (location.pathname + location.search === lastLocation) return;
   render({ pop: true });
@@ -447,7 +472,8 @@ window.addEventListener('vibz:auth', async (e) => {
     disconnectRealtime();
     await store.refresh().catch(() => store.setUser(null));
     if (!store.user) {
-      toast('Ta session a expiré. Reconnecte-toi.');
+      // Compte suspendu pendant la visite : on dit pourquoi
+      toast(e.detail.code === 'BANNED' ? e.detail.message : 'Ta session a expiré. Reconnecte-toi.', e.detail.code === 'BANNED' ? 'error' : 'ok');
       render({ same: true });
     }
   }
