@@ -3,7 +3,7 @@
 import { api, enc } from './api.js';
 import { store, connectRealtime, disconnectRealtime } from './store.js';
 import { navigate, setRenderer, compile } from './router.js';
-import { h, icon, avatar, spinner, emptyState, closeModal, closeModals, modalOpen, closeMenu, toast, popMenu, logoMark, modal } from './dom.js';
+import { h, icon, avatar, spinner, emptyState, closeModal, closeModals, modalOpen, closeMenu, toast, popMenu, logoMark, modal, syncThemeColor } from './dom.js';
 import { openSheet, closeSheet, sheetOpen } from './components/sheet.js';
 import { installFormValidation } from './forms.js';
 import { trackPage, cookieBanner } from './components/cookies.js';
@@ -22,7 +22,7 @@ import { createView } from './views/create.js';
 import { liveListView, liveRoomView } from './views/live.js';
 import { walletView } from './views/wallet.js';
 import { studioView } from './views/studio.js';
-import { settingsView } from './views/settings.js';
+import { settingsView, getTheme, setTheme } from './views/settings.js';
 import { adminView } from './views/admin.js';
 import { loginView, signupView, forgotView, resetView, logout } from './views/auth.js';
 import { welcomeView } from './views/onboarding.js';
@@ -129,6 +129,13 @@ document.addEventListener('vibz:edit-post', (e) => editPost(e.detail));
 
 const wordmark = () => h('a', { href: '/', class: 'brand', 'aria-label': 'Vibz, accueil' }, logoMark(34), h('span', { class: 'brand-name' }, 'vibz'));
 
+// Apparence sans compte : le choix est gardé dans ce navigateur
+function themePicker() {
+  const current = getTheme();
+  const opt = (v, label, ic) => h('label', { class: 'set-row' }, h('span', { class: 'set-ic' }, icon(ic)), h('span', { class: 'set-text' }, label), h('input', { type: 'radio', name: 'theme-guest', value: v, checked: current === v, onchange: () => { setTheme(v); toast('Apparence enregistrée'); } }));
+  modal('Apparence', h('div', { class: 'modal-body' }, h('div', { class: 'set-card' }, opt('system', 'Comme l’appareil', 'sliders'), opt('light', 'Clair', 'sun'), opt('dark', 'Sombre', 'moon')), h('p', { class: 'muted small' }, 'Le fil des vidéos reste toujours sombre, pour mieux les voir.')));
+}
+
 // ---------------------------------------------------------------------------
 // Coquille
 // ---------------------------------------------------------------------------
@@ -170,7 +177,7 @@ function buildShell() {
       me() && { icon: 'settings', label: 'Réglages et confidentialité', action: () => navigate('/reglages') },
       me()?.isAdmin && { icon: 'shield', label: 'Administration', action: () => navigate('/admin') },
       { icon: 'help', label: 'Aide', action: () => navigate('/aide') },
-      { icon: 'moon', label: 'Apparence', action: () => navigate(me() ? '/reglages/apparence' : '/aide#apparence') },
+      { icon: 'moon', label: 'Apparence', action: () => (me() ? navigate('/reglages/apparence') : themePicker()) },
       me() && { icon: 'logout', label: 'Se déconnecter', action: logout, danger: true },
     ].filter(Boolean);
     popMenu(moreBtn, items);
@@ -191,7 +198,7 @@ function buildShell() {
     profileLink,
     moreBtn,
     sideAccount,
-    h('footer', { class: 'side-foot' }, h('a', { href: '/aide' }, 'Aide'), h('a', { href: '/regles' }, 'Règles'), h('a', { href: '/cgu' }, 'CGU'), h('a', { href: '/confidentialite' }, 'Confidentialité'), h('a', { href: '/mentions-legales' }, 'Mentions légales'), h('span', null, `© ${new Date().getFullYear()} Vibz`)),
+    h('footer', { class: 'side-foot' }, h('a', { href: '/aide' }, 'Aide'), h('a', { href: '/regles' }, 'Règles'), h('a', { href: '/cgu' }, 'CGU'), h('a', { href: '/cgv' }, 'CGV'), h('a', { href: '/confidentialite' }, 'Confidentialité'), h('a', { href: '/mentions-legales' }, 'Mentions légales'), h('span', null, `© ${new Date().getFullYear()} Vibz`)),
   );
 
   // Barre du bas (téléphone)
@@ -305,8 +312,8 @@ function restoreScroll(target) {
   const attempt = () => {
     if (userMoved || token !== renderToken || !el.isConnected) return;
     el.scrollTop = target;
-    if (Math.abs(el.scrollTop - target) < 2 || ++tries > 15) return;
-    setTimeout(attempt, 120);
+    if (Math.abs(el.scrollTop - target) < 2 || ++tries > 30) return;
+    setTimeout(attempt, 150);
   };
   requestAnimationFrame(attempt);
 }
@@ -340,7 +347,7 @@ async function render(opts = {}) {
 
   const layout = !route ? 'app' : route.layout === 'auto' ? 'app' : route.layout;
   const mine = [];
-  const ctx = { params, query: url.searchParams, route, title: null, description: null, onCleanup: (fn) => typeof fn === 'function' && mine.push(fn) };
+  const ctx = { params, query: url.searchParams, route, pop: Boolean(opts.pop), title: null, description: null, onCleanup: (fn) => typeof fn === 'function' && mine.push(fn) };
 
   let container;
   if (layout === 'app' || layout === 'feed') {
@@ -387,6 +394,8 @@ async function render(opts = {}) {
 // Liens internes, historique, session
 // ---------------------------------------------------------------------------
 installFormValidation();
+syncThemeColor();
+matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', syncThemeColor);
 
 const offlineBar = h('div', { class: 'offline-bar', role: 'status', hidden: navigator.onLine !== false }, icon('wifiOff', 'icon-sm'), 'Hors connexion');
 document.body.append(offlineBar);
@@ -434,6 +443,10 @@ document.addEventListener('click', (e) => {
     if (again.defaultPrevented) return;
   }
   navigate(url.pathname + url.search + url.hash);
+});
+
+window.addEventListener('vibz:url', () => {
+  lastLocation = location.pathname + location.search;
 });
 
 window.addEventListener('popstate', () => {

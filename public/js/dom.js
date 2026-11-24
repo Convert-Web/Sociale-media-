@@ -40,12 +40,23 @@ export function h(tag, props, ...children) {
   return el;
 }
 
+// Typographie française : espace fine insécable avant « ; : ? ! » et après « « », pour qu'aucun
+// signe ne reste seul en début ou en fin de ligne (tous les textes ajoutés par h()/append())
+export const frenchSpaces = (s) => (/[ «]/.test(s) ? s.replace(/ ([?!;:»])/g, '\u202f$1').replace(/« /g, '«\u202f') : s);
+
 export function append(el, children) {
   for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false || c === true) continue;
-    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    el.append(c instanceof Node ? c : document.createTextNode(typeof c === 'string' ? frenchSpaces(c) : String(c)));
   }
   return el;
+}
+
+// Couleur de la barre du navigateur : celle du fond des pages (claire ou sombre), noire sur le fil
+export function syncThemeColor() {
+  if (document.documentElement.classList.contains('feed-mode')) return;
+  const t = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = t === 'dark' ? '#0e0e13' : '#ffffff';
 }
 
 export function clear(el) {
@@ -133,7 +144,6 @@ const TOKEN_RE = /(https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]])|@([a-z0-9_][a-z0-9_.
 const WORD = /[\p{L}\p{N}_]/u;
 
 // Typographie française : espace insécable fine avant ? ! ; : » et après «
-const frenchSpaces = (s) => s.replace(/ ([?!;:»])/g, '\u202f$1').replace(/« /g, '«\u202f');
 
 export function richText(str) {
   const frag = document.createDocumentFragment();

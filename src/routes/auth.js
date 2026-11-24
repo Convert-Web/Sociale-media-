@@ -9,9 +9,9 @@ const { assertClean } = require('../contentFilter');
 const { CATEGORIES } = require('../catalog');
 
 function validatePassword(pw) {
-  if (typeof pw !== 'string' || pw.length < 8) fail(400, 'Le mot de passe doit contenir au moins 8 caractères.');
-  if (pw.length > 200) fail(400, 'Mot de passe trop long.');
-  if (!/[a-zA-Z]/.test(pw) || !/[0-9\W_]/.test(pw)) fail(400, 'Le mot de passe doit mêler des lettres et au moins un chiffre ou un symbole.');
+  if (typeof pw !== 'string' || pw.length < 8) fail(400, 'Le mot de passe doit contenir au moins 8 caractères.', 'PASSWORD_WEAK');
+  if (pw.length > 200) fail(400, 'Mot de passe trop long.', 'PASSWORD_WEAK');
+  if (!/[a-zA-Z]/.test(pw) || !/[0-9\W_]/.test(pw)) fail(400, 'Le mot de passe doit mêler des lettres et au moins un chiffre ou un symbole.', 'PASSWORD_WEAK');
   return pw;
 }
 
@@ -19,9 +19,12 @@ function validatePassword(pw) {
 const MIN_AGE = 13;
 function checkBirthdate(value) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
-  if (!m) fail(400, 'Indique ta date de naissance.');
+  if (!m) fail(400, 'Indique ta date de naissance.', 'BIRTHDATE');
   const birth = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  if (Number.isNaN(birth.getTime()) || birth.getFullYear() < 1900 || birth > new Date()) fail(400, 'Date de naissance invalide.');
+  // Une date qui n'existe pas (31 février) est refusée, pas décalée au mois suivant
+  if (Number.isNaN(birth.getTime()) || birth.getFullYear() < 1900 || birth > new Date() || birth.getMonth() !== Number(m[2]) - 1 || birth.getDate() !== Number(m[3])) {
+    fail(400, 'Date de naissance invalide.', 'BIRTHDATE');
+  }
   const now = new Date();
   let age = now.getFullYear() - birth.getFullYear();
   if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age--;
@@ -54,7 +57,7 @@ module.exports = function authRoutes(ctx) {
   // Nom d'utilisateur disponible ? (vérifié pendant la saisie)
   r.get('/auth/username', async (req, res) => {
     const name = String(req.query.u || '').replace(/^@/, '');
-    if (!USERNAME_RE.test(name)) return res.json({ ok: false, reason: '2 à 24 caractères : lettres, chiffres, « _ » ou « . ».' });
+    if (!USERNAME_RE.test(name)) return res.json({ ok: false, reason: '2 à 24 caractères : lettres sans accent (a-z), chiffres, « _ » ou « . ».' });
     if (RESERVED.has(name.toLowerCase())) return res.json({ ok: false, reason: 'Ce nom est réservé.' });
     // Son propre nom (même dans une autre casse) n'est pas « déjà pris »
     const taken = await db.get('SELECT 1 FROM users WHERE username = ? AND id != ?', name, req.user?.id || 0);
@@ -74,19 +77,20 @@ module.exports = function authRoutes(ctx) {
   r.post('/auth/signup', async (req, res) => {
     assertHuman(req.body); // champ piège et délai minimal : les robots sont refusés
     checkBirthdate(req.body.birthdate);
+    if (!String(req.body.username || '').trim()) fail(400, 'Choisis un nom d’utilisateur.', 'USERNAME_INVALID');
     const username = text(req.body.username, { field: "Nom d'utilisateur", required: true, max: 24 }).replace(/^@/, '');
     const displayName = text(req.body.displayName || username, { field: 'Nom', min: 1, max: 30, required: true });
     const email = text(req.body.email, { field: 'E-mail', required: true, max: 120 }).toLowerCase();
     const password = validatePassword(req.body.password);
-    if (req.body.terms !== true) fail(400, 'Accepte les conditions d’utilisation pour continuer.');
+    if (req.body.terms !== true) fail(400, 'Accepte les conditions d’utilisation pour continuer.', 'TERMS');
 
-    if (!USERNAME_RE.test(username)) fail(400, "Nom d'utilisateur : 2 à 24 caractères (lettres, chiffres, « _ » ou « . »).");
-    if (RESERVED.has(username.toLowerCase())) fail(409, "Ce nom d'utilisateur est réservé.");
+    if (!USERNAME_RE.test(username)) fail(400, "Nom d'utilisateur : 2 à 24 caractères (lettres sans accent, chiffres, « _ » ou « . »).", 'USERNAME_INVALID');
+    if (RESERVED.has(username.toLowerCase())) fail(409, "Ce nom d'utilisateur est réservé.", 'USERNAME_TAKEN');
     assertClean('Nom', displayName, username.replace(/[._]/g, ' '));
-    if (!EMAIL_RE.test(email)) fail(400, 'Adresse e-mail invalide.');
-    if (isDisposable(email)) fail(400, 'Les adresses e-mail jetables ne sont pas acceptées.');
-    if (await db.get('SELECT 1 FROM users WHERE username = ?', username)) fail(409, "Ce nom d'utilisateur est déjà pris.");
-    if (await db.get('SELECT 1 FROM users WHERE email = ?', email)) fail(409, 'Un compte existe déjà avec cet e-mail.');
+    if (!EMAIL_RE.test(email)) fail(400, 'Adresse e-mail invalide.', 'EMAIL_INVALID');
+    if (isDisposable(email)) fail(400, 'Les adresses e-mail jetables ne sont pas acceptées.', 'EMAIL_INVALID');
+    if (await db.get('SELECT 1 FROM users WHERE username = ?', username)) fail(409, "Ce nom d'utilisateur est déjà pris.", 'USERNAME_TAKEN');
+    if (await db.get('SELECT 1 FROM users WHERE email = ?', email)) fail(409, 'Un compte existe déjà avec cet e-mail.', 'EMAIL_TAKEN');
 
     const hash = await hashPassword(password);
     // Sans ADMIN_EMAILS, le tout premier compte créé devient administrateur.
@@ -146,11 +150,18 @@ module.exports = function authRoutes(ctx) {
     res.json({ ok: true });
   });
 
+  // Lien de réinitialisation encore valable ? (vérifié dès l'ouverture de la page)
+  r.get('/auth/reset', async (req, res) => {
+    const token = typeof req.query.token === 'string' ? req.query.token : '';
+    const row = token && (await db.get('SELECT 1 FROM password_resets WHERE id = ? AND used_at IS NULL AND expires_at > ?', sha256(token), Date.now()));
+    res.json({ valid: Boolean(row) });
+  });
+
   r.post('/auth/reset', async (req, res) => {
     const token = typeof req.body.token === 'string' ? req.body.token : '';
     const password = validatePassword(req.body.password);
     const row = await db.get('SELECT * FROM password_resets WHERE id = ? AND used_at IS NULL AND expires_at > ?', sha256(token), Date.now());
-    if (!row) fail(400, 'Ce lien a expiré ou a déjà été utilisé.');
+    if (!row) fail(400, 'Ce lien a expiré ou a déjà été utilisé.', 'RESET_EXPIRED');
     const hash = await hashPassword(password);
     await db.transaction(async (t) => {
       await t.run('UPDATE users SET password_hash = ?, login_failures = 0, login_locked_until = NULL WHERE id = ?', hash, row.user_id);
@@ -164,7 +175,7 @@ module.exports = function authRoutes(ctx) {
   r.post('/auth/password', requireAuth, async (req, res) => {
     const current = typeof req.body.current === 'string' ? req.body.current : '';
     const next = validatePassword(req.body.next);
-    if (!(await verifyPassword(current, req.user.password_hash))) fail(400, 'Mot de passe actuel incorrect.');
+    if (!(await verifyPassword(current, req.user.password_hash))) fail(400, 'Mot de passe actuel incorrect.', 'BAD_PASSWORD');
     const hash = await hashPassword(next);
     await db.transaction(async (t) => {
       await t.run('UPDATE users SET password_hash = ? WHERE id = ?', hash, req.user.id);

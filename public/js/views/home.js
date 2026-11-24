@@ -3,10 +3,10 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, emptyState, toast } from '../dom.js';
+import { h, icon, avatar, emptyState, toast, syncThemeColor } from '../dom.js';
 import { verticalFeed } from '../components/feed.js';
 import { takeReels, pendingReels } from '../components/video.js';
-import { needLogin } from '../components/actions.js';
+import { needLogin, follow } from '../components/actions.js';
 import { openComments } from '../components/comments.js';
 
 function darkTop(ctx) {
@@ -17,6 +17,7 @@ function darkTop(ctx) {
   ctx.onCleanup(() => {
     metas.forEach((m, i) => (m.content = saved[i]));
     document.documentElement.classList.remove('feed-mode');
+    syncThemeColor();
   });
 }
 
@@ -217,24 +218,30 @@ export async function friendsView(ctx) {
 }
 
 // Comptes suggérés (quand on n'a pas encore d'amis)
-export function suggestionsPanel() {
+// Comptes à suivre ; « Suivre » se défait d'un second toucher. Au premier lancement (welcome),
+// les cartes ne mènent pas au profil : on reste dans le parcours.
+export function suggestionsPanel({ welcome = false } = {}) {
   const list = h('div', { class: 'suggest-cards' });
   api.get('/api/suggestions?limit=12').then(({ users }) => {
     list.replaceChildren(
       ...users.map((u) => {
         const btn = h('button', { type: 'button', class: 'btn btn-primary btn-sm' }, u.followsYou ? 'Suivre en retour' : 'Suivre');
+        let on = false;
+        const paint = (r) => {
+          on = Boolean(r && (r.isFollowing || r.requested));
+          btn.textContent = on ? (r.requested ? 'Demandé' : r.friend ? 'Amis' : 'Abonné') : u.followsYou ? 'Suivre en retour' : 'Suivre';
+          btn.classList.toggle('btn-primary', !on);
+          btn.classList.toggle('btn-ghost', on);
+          btn.setAttribute('aria-pressed', String(on));
+        };
         btn.addEventListener('click', async () => {
           btn.disabled = true;
-          try {
-            const r = await api.post(`/api/users/${enc(u.username)}/follow`);
-            btn.textContent = r.user.requested ? 'Demandé' : r.user.friend ? 'Amis' : 'Abonné';
-            btn.classList.replace('btn-primary', 'btn-ghost');
-          } catch (err) {
-            btn.disabled = false;
-            toast(err.message, 'error');
-          }
+          const r = await follow(u.username, !on);
+          btn.disabled = false;
+          if (r) paint(r);
         });
-        return h('div', { class: 'suggest-card' }, h('a', { href: `/@${enc(u.username)}` }, avatar(u, 'xl'), h('b', null, u.displayName), h('small', null, u.reason)), btn);
+        const who = [avatar(u, 'xl'), h('b', null, u.displayName), h('small', null, u.reason)];
+        return h('div', { class: 'suggest-card' }, welcome ? h('div', { class: 'suggest-who' }, who) : h('a', { href: `/@${enc(u.username)}` }, who), btn);
       }),
     );
   }).catch(() => {});

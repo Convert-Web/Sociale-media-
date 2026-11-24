@@ -67,6 +67,9 @@ function requireAdmin(req, _res, next) {
 function csrfGuard(req, _res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   if (req.path === '/billing/webhook') return next();
+  // Départ d'un spectateur envoyé à la fermeture de l'onglet (sendBeacon, sans en-tête) : il ne fait
+  // que retirer la connexion dont l'identifiant secret est donné
+  if (/^\/live\/\d+\/leave$/.test(req.path)) return next();
   if (req.get('x-vibz') !== '1') fail(403, 'Requête refusée.');
   next();
 }

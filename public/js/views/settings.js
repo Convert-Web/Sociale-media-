@@ -2,12 +2,13 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, toast, confirmDialog, modal, emptyState, spinner } from '../dom.js';
+import { h, icon, toast, confirmDialog, modal, emptyState, spinner, syncThemeColor } from '../dom.js';
 import { pushState, enablePush, disablePush } from '../push.js';
 import { LANG_CHOICES } from '../components/translate.js';
 import { toggle } from '../components/postedit.js';
 import { userRow } from '../components/userlist.js';
-import { logout } from './auth.js';
+import { logout, passwordInput } from './auth.js';
+import { fieldError } from '../forms.js';
 import { validatePasswordHint } from './onboarding.js';
 
 const back = (to = '/reglages') => h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => navigate(to) }, icon('back'));
@@ -44,10 +45,17 @@ export function setTheme(v) {
   }
   if (v === 'system') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = v;
+  syncThemeColor();
 }
+
+const SECTIONS = new Set(['', 'compte', 'confidentialite', 'notifications', 'apparence']);
 
 export async function settingsView(ctx) {
   const section = ctx.params.section || '';
+  if (!SECTIONS.has(section)) {
+    ctx.title = 'Page introuvable — Vibz';
+    return h('div', { class: 'page settings' }, h('header', { class: 'page-head' }, h('a', { href: '/reglages', class: 'icon-btn', 'aria-label': 'Retour' }, icon('back')), h('h1', null, 'Réglages'), h('span', { class: 'icon-btn' })), emptyState('alert', 'Cette page n’existe pas', 'Le lien est peut-être incomplet.', h('a', { href: '/reglages', class: 'btn btn-primary btn-sm' }, 'Retour aux réglages')));
+  }
   const u = store.user;
   const s = u.settings;
   ctx.title = 'Réglages — Vibz';
@@ -170,8 +178,11 @@ export async function settingsView(ctx) {
 }
 
 function changePassword() {
-  const cur = h('input', { class: 'input', type: 'password', required: true, autocomplete: 'current-password' });
-  const next = h('input', { class: 'input', type: 'password', required: true, minlength: 8, autocomplete: 'new-password' });
+  // Champs avec le bouton « œil », comme à la connexion ; erreur sous le champ concerné
+  const curPw = passwordInput({ autocomplete: 'current-password', minlength: null });
+  const nextPw = passwordInput({ autocomplete: 'new-password' });
+  const cur = curPw.input;
+  const next = nextPw.input;
   const save = h('button', { type: 'submit', class: 'btn btn-primary btn-block' }, 'Changer le mot de passe');
   const m = modal('Mot de passe', h('form', {
     class: 'modal-body form-stack',
@@ -184,10 +195,12 @@ function changePassword() {
         toast('Mot de passe changé : les autres appareils sont déconnectés');
       } catch (err) {
         save.disabled = false;
-        toast(err.message, 'error');
+        if (err.code === 'BAD_PASSWORD') fieldError(cur, err.message);
+        else if (err.code === 'PASSWORD_WEAK') fieldError(next, err.message);
+        else toast(err.message, 'error');
       }
     },
-  }, h('label', { class: 'field' }, h('span', null, 'Mot de passe actuel'), cur), h('label', { class: 'field' }, h('span', null, 'Nouveau mot de passe'), next, h('small', { class: 'field-hint' }, validatePasswordHint)), save));
+  }, h('label', { class: 'field' }, h('span', null, 'Mot de passe actuel'), curPw.el), h('label', { class: 'field' }, h('span', null, 'Nouveau mot de passe'), nextPw.el, h('small', { class: 'field-hint' }, validatePasswordHint)), save));
 }
 
 function deleteAccount() {

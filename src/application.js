@@ -75,7 +75,7 @@ async function createApp(config, overrides = {}) {
   app.use('/api', csrfGuard, loadUser(ctx));
 
   if (config.rateLimit) {
-    const tooMany = { error: 'Trop de tentatives. Patientez quelques minutes.' };
+    const tooMany = { error: 'Trop de tentatives. Patiente quelques minutes.' };
     app.use(
       '/api/auth',
       rateLimit({ windowMs: 15 * 60 * 1000, limit: 40, standardHeaders: 'draft-7', legacyHeaders: false, message: tooMany }),
@@ -147,7 +147,7 @@ async function createApp(config, overrides = {}) {
     if (status >= 500) console.error(err);
     if (res.headersSent) return res.end();
     let message = err.message;
-    if (status >= 500) message = 'Une erreur est survenue. Réessayez dans un instant.';
+    if (status >= 500) message = 'Une erreur est survenue. Réessaie dans un instant.';
     else if (err.type) message = 'Requête invalide.';
     if (req.path.startsWith('/api')) return res.status(status).json({ error: message, code: err.code });
     res.status(status).type('text/plain').send(message);

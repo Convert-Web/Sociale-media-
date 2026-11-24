@@ -17,6 +17,14 @@ export function navigate(to, { replace = false } = {}) {
   renderFn({});
 }
 
+// Adresse changée sur place (filtre, onglet) : pas de nouveau rendu, mais l'application en tient
+// compte pour retrouver la position au retour
+export function replaceUrl(to) {
+  const url = new URL(to, location.origin);
+  history.replaceState(history.state, '', url.pathname + url.search + url.hash);
+  dispatchEvent(new CustomEvent('vibz:url'));
+}
+
 // Chemin de retour sûr (uniquement interne)
 export function safePath(p, fallback) {
   return typeof p === 'string' && p.startsWith('/') && !p.startsWith('//') && !p.startsWith('/api') ? p : fallback;

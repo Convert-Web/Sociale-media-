@@ -196,7 +196,7 @@ export async function profileView(ctx) {
       favorites: emptyState('bookmark', 'Aucun favori', 'Garde des vidéos avec le signet : elles restent visibles de toi seul.'),
       liked: emptyState('heart', 'Aucune vidéo aimée', me ? 'Les vidéos que tu aimes apparaîtront ici (visibles de toi seul, sauf réglage contraire).' : null),
     };
-    grid = videoGrid({ fetchPage: (cursor) => api.get(`${url}${cursor ? `?cursor=${cursor}` : ''}`), empty: empties[current], showLikes: current === 'liked' });
+    grid = videoGrid({ fetchPage: (cursor) => api.get(`${url}${cursor ? `?cursor=${cursor}` : ''}`), empty: empties[current], showLikes: current === 'liked', showPinned: current === 'videos' });
     content.replaceChildren(...(me && current === 'videos' ? [uploadsStrip] : []), grid.el);
     paintUploads();
   }

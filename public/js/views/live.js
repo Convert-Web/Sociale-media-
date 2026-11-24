@@ -5,7 +5,10 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, short, num, toast, emptyState, spinner, verifiedMark, duration, shareLink } from '../dom.js';
+import { h, icon, avatar, short, num, toast, emptyState, spinner, verifiedMark, duration, shareLink, plural, confirmDialog } from '../dom.js';
+
+const coinsLabel = (n) => plural(n, 'pièce', 'pièces');
+const viewersLabel = (n) => `${short(n)} ${n > 1 ? 'spectateurs' : 'spectateur'}`;
 import { openSheet, closeSheet } from '../components/sheet.js';
 import { needLogin, follow } from '../components/actions.js';
 import { reportDialog } from '../components/report.js';
@@ -32,6 +35,8 @@ export async function liveListView(ctx) {
   ctx.title = 'LIVE — Vibz';
   ctx.description = 'Les LIVE en cours sur Vibz.';
   const list = h('div', { class: 'live-grid' }, spinner());
+  const go = () => h('a', { href: store.user ? `/live/${enc(store.user.username)}` : '/connexion?suite=/live', class: 'btn btn-primary', onclick: (e) => needLogin('Connecte-toi pour passer en LIVE.') && e.preventDefault() }, icon('broadcast', 'icon-sm'), 'Passer en LIVE');
+  const cta = h('div', { class: 'live-cta' }, go());
   const load = async () => {
     try {
       const { lives } = await api.get('/api/live');
@@ -41,7 +46,9 @@ export async function liveListView(ctx) {
             h('span', { class: 'live-badge' }, 'LIVE'),
             h('span', { class: 'live-card-viewers' }, icon('eye', 'icon-xs'), short(l.viewers)),
             h('span', { class: 'live-card-info' }, h('b', null, l.host.displayName), h('small', null, l.title || 'En direct'))))
-        : [emptyState('live', 'Aucun LIVE en ce moment', 'Lance le tien : tes abonnés seront prévenus.')]));
+        : [emptyState('live', 'Aucun LIVE en ce moment', 'Lance le tien : tes abonnés seront prévenus.', go())]));
+      // Sans LIVE, le bouton est dans le message (sous le texte qui l'annonce)
+      cta.hidden = !lives.length;
     } catch (err) {
       list.replaceChildren(emptyState('alert', 'LIVE indisponibles', err.message));
     }
@@ -49,8 +56,7 @@ export async function liveListView(ctx) {
   await load();
   const timer = setInterval(load, 15000);
   ctx.onCleanup(() => clearInterval(timer));
-  const go = h('a', { href: store.user ? `/live/${enc(store.user.username)}` : '/connexion?suite=/live', class: 'btn btn-primary', onclick: (e) => needLogin('Connecte-toi pour passer en LIVE.') && e.preventDefault() }, icon('broadcast', 'icon-sm'), 'Passer en LIVE');
-  return h('div', { class: 'page live-list' }, h('header', { class: 'page-head' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => (history.length > 1 ? history.back() : navigate('/')) }, icon('back')), h('h1', null, 'LIVE'), h('span', { class: 'icon-btn' })), h('div', { class: 'live-cta' }, go), list);
+  return h('div', { class: 'page live-list' }, h('header', { class: 'page-head' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => (history.length > 1 ? history.back() : navigate('/')) }, icon('back')), h('h1', null, 'LIVE'), h('span', { class: 'icon-btn' })), cta, list);
 }
 
 // ---------------------------------------------------------------------------
@@ -92,29 +98,37 @@ function chatFeed() {
 }
 
 // Feuille des cadeaux : catalogue, solde, envoi
-function giftSheet(liveId, onSent) {
+function giftSheet(liveId, onSent, back) {
   const balance = h('b', null, '…');
+  const unit = h('span', null, 'pièces');
   const grid = h('div', { class: 'gift-grid' }, spinner());
+  let coins = 0;
+  const paintBalance = () => {
+    balance.textContent = num(coins);
+    unit.textContent = coins > 1 ? 'pièces' : 'pièce';
+    for (const b of grid.querySelectorAll('.gift')) b.classList.toggle('too-much', Number(b.dataset.coins) > coins);
+  };
   api.get('/api/wallet').then((w) => {
-    balance.textContent = num(w.coins);
-    grid.replaceChildren(...w.gifts.map((g) => h('button', { type: 'button', class: 'gift', onclick: async (e) => {
+    coins = w.coins;
+    grid.replaceChildren(...w.gifts.map((g) => h('button', { type: 'button', class: 'gift', dataset: { coins: g.coins }, 'aria-label': `${g.name}, ${coinsLabel(g.coins)}`, onclick: async (e) => {
       const btn = e.currentTarget;
+      if (g.coins > coins) return toast(`Il te faut ${coinsLabel(g.coins)} pour offrir ${g.name} : recharge ton portefeuille.`, 'error');
       btn.disabled = true;
       try {
         const r = await api.post(`/api/live/${liveId}/gift`, { gift: g.id, count: 1 });
-        balance.textContent = num(r.coins);
-        store.user && (store.user.coins = r.coins);
+        coins = r.coins;
+        paintBalance();
+        if (store.user) store.user.coins = r.coins;
         onSent?.(g);
       } catch (err) {
-        if (err.code === 'NO_COINS') {
-          toast('Pas assez de pièces : recharge ton portefeuille.', 'error');
-        } else toast(err.message, 'error');
+        toast(err.code === 'NO_COINS' ? 'Pas assez de pièces : recharge ton portefeuille.' : err.message, 'error');
       } finally {
         btn.disabled = false;
       }
     } }, h('span', { class: 'gift-emoji' }, g.emoji), h('b', null, g.name), h('small', null, icon('coin', 'icon-xs'), num(g.coins)))));
+    paintBalance();
   }).catch((err) => grid.replaceChildren(emptyState('alert', 'Cadeaux indisponibles', err.message)));
-  openSheet({ title: 'Cadeaux', body: h('div', { class: 'gifts' }, h('div', { class: 'gift-balance' }, icon('coin'), balance, h('span', null, 'pièces'), h('a', { href: '/portefeuille', class: 'btn btn-primary btn-sm', onclick: () => closeSheet() }, 'Recharger')), grid) });
+  openSheet({ title: 'Cadeaux', body: h('div', { class: 'gifts' }, h('div', { class: 'gift-balance' }, icon('coin'), balance, unit, h('a', { href: `/portefeuille?suite=${enc(back)}`, class: 'btn btn-primary btn-sm', onclick: () => closeSheet() }, 'Recharger')), grid) });
 }
 
 // ---------------------------------------------------------------------------
@@ -140,15 +154,22 @@ async function viewerView(ctx, username) {
   try {
     data = await api.get(`/api/live/user/${enc(username)}`);
   } catch (err) {
-    ctx.title = 'LIVE terminé — Vibz';
-    return h('div', { class: 'live-room ended' }, h('div', { class: 'live-ended' }, emptyState('live', err.code === 'NOT_LIVE' ? `@${username} n’est pas en LIVE` : 'LIVE indisponible', err.code === 'NOT_LIVE' ? 'Abonne-toi pour être prévenu de son prochain LIVE.' : err.message, h('a', { href: `/@${enc(username)}`, class: 'btn btn-primary' }, 'Voir le profil')), h('a', { href: '/live', class: 'link-btn' }, 'Autres LIVE')));
+    ctx.title = 'LIVE — Vibz';
+    const closeX = h('button', { type: 'button', class: 'icon-btn live-close live-ended-close', 'aria-label': 'Fermer', onclick: () => (history.length > 1 ? history.back() : navigate('/live')) }, icon('x'));
+    const body = err.code === 'USER_NOT_FOUND'
+      ? emptyState('user', 'Ce compte est introuvable', 'Le lien est peut-être incomplet, ou le compte a été supprimé.')
+      : err.code === 'NOT_LIVE'
+        ? emptyState('live', `@${username} n’est pas en LIVE`, 'Abonne-toi pour être prévenu de son prochain LIVE.', h('a', { href: `/@${enc(username)}`, class: 'btn btn-primary' }, 'Voir le profil'))
+        : emptyState('live', 'LIVE indisponible', err.message);
+    return h('div', { class: 'live-room ended' }, closeX, h('div', { class: 'live-ended' }, body, h('a', { href: '/live', class: 'link-btn' }, 'Autres LIVE')));
   }
   const live = data.live;
   ctx.title = `${live.host.displayName} en LIVE — Vibz`;
   const video = h('video', { class: 'live-video', autoplay: true, playsinline: true, 'webkit-playsinline': '' });
   video.playsInline = true;
   const status = h('div', { class: 'live-status' }, spinner(), h('span', null, 'Connexion au LIVE…'));
-  const viewersEl = h('small', null, `${short(live.viewers)} spectateur${live.viewers > 1 ? 's' : ''}`);
+  // Compteur affiché après sa propre arrivée (sinon « 0 spectateur » pendant la connexion)
+  const viewersEl = h('small', null, live.viewers ? viewersLabel(live.viewers) : '');
   const chat = chatFeed();
   const unmute = h('button', { type: 'button', class: 'feed-unmute', hidden: true, onclick: () => { video.muted = false; unmute.hidden = true; video.play().catch(() => {}); } }, icon('mute', 'icon-sm'), 'Activer le son');
   let following = live.following;
@@ -162,8 +183,8 @@ async function viewerView(ctx, username) {
     api.post(`/api/live/${live.id}/event`, { type: 'follow' }).catch(() => {});
   });
   const close = h('button', { type: 'button', class: 'icon-btn live-close', 'aria-label': 'Quitter le LIVE', onclick: () => (history.length > 1 ? history.back() : navigate('/live')) }, icon('x'));
-  const more = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Options', onclick: () => !needLogin('Connecte-toi pour signaler.') && reportDialog('live', live.id, 'Signaler ce LIVE') }, icon('flag'));
-  const input = h('input', { class: 'live-input', type: 'text', maxlength: 150, placeholder: store.user ? 'Ajouter un commentaire…' : 'Connecte-toi pour commenter', enterkeyhint: 'send' });
+  const more = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Signaler ce LIVE', onclick: () => !needLogin('Connecte-toi pour signaler.') && reportDialog('live', live.id, 'Signaler ce LIVE') }, icon('flag'));
+  const input = h('input', { class: 'live-input', type: 'text', maxlength: 150, placeholder: store.user ? 'Commenter…' : 'Connecte-toi pour commenter', 'aria-label': 'Commenter le LIVE', enterkeyhint: 'send' });
   const form = h('form', { class: 'live-form', onsubmit: async (e) => {
     e.preventDefault();
     if (needLogin('Connecte-toi pour commenter.')) return;
@@ -174,13 +195,16 @@ async function viewerView(ctx, username) {
       await api.post(`/api/live/${live.id}/comment`, { body });
       pollNow();
     } catch (err) {
+      // Refusé : le texte revient dans le champ, pour être corrigé
+      if (!input.value) input.value = body;
       toast(err.message, 'error');
     }
   } }, input);
   input.addEventListener('focus', () => needLogin('Connecte-toi pour commenter.') && input.blur());
   let pendingLikes = 0;
+  const sentLikes = []; // envois d'un visiteur (sans compte) : ses cœurs sont déjà affichés
   const heartBtn = h('button', { type: 'button', class: 'live-act', 'aria-label': 'Envoyer des cœurs', onclick: () => { pendingLikes++; chat.floatHeart(); } }, icon('heart-fill'));
-  const giftBtn = h('button', { type: 'button', class: 'live-act', 'aria-label': 'Cadeaux', onclick: () => !needLogin('Connecte-toi pour offrir des cadeaux.') && giftSheet(live.id, () => pollNow()) }, icon('gift'));
+  const giftBtn = h('button', { type: 'button', class: 'live-act', 'aria-label': 'Cadeaux', onclick: () => !needLogin('Connecte-toi pour offrir des cadeaux.') && giftSheet(live.id, () => pollNow(), `/live/${live.host.username}`) }, icon('gift'));
   const shareBtn = h('button', { type: 'button', class: 'live-act', 'aria-label': 'Partager', onclick: async () => { await shareLink(`${live.host.displayName} est en LIVE sur Vibz`, `/live/${enc(live.host.username)}`); if (store.user) api.post(`/api/live/${live.id}/event`, { type: 'share' }).catch(() => {}); } }, icon('shareFill'));
   const root = h('div', { class: 'live-room' },
     video, status, unmute, chat.gifts, chat.hearts,
@@ -227,7 +251,11 @@ async function viewerView(ctx, username) {
           status.replaceChildren(spinner(), h('span', null, 'Reconnexion…'));
           retryTimer = setTimeout(connect, 2000);
         }
-        if (s === 'disconnected') retryTimer = setTimeout(() => pc.connectionState !== 'connected' && connect(), 6000);
+        if (s === 'disconnected') {
+          status.hidden = false;
+          status.replaceChildren(spinner(), h('span', null, 'Reconnexion…'));
+          retryTimer = setTimeout(() => pc.connectionState !== 'connected' && connect(), 6000);
+        }
       };
       await pc.setLocalDescription(await pc.createOffer());
       await waitIce(pc);
@@ -255,7 +283,10 @@ async function viewerView(ctx, username) {
     try {
       const likes = pendingLikes;
       pendingLikes = 0;
-      if (likes) api.post(`/api/live/${live.id}/like`, { count: likes }).catch(() => {});
+      if (likes) {
+        if (!store.user) sentLikes.push(likes);
+        api.post(`/api/live/${live.id}/like`, { count: likes }).catch(() => {});
+      }
       const d = await api.get(`/api/live/${live.id}/poll?peer=${peer || ''}&after=${after}`);
       if (d.answer && pc && pc.signalingState === 'have-local-offer') {
         awaitingAnswer = false;
@@ -263,11 +294,19 @@ async function viewerView(ctx, username) {
         await pc.setRemoteDescription({ type: 'answer', sdp: d.answer });
       }
       for (const e of d.events) {
-        // Ses propres cœurs sont déjà affichés
-        if (!(e.type === 'like' && e.user && e.user.id === store.user?.id)) chat.show(e);
         after = Math.max(after, e.id);
+        // Ses propres cœurs sont déjà affichés (avec un compte : par l'identifiant ; sans : par l'envoi)
+        if (e.type === 'like' && e.user && e.user.id === store.user?.id) continue;
+        if (e.type === 'like' && !e.user && !store.user) {
+          const i = sentLikes.indexOf(e.count);
+          if (i >= 0) {
+            sentLikes.splice(i, 1);
+            continue;
+          }
+        }
+        chat.show(e);
       }
-      viewersEl.textContent = `${short(d.viewers)} spectateur${d.viewers > 1 ? 's' : ''}`;
+      viewersEl.textContent = viewersLabel(d.viewers);
       if (d.ended) return showEnded();
     } catch {
       /* nouvel essai au prochain tour */
@@ -279,7 +318,12 @@ async function viewerView(ctx, username) {
     poll();
   };
   connect().then(poll);
-  const leave = () => peer && fetch(`/api/live/${live.id}/leave`, { method: 'POST', headers: { 'x-vibz': '1', 'content-type': 'application/json' }, body: JSON.stringify({ peer }), keepalive: true }).catch(() => {});
+  const leave = () => {
+    if (!peer) return;
+    const body = JSON.stringify({ peer });
+    if (navigator.sendBeacon?.(`/api/live/${live.id}/leave`, new Blob([body], { type: 'application/json' }))) return;
+    fetch(`/api/live/${live.id}/leave`, { method: 'POST', headers: { 'x-vibz': '1', 'content-type': 'application/json' }, body, keepalive: true }).catch(() => {});
+  };
   addEventListener('pagehide', leave);
   ctx.onCleanup(() => {
     destroyed = true;
@@ -309,6 +353,8 @@ async function hostView(ctx) {
     stream?.getTracks().forEach((t) => t.stop());
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 720 }, height: { ideal: 1280 }, frameRate: { ideal: 30 } }, audio: { echoCancellation: true, noiseSuppression: true } });
+      // Micro coupé : il le reste avec la nouvelle caméra (sinon les spectateurs entendraient tout)
+      stream.getAudioTracks().forEach((t) => (t.enabled = micOn));
       video.srcObject = stream;
       video.classList.toggle('mirror', facing === 'user');
       status.hidden = true;
@@ -322,7 +368,9 @@ async function hostView(ctx) {
       return true;
     } catch (err) {
       status.hidden = false;
-      status.replaceChildren(icon('videoOff'), h('span', null, err?.name === 'NotAllowedError' ? 'Autorise la caméra et le micro pour passer en LIVE.' : 'Caméra introuvable sur cet appareil.'));
+      const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+      status.replaceChildren(icon('videoOff'), h('span', null, err?.name === 'NotAllowedError' ? (ios ? 'Autorise la caméra et le micro : Réglages de l’iPhone → Safari → Caméra et Micro, puis recharge la page.' : 'Autorise la caméra et le micro (icône à gauche de l’adresse), puis recharge la page.') : 'Caméra introuvable sur cet appareil.'));
+      toast(err?.name === 'NotAllowedError' ? 'Accès à la caméra refusé' : 'Caméra introuvable', 'error');
       return false;
     }
   }
@@ -334,7 +382,7 @@ async function hostView(ctx) {
   let clockTimer = 0;
   let destroyed = false;
   const chat = chatFeed();
-  const viewersEl = h('small', null, '0 spectateur');
+  const viewersEl = h('small', { hidden: true }, '');
   const statsEl = h('span', { class: 'live-stats' });
   const clock = h('span', { class: 'live-clock' }, '0:00');
   const title = h('input', { class: 'input live-title-input', maxlength: 80, placeholder: 'Ajoute un titre à ton LIVE' });
@@ -343,8 +391,14 @@ async function hostView(ctx) {
   const mic = h('button', { type: 'button', class: 'live-tool', 'aria-label': 'Micro', onclick: () => { micOn = !micOn; stream?.getAudioTracks().forEach((t) => (t.enabled = micOn)); mic.replaceChildren(icon(micOn ? 'mic' : 'micOff'), h('small', null, micOn ? 'Micro' : 'Muet')); } }, icon('mic'), h('small', null, 'Micro'));
   const startBtn = h('button', { type: 'button', class: 'btn btn-primary btn-lg live-go' }, 'Passer en LIVE');
   const endBtn = h('button', { type: 'button', class: 'btn btn-danger btn-sm', hidden: true }, 'Terminer');
-  const close = h('button', { type: 'button', class: 'icon-btn live-close', 'aria-label': 'Fermer', onclick: () => (history.length > 1 ? history.back() : navigate('/live')) }, icon('x'));
-  const setup = h('div', { class: 'live-setup' }, h('div', { class: 'live-setup-who' }, avatar(me, 'md'), h('b', null, me.displayName)), title, h('p', { class: 'muted small' }, 'Tes abonnés sont prévenus. Les spectateurs reçoivent l’image directement depuis ton appareil.'), startBtn);
+  // Pendant le LIVE, quitter l'écran termine le direct : on le demande d'abord
+  const leaveRoom = () => (history.length > 1 ? history.back() : navigate('/live'));
+  const close = h('button', { type: 'button', class: 'icon-btn live-close', 'aria-label': 'Fermer', onclick: async () => {
+    if (live && !(await confirmDialog('Terminer le LIVE ?', 'Quitter cet écran termine le direct pour tous tes spectateurs.', 'Terminer'))) return;
+    if (live) await finish({ silent: true });
+    leaveRoom();
+  } }, icon('x'));
+  const setup = h('div', { class: 'live-setup' }, h('div', { class: 'live-setup-who' }, avatar(me, 'md'), h('b', null, me.displayName)), title, h('p', { class: 'muted small' }, 'Tes abonnés seront prévenus dès que tu passes en LIVE. Les spectateurs reçoivent l’image directement depuis ton appareil.'), startBtn);
   const hostTop = h('header', { class: 'live-top' }, h('span', { class: 'live-host' }, avatar(me, 'sm'), h('span', null, h('b', null, me.displayName), viewersEl)), h('span', { class: 'grow' }), h('span', { class: 'live-badge', hidden: true }, 'LIVE'), clock, endBtn, close);
   clock.hidden = true;
   const root = h('div', { class: 'live-room host' }, video, status, chat.gifts, chat.hearts, hostTop,
@@ -385,7 +439,7 @@ async function hostView(ctx) {
         chat.show(e);
         after = Math.max(after, e.id);
       }
-      viewersEl.textContent = `${short(d.viewers)} spectateur${d.viewers > 1 ? 's' : ''}`;
+      viewersEl.textContent = viewersLabel(d.viewers);
       statsEl.replaceChildren(h('span', null, icon('heart-fill', 'icon-xs'), short(d.likes)), h('span', null, icon('diamond', 'icon-xs'), short(d.diamonds)));
     } catch (err) {
       if (err.code === 'LIVE_ENDED') return finish();
@@ -403,6 +457,8 @@ async function hostView(ctx) {
       endBtn.hidden = false;
       hostTop.querySelector('.live-badge').hidden = false;
       clock.hidden = false;
+      viewersEl.hidden = false;
+      viewersEl.textContent = viewersLabel(0);
       const t0 = Date.now();
       clockTimer = setInterval(() => (clock.textContent = duration((Date.now() - t0) / 1000)), 1000);
       toast('Tu es en LIVE !');
@@ -412,7 +468,7 @@ async function hostView(ctx) {
       toast(err.message, 'error');
     }
   });
-  async function finish() {
+  async function finish({ silent = false } = {}) {
     clearTimeout(pollTimer);
     clearInterval(clockTimer);
     for (const pc of peers.values()) pc.close();
@@ -421,6 +477,7 @@ async function hostView(ctx) {
     if (live) summary = (await api.post(`/api/live/${live.id}/end`).catch(() => null))?.summary;
     live = null;
     stream?.getTracks().forEach((t) => t.stop());
+    if (silent) return;
     root.classList.add('ended');
     root.append(h('div', { class: 'live-ended' }, h('h2', null, 'LIVE terminé'),
       summary ? h('div', { class: 'kpis small' },
@@ -431,7 +488,9 @@ async function hostView(ctx) {
         h('div', { class: 'kpi' }, h('small', null, 'Nouveaux abonnés'), h('b', null, short(summary.newFollowers)))) : null,
       h('a', { href: '/studio', class: 'btn btn-ghost' }, 'Studio créateur'), h('a', { href: '/', class: 'btn btn-primary' }, 'Retour à l’accueil')));
   }
-  endBtn.addEventListener('click', finish);
+  endBtn.addEventListener('click', async () => {
+    if (await confirmDialog('Terminer le LIVE ?', 'Tes spectateurs verront la fin du direct.', 'Terminer')) finish();
+  });
   const endOnLeave = () => live && fetch(`/api/live/${live.id}/end`, { method: 'POST', headers: { 'x-vibz': '1' }, keepalive: true }).catch(() => {});
   addEventListener('pagehide', endOnLeave);
   ctx.onCleanup(() => {
@@ -444,5 +503,11 @@ async function hostView(ctx) {
     stream?.getTracks().forEach((t) => t.stop());
   });
   openCamera();
+  // Déjà en LIVE sur un autre appareil : on le dit avant de proposer d'en lancer un ici
+  api.get(`/api/live/user/${enc(me.username)}`).then(() => {
+    if (destroyed || live) return;
+    startBtn.textContent = 'Reprendre le LIVE ici';
+    setup.querySelector('.muted')?.replaceWith(h('p', { class: 'live-elsewhere' }, icon('info', 'icon-sm'), 'Tu es déjà en LIVE sur un autre appareil. Le reprendre ici le terminera là-bas.'));
+  }).catch(() => {});
   return root;
 }

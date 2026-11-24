@@ -5,7 +5,7 @@ import { openViewer } from './feed.js';
 import { warmImages } from '../warm.js';
 import { filterCss } from './fx.js';
 
-export function tile(post, { onOpen, showAuthor = false, showLikes = false } = {}) {
+export function tile(post, { onOpen, showAuthor = false, showLikes = false, showPinned = false, badge = null } = {}) {
   const img = post.video?.poster || post.images?.[0] || null;
   const filter = filterCss(post.fx?.filter);
   const media = img
@@ -15,18 +15,21 @@ export function tile(post, { onOpen, showAuthor = false, showLikes = false } = {
     'a',
     { href: `/@${post.author.username}/video/${post.id}`, class: 'tile', onclick: (e) => { e.preventDefault(); onOpen(post); } },
     media,
-    post.pinned ? h('span', { class: 'tile-pin' }, 'Épinglée') : null,
+    badge ? h('span', { class: 'tile-pin' }, badge) : post.pinned && showPinned ? h('span', { class: 'tile-pin' }, 'Épinglée') : null,
     post.kind === 'photo' && post.images.length > 1 ? h('span', { class: 'tile-kind' }, icon('photo', 'icon-xs')) : null,
     post.privacy === 'private' ? h('span', { class: 'tile-kind' }, icon('lock', 'icon-xs')) : null,
-    showAuthor ? h('span', { class: 'tile-author' }, avatar(post.author, 'xs'), post.author.displayName) : null,
+    showAuthor ? h('span', { class: 'tile-author' }, avatar(post.author, 'xs'), h('span', null, post.author.displayName)) : null,
     h('span', { class: 'tile-views' }, icon(showLikes ? 'heart' : 'play', 'icon-xs'), short(showLikes ? post.likeCount : post.viewCount)),
     post.body && showAuthor ? h('span', { class: 'tile-caption' }, post.body.slice(0, 60)) : null,
   );
 }
 
-// fetchPage(cursor) → { posts, cursor }
-export function videoGrid({ fetchPage, empty = null, showAuthor = false, showLikes = false, columns = 3 } = {}) {
+// fetchPage(cursor) → { posts, cursor }. initial : pages déjà chargées (retour en arrière, la
+// position est retrouvée d'un coup) ; onPage : prévenu à chaque page (pour les garder en mémoire).
+export function videoGrid({ fetchPage, empty = null, showAuthor = false, showLikes = false, showPinned = false, tileBadge = null, columns = 3, initial = null, onPage = null, skeletons = 9 } = {}) {
   const grid = h('div', { class: `grid cols-${columns}` });
+  // Squelettes jusqu'à la première page (la grille garde sa place : rien ne saute)
+  if (!initial?.posts?.length && skeletons) grid.append(...Array.from({ length: skeletons }, () => h('div', { class: 'tile sk', 'aria-hidden': 'true' })));
   const sentinel = h('div', { class: 'grid-sentinel' });
   const loader = h('div', { class: 'grid-loader' }, spinner());
   const root = h('div', { class: 'grid-wrap' }, grid, loader, sentinel);
@@ -48,18 +51,21 @@ export function videoGrid({ fetchPage, empty = null, showAuthor = false, showLik
     loading = true;
     try {
       const d = await fetchPage(cursor);
+      grid.querySelectorAll(':scope > .sk').forEach((el) => el.remove());
       const fresh = d.posts.filter((p) => !posts.some((x) => x.id === p.id));
       posts.push(...fresh);
-      for (const p of fresh) grid.append(tile(p, { onOpen: open, showAuthor, showLikes }));
+      for (const p of fresh) grid.append(tile(p, { onOpen: open, showAuthor, showLikes, showPinned, badge: tileBadge?.(p) }));
       warmImages(fresh.map((p) => p.video?.poster || p.images?.[0]).filter(Boolean));
       cursor = d.cursor;
       done = !d.cursor;
+      onPage?.({ posts, cursor });
       if (!posts.length) {
         grid.replaceWith(h('div', { class: 'grid-empty' }, empty || emptyState('video', 'Aucune vidéo', null)));
       }
       return fresh;
     } catch (err) {
       toast(err.message, 'error');
+      grid.querySelectorAll(':scope > .sk').forEach((el) => el.remove());
       done = true;
       return [];
     } finally {
@@ -67,7 +73,14 @@ export function videoGrid({ fetchPage, empty = null, showAuthor = false, showLik
       loader.hidden = done;
     }
   }
+  if (initial?.posts?.length) {
+    posts.push(...initial.posts);
+    for (const p of posts) grid.append(tile(p, { onOpen: open, showAuthor, showLikes, showPinned, badge: tileBadge?.(p) }));
+    cursor = initial.cursor;
+    done = !cursor;
+    loader.hidden = done;
+  }
   const stop = infinite(sentinel, load);
-  load();
+  if (!initial?.posts?.length) load();
   return { el: root, destroy: stop, get posts() { return posts; } };
 }

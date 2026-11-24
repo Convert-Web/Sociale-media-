@@ -19,7 +19,7 @@ async function request(method, url, body) {
   try {
     res = await fetch(url, opts);
   } catch {
-    throw new ApiError(0, 'Connexion impossible. Vérifiez votre réseau.');
+    throw new ApiError(0, 'Connexion impossible. Vérifie ta connexion Internet.');
   }
   return handle(res);
 }
@@ -30,7 +30,7 @@ export async function fromResponse(promise) {
   try {
     res = await promise;
   } catch {
-    throw new ApiError(0, 'Connexion impossible. Vérifiez votre réseau.');
+    throw new ApiError(0, 'Connexion impossible. Vérifie ta connexion Internet.');
   }
   return handle(res);
 }

@@ -25,15 +25,15 @@ function assertHuman(body) {
   if (typeof body?.website === 'string' && body.website.trim()) fail(400, 'Inscription refusée.', 'SPAM');
   const elapsed = Number(body?.elapsed);
   if (body?.elapsed !== undefined && Number.isFinite(elapsed) && elapsed < MIN_FILL_MS) {
-    fail(400, 'Envoi trop rapide. Vérifiez vos informations puis réessayez.', 'TOO_FAST');
+    fail(400, 'Envoi trop rapide. Vérifie tes informations puis réessaie.', 'TOO_FAST');
   }
 }
 
 // Rafales : nombre maximal d'envois par membre sur une période
 const LIMITS = {
-  post: { table: 'posts', col: 'user_id', max: 15, ms: 3600e3, msg: 'Vous avez beaucoup publié en peu de temps. Réessayez dans un moment.' },
-  comment: { table: 'comments', col: 'user_id', max: 40, ms: 600e3, msg: 'Trop de commentaires en peu de temps. Patientez quelques minutes.' },
-  message: { table: 'messages', col: 'sender_id', max: 60, ms: 300e3, msg: 'Trop de messages d’affilée. Patientez quelques minutes.' },
+  post: { table: 'posts', col: 'user_id', max: 15, ms: 3600e3, msg: 'Tu as beaucoup publié en peu de temps. Réessaie dans un moment.' },
+  comment: { table: 'comments', col: 'user_id', max: 40, ms: 600e3, msg: 'Trop de commentaires en peu de temps. Patiente quelques minutes.' },
+  message: { table: 'messages', col: 'sender_id', max: 60, ms: 300e3, msg: 'Trop de messages d’affilée. Patiente quelques minutes.' },
   story: { table: 'stories', col: 'user_id', max: 30, ms: 86400e3, msg: 'Limite de stories atteinte pour aujourd’hui.' },
 };
 async function throttle(ctx, user, kind) {
@@ -49,7 +49,7 @@ const LOCK_MS = 15 * 60e3;
 function assertNotLocked(user) {
   if (user?.login_locked_until && user.login_locked_until > Date.now()) {
     const min = Math.ceil((user.login_locked_until - Date.now()) / 60e3);
-    fail(429, `Trop d’essais sur ce compte. Réessayez dans ${min} min, ou réinitialisez votre mot de passe.`, 'LOCKED');
+    fail(429, `Trop d’essais sur ce compte. Réessaie dans ${min} min, ou réinitialise ton mot de passe.`, 'LOCKED');
   }
 }
 async function loginFailed(ctx, user) {

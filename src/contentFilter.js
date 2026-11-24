@@ -214,7 +214,7 @@ const labels = (categories) => categories.map((c) => CATEGORIES[c] || c);
 // Message d'erreur adressé à l'auteur d'un contenu refusé
 function blockedMessage(categories) {
   if (categories.includes('carte')) {
-    return 'Ce texte contient un numéro de carte bancaire : par sécurité, il n’est pas envoyé. Ne partagez jamais vos coordonnées bancaires, même en privé.';
+    return 'Ce texte contient un numéro de carte bancaire : par sécurité, il n’est pas envoyé. Ne partage jamais tes coordonnées bancaires, même en privé.';
   }
   return `Ce texte ne peut pas être envoyé (${labels(categories).join(', ').toLowerCase()}). Le cercle n’accepte ni propos haineux, ni menaces. Merci de le reformuler.`;
 }

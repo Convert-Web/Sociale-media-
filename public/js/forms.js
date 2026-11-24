@@ -5,9 +5,9 @@
 export function messageFor(el) {
   const v = el.validity;
   if (v.valueMissing) {
-    if (el.type === 'checkbox') return 'Cochez cette case pour continuer.';
-    if (el.type === 'file') return 'Choisissez un fichier.';
-    if (el.tagName === 'SELECT') return 'Choisissez une option.';
+    if (el.type === 'checkbox') return 'Coche cette case pour continuer.';
+    if (el.type === 'file') return 'Choisis un fichier.';
+    if (el.tagName === 'SELECT') return 'Choisis une option.';
     return 'Ce champ est obligatoire.';
   }
   if (v.typeMismatch) {
@@ -43,6 +43,13 @@ function show(el, msg) {
   box.textContent = msg;
   el.setAttribute('aria-invalid', 'true');
   el.setAttribute('aria-describedby', box.id);
+}
+
+// Erreur renvoyée par le serveur : sous le champ concerné, mise au point dessus
+export function fieldError(el, msg) {
+  show(el, msg);
+  el.focus({ preventScroll: true });
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 function clearError(el) {
