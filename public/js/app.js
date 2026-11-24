@@ -27,6 +27,7 @@ import { settingsView, getTheme, setTheme } from './views/settings.js';
 import { adminView } from './views/admin.js';
 import { loginView, signupView, forgotView, resetView, logout } from './views/auth.js';
 import { welcomeView } from './views/onboarding.js';
+import { landingView } from './views/landing.js';
 import { legalView } from './views/legal.js';
 import { helpView, rulesView } from './views/help.js';
 
@@ -66,6 +67,7 @@ const ROUTES = [
   { path: '/reglages/:section', view: settingsView, layout: 'app', nav: 'more', access: 'auth' },
   { path: '/admin', view: adminView, layout: 'app', nav: 'more', access: 'admin', wide: true },
   { path: '/bienvenue', view: welcomeView, layout: 'bare', access: 'auth' },
+  { path: '/rejoindre', view: landingView, layout: 'bare', access: 'guest' },
   { path: '/connexion', view: loginView, layout: 'bare', access: 'guest' },
   { path: '/inscription', view: signupView, layout: 'bare', access: 'guest' },
   { path: '/mot-de-passe-oublie', view: forgotView, layout: 'bare', access: 'guest' },
@@ -268,6 +270,9 @@ function buildShell() {
 // ---------------------------------------------------------------------------
 // Rendu des routes
 // ---------------------------------------------------------------------------
+// Pages ouvertes sans compte : l'entrée, la connexion et l'inscription, l'aide et les pages légales
+const OPEN_PATHS = new Set(['/rejoindre', '/connexion', '/inscription', '/mot-de-passe-oublie', '/reinitialiser', '/aide', '/regles', '/cgu', '/cgv', '/rgpd', '/confidentialite', '/mentions-legales']);
+
 let shell = null;
 let renderToken = 0;
 let cleanups = [];
@@ -347,16 +352,20 @@ async function render(opts = {}) {
   const u = store.user;
   const here = url.pathname + url.search;
 
+  // Sans compte : d'abord la page d'entrée (créer un compte ou se connecter), puis la page voulue
+  if (!u && !OPEN_PATHS.has(url.pathname)) return navigate(here === '/' ? '/rejoindre' : `/rejoindre?suite=${enc(here)}`, { replace: true });
+
   if (route) {
     if (route.access === 'guest' && u) return navigate(url.searchParams.get('suite') || '/', { replace: true });
-    if ((route.access === 'auth' || route.access === 'admin') && !u) return navigate(`/connexion?suite=${enc(here)}`, { replace: true });
+    if ((route.access === 'auth' || route.access === 'admin') && !u) return navigate(`/rejoindre?suite=${enc(here)}`, { replace: true });
     if (route.access === 'admin' && !u.isAdmin) {
       toast('Cette page est réservée à l’administration.', 'error');
       return navigate('/', { replace: true });
     }
   }
 
-  const layout = !route ? 'app' : route.layout === 'auto' ? 'app' : route.layout;
+  // Aide et pages légales : dans l'application avec un compte, en page simple sans
+  const layout = !route ? 'app' : route.layout === 'auto' ? (u ? 'app' : 'bare') : route.layout;
   const mine = [];
   const ctx = { params, query: url.searchParams, route, pop: Boolean(opts.pop), title: null, description: null, onCleanup: (fn) => typeof fn === 'function' && mine.push(fn) };
 
@@ -396,6 +405,7 @@ async function render(opts = {}) {
   else if (!opts.same) scroller().scrollTop = 0;
   baseTitle = ctx.title || 'Vibz';
   paintTitle();
+  if (window.__vibzStarted && url.pathname !== '/rejoindre') cookieBanner();
   const desc = document.querySelector('meta[name="description"]');
   if (desc && ctx.description) desc.content = ctx.description;
   if (!opts.same) trackPage(route ? route.path : '404');
@@ -510,7 +520,7 @@ setRenderer(render);
     syncPush();
   }
   // Les premières vidéos de « Pour toi » se préparent pendant le rendu
-  if (location.pathname === '/') prefetchReels();
+  if (location.pathname === '/' && store.user) prefetchReels();
   registerServiceWorker();
   window.__vibzStarted = true;
   startUpdateChecks();
@@ -521,5 +531,5 @@ setRenderer(render);
     }
   });
   render();
-  setTimeout(() => cookieBanner(), 2500);
+  setTimeout(() => location.pathname !== '/rejoindre' && cookieBanner(), 2500);
 })();

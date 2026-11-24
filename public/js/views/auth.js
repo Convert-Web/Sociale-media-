@@ -15,7 +15,7 @@ function frame(ctx, title, subtitle, ...content) {
   return h(
     'div',
     { class: 'auth' },
-    h('header', { class: 'auth-top' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Fermer', onclick: () => navigate(safePath(ctx.query.get('suite'), '/')) }, icon('x')), h('a', { href: '/aide', class: 'icon-btn', 'aria-label': 'Aide' }, icon('help'))),
+    h('header', { class: 'auth-top' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => { const s = safePath(ctx.query.get('suite'), ''); navigate(s ? `/rejoindre?suite=${enc(s)}` : '/rejoindre'); } }, icon('back')), h('a', { href: '/aide', class: 'icon-btn', 'aria-label': 'Aide' }, icon('help'))),
     h('div', { class: 'auth-card' }, h('div', { class: 'auth-logo' }, logoMark(56)), h('h1', null, title), subtitle ? h('p', { class: 'auth-sub' }, subtitle) : null, ...content),
   );
 }

@@ -465,7 +465,7 @@ test('contenu de démonstration : ajout et retrait depuis l’administration', a
 });
 
 test('pages de l’application, 404, robots et accord avec vercel.json', async () => {
-  for (const p of ['/', '/explorer', '/@alice', '/@alice/video/1', '/tag/danse', '/son/1', '/live', '/messages/bob', '/reglages']) {
+  for (const p of ['/', '/rejoindre', '/actu', '/actu/3', '/explorer', '/@alice', '/@alice/video/1', '/tag/danse', '/son/1', '/live', '/messages/bob', '/reglages']) {
     const res = await fetch(base + p);
     assert.equal(res.status, 200, p);
   }
