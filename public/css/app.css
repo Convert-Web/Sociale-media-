@@ -6449,3 +6449,737 @@ body.no-side-search .side-search {
     pointer-events: none;
   }
 }
+
+/* ===========================================================================
+   L'Actu : la une, le brief, à écouter, à regarder, les réactions en vidéo
+   =========================================================================== */
+.page.actu {
+  padding-bottom: 32px;
+}
+@media (min-width: 900px) {
+  .page.actu {
+    max-width: 900px;
+  }
+}
+.actu-updated {
+  display: block;
+  margin: -6px 0 6px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.actu-fresh {
+  position: sticky;
+  top: calc(var(--safe-t) + 8px);
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px auto 8px;
+  padding: 8px 14px;
+  border-radius: 99px;
+  background: var(--primary-fill);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13.5px;
+  box-shadow: var(--shadow);
+}
+.actu-fresh[hidden] {
+  display: none;
+}
+.actu-loading,
+.actu-first {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  min-height: 40vh;
+  color: var(--muted);
+  text-align: center;
+}
+.actu-section {
+  margin-top: 6px;
+}
+.actu-section .section-title small {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+  margin-top: 2px;
+}
+/* Images des médias : fond neutre tant qu'elles chargent, masquées si elles échouent */
+.actu-card-img,
+.actu-thumb,
+.actu-media,
+.actu-pod-art {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-2);
+}
+:is(.actu-card-img, .actu-thumb, .actu-media, .actu-pod-art) img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.no-img img {
+  display: none;
+}
+/* La une */
+.actu-lead {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+.actu-lead .actu-card-img {
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+}
+.actu-lead-text {
+  display: grid;
+  gap: 6px;
+}
+.actu-kicker {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--primary);
+  text-transform: none;
+}
+.actu-lead b {
+  font-size: 21px;
+  line-height: 1.22;
+  letter-spacing: -0.01em;
+}
+.actu-lead-sum {
+  color: var(--fg-2);
+  font-size: 15px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.actu-lead-more {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
+}
+.actu-lead.small b {
+  font-size: 15px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.actu-lead.small .actu-card-img {
+  border-radius: 12px;
+}
+/* Le brief : les titres du moment, numérotés */
+.actu-brief {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: brief;
+  display: grid;
+  border-radius: 14px;
+  background: var(--bg-2);
+}
+.actu-brief li {
+  counter-increment: brief;
+  border-bottom: 1px solid var(--line);
+}
+.actu-brief li:last-child {
+  border-bottom: 0;
+}
+.actu-brief a {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 8px;
+  padding: 12px 14px 12px 10px;
+}
+.actu-brief a::before {
+  content: counter(brief);
+  grid-row: span 2;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--primary);
+  text-align: center;
+}
+.actu-brief b {
+  font-size: 15px;
+  line-height: 1.3;
+}
+.actu-brief small {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 3px;
+}
+/* Rangées défilantes (à écouter, à regarder, ça fait réagir) */
+.actu-rail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  margin-inline: -16px;
+  padding: 2px 16px 6px;
+  scroll-padding-inline: 16px;
+}
+.actu-rail::-webkit-scrollbar {
+  display: none;
+}
+.actu-rail > * {
+  scroll-snap-align: start;
+  flex: none;
+}
+.actu-vid,
+.actu-reacted {
+  width: 230px;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+.actu-vid .actu-card-img,
+.actu-reacted .actu-card-img {
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+}
+.actu-vid b,
+.actu-reacted b,
+.actu-pod-text b {
+  font-size: 14px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.actu-vid small,
+.actu-reacted small,
+.actu-pod-text small {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.actu-thumb-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.actu-reacted-count {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: var(--primary-fill);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+/* Épisodes de podcast */
+.actu-pod {
+  width: 250px;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--bg-2);
+}
+.actu-pod-art {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+}
+.actu-pod-text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.actu-play {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary-fill);
+  color: #fff;
+}
+.actu-list .actu-pod,
+.actu-list > .actu-pod {
+  width: auto;
+  margin-bottom: 8px;
+}
+/* Liste : texte à gauche, image à droite */
+.actu-list {
+  display: grid;
+}
+.actu-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.actu-row-text {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  min-width: 0;
+}
+.actu-row b {
+  font-size: 15.5px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.actu-src {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--muted);
+  min-width: 0;
+}
+.actu-react {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.actu-thumb {
+  width: 104px;
+  height: 78px;
+  border-radius: 10px;
+}
+.actu-thumb .actu-thumb-play {
+  width: 28px;
+  height: 28px;
+}
+.actu-vid-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 16px;
+}
+.actu-vid-grid .actu-vid {
+  width: auto;
+}
+/* Fiche d'une actualité */
+.actu-sheet {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+.actu-media {
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+}
+.actu-media.embed iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.actu-embed-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+}
+.actu-embed-play .icon {
+  width: 30px;
+  height: 30px;
+}
+.actu-media.podcast {
+  aspect-ratio: auto;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  background: var(--bg-2);
+}
+.actu-media.podcast img {
+  position: static;
+  width: 110px;
+  height: 110px;
+  border-radius: 12px;
+}
+.actu-pod-play {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+.actu-pod-play small {
+  color: var(--muted);
+}
+.actu-sheet-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+.actu-sheet-meta small {
+  color: var(--muted);
+  font-size: 13px;
+}
+.actu-topic {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 750;
+}
+.actu-topic.une {
+  background: var(--primary-fill);
+  color: #fff;
+}
+.actu-sheet-title {
+  font-size: 21px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.actu-sheet-summary {
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--fg-2);
+}
+.actu-credit {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.actu-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.actu-actions .actu-read {
+  grid-column: 1 / -1;
+}
+.actu-actions .btn {
+  min-width: 0;
+  padding-inline: 12px;
+  white-space: nowrap;
+}
+.actu-share {
+  background: var(--bg-2);
+}
+.actu-reactions .section-title {
+  margin-top: 8px;
+}
+.actu-admin {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.danger-text {
+  color: var(--danger);
+}
+/* « Réagit à : … » sur une vidéo du fil */
+.info-chip.actu-chip {
+  max-width: 100%;
+  background: rgba(108, 77, 255, 0.55);
+}
+.info-chip.actu-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Création : l'actualité à laquelle on réagit */
+.post-actu {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 6px 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-2));
+}
+.post-actu-ic {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--primary-fill);
+  color: #fff;
+}
+.post-actu-text {
+  display: grid;
+  min-width: 0;
+}
+.post-actu-text b {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.post-actu-text small {
+  font-size: 12px;
+  color: var(--muted);
+}
+/* Administration de l'Actu */
+.admin-source {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.admin-source:last-child {
+  border-bottom: 0;
+}
+.admin-source-ic {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--bg-3);
+}
+.admin-source .tx-text small {
+  display: block;
+}
+.input.input-sm {
+  height: 36px;
+  padding: 0 8px;
+  font-size: 13px;
+  width: auto;
+  max-width: 130px;
+}
+@media (max-width: 480px) {
+  .admin-source {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+  }
+  .admin-source .input-sm {
+    grid-column: 2 / 3;
+    max-width: none;
+  }
+}
+.row-search {
+  display: flex;
+  gap: 8px;
+}
+.row-search .input {
+  flex: 1;
+  min-width: 0;
+}
+.admin-pod-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex: none;
+}
+.set-card.pad {
+  padding: 14px;
+}
+
+/* Lecteur de podcast : au-dessus de la barre d'onglets, il suit la navigation */
+.player {
+  position: fixed;
+  z-index: 45;
+  left: 8px;
+  right: 8px;
+  bottom: calc(var(--tab-h) + var(--safe-b) + 8px);
+  border-radius: 16px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22), 0 0 0 1px var(--line);
+  animation: up 0.3s ease;
+}
+.player[hidden] {
+  display: none;
+}
+/* Fil et LIVE : le lecteur ne se montre que s'il joue (une vidéo avec le son le met en pause) */
+:root.feed-mode .player:not(.playing) {
+  display: none;
+}
+body.in-chat .player {
+  display: none;
+}
+.player-progress {
+  height: 3px;
+  background: var(--bg-3);
+  cursor: pointer;
+}
+.player-progress i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--primary);
+  transition: width 0.25s linear;
+}
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 6px 8px 8px;
+  min-width: 0;
+}
+.player-art {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 9px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--bg-3);
+  color: var(--primary);
+  margin-right: 8px;
+}
+.player-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.player-meta {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.player-meta b {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-sub {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-sub small {
+  font-size: inherit;
+}
+.player-btn {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--fg);
+}
+.player-close {
+  color: var(--muted);
+}
+body.has-player .main {
+  padding-bottom: calc(var(--tab-h) + var(--safe-b) + 84px);
+}
+@media (max-width: 380px) {
+  .player-btn:not(.player-main):not(.player-close) {
+    display: none;
+  }
+}
+@media (min-width: 900px) {
+  .player {
+    left: calc(var(--side-w) + 50% - var(--side-w) / 2);
+    right: auto;
+    width: 460px;
+    transform: translateX(-50%);
+    bottom: 20px;
+    animation: none;
+  }
+  body.has-player .main {
+    padding-bottom: 110px;
+  }
+}
+
+/* Caméra : rappel de l'actualité à laquelle on réagit */
+.cam-kind.cam-actu {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 120px);
+}
+.cam-kind.cam-actu span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Ordinateur : la une en deux colonnes (image, texte) */
+@media (min-width: 900px) {
+  .actu-lead:not(.small) {
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 20px;
+  }
+  .actu-lead:not(.small) b {
+    font-size: 24px;
+  }
+  .actu-lead-more {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Explorer : l'actu du jour */
+.explore-news[hidden] {
+  display: none;
+}
+.explore-news-list {
+  display: grid;
+  border-radius: 14px;
+  background: var(--bg-2);
+}
+.explore-news-item {
+  display: grid;
+  gap: 3px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.explore-news-item:last-child {
+  border-bottom: 0;
+}
+.explore-news-item b {
+  font-size: 14.5px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.explore-news-item small {
+  font-size: 12.5px;
+  color: var(--muted);
+}

@@ -85,18 +85,22 @@ async function liveBadge(btn) {
   }
 }
 
+// Haut des fils : LIVE, onglets « Amis · Abonnements · Pour toi », et la loupe (Explorer et recherche)
+function feedTop(active) {
+  const tab = (href, label, key) => h('a', { href, class: `top-tab${active === key ? ' on' : ''}`, 'aria-current': active === key ? 'page' : null }, label);
+  return h(
+    'header',
+    { class: 'feed-top' },
+    h('a', { href: '/live', class: 'top-icon live-link', 'aria-label': 'LIVE' }, icon('live')),
+    h('nav', { class: 'top-tabs', 'aria-label': 'Fils' }, tab('/amis', 'Amis', 'friends'), tab('/abonnements', 'Abonnements', 'following'), tab('/', 'Pour toi', 'foryou')),
+    h('a', { href: '/explorer', class: 'top-icon', 'aria-label': 'Explorer et rechercher' }, icon('search')),
+  );
+}
+
 export async function homeView(ctx) {
   darkTop(ctx);
   const followingTab = ctx.route.path === '/abonnements';
-  const tab = (href, label, on) => h('a', { href, class: `top-tab${on ? ' on' : ''}`, 'aria-current': on ? 'page' : null }, label);
-  const liveBtn = h('a', { href: '/live', class: 'top-icon live-link', 'aria-label': 'LIVE' }, icon('live'));
-  const top = h(
-    'header',
-    { class: 'feed-top' },
-    liveBtn,
-    h('nav', { class: 'top-tabs', 'aria-label': 'Fils' }, tab('/explorer', 'Explorer', false), tab('/abonnements', 'Abonnements', followingTab), tab('/', 'Pour toi', !followingTab)),
-    h('a', { href: '/recherche', class: 'top-icon', 'aria-label': 'Rechercher' }, icon('search')),
-  );
+  const top = feedTop(followingTab ? 'following' : 'foryou');
 
   ctx.title = followingTab ? 'Abonnements — Vibz' : 'Vibz — Pour toi';
   ctx.description = 'Regarde des vidéos courtes qui te ressemblent, crée les tiennes et partage-les avec tes amis.';
@@ -197,13 +201,14 @@ function backBar() {
 
 // Onglet « Amis » : vidéos des abonnements réciproques, et comptes à découvrir
 export async function friendsView(ctx) {
-  if (!store.user) {
-    return h('div', { class: 'page' }, h('header', { class: 'page-head' }, h('h1', null, 'Amis')), emptyState('friends', 'Retrouve tes amis', 'Connecte-toi pour voir les vidéos de tes amis et découvrir des comptes à suivre.', h('button', { class: 'btn btn-primary', onclick: () => needLogin('Connecte-toi pour voir tes amis.') }, 'Se connecter')));
-  }
   darkTop(ctx);
-  const top = h('header', { class: 'feed-top' }, h('a', { href: '/activite?type=followers', class: 'top-icon', 'aria-label': 'Nouveaux abonnés' }, icon('userPlus')), h('nav', { class: 'top-tabs' }, h('span', { class: 'top-tab on' }, 'Amis')), h('a', { href: '/recherche', class: 'top-icon', 'aria-label': 'Rechercher' }, icon('search')));
+  const top = feedTop('friends');
   ctx.title = 'Amis — Vibz';
-  return keptScreen(ctx, 'friends', top, (refresh) => {
+  if (!store.user) {
+    setTimeout(() => needLogin('Connecte-toi pour voir les vidéos de tes amis.'), 50);
+    return withLive(h('div', { class: 'feed-page' }, top, h('div', { class: 'feed-gate' }, emptyState('friends', 'Les vidéos de tes amis', 'Connecte-toi pour voir ici les vidéos des comptes avec qui vous vous suivez mutuellement.', h('button', { class: 'btn btn-primary', onclick: () => needLogin('Connecte-toi pour continuer.') }, 'Se connecter')))));
+  }
+  return withLive(keptScreen(ctx, 'friends', top, (refresh) => {
     let cursor = null;
     return verticalFeed({
       onRefresh: refresh,
@@ -214,10 +219,9 @@ export async function friendsView(ctx) {
       },
       emptyView: () => suggestionsPanel(),
     });
-  });
+  }));
 }
 
-// Comptes suggérés (quand on n'a pas encore d'amis)
 // Comptes à suivre ; « Suivre » se défait d'un second toucher. Au premier lancement (welcome),
 // les cartes ne mènent pas au profil : on reste dans le parcours.
 export function suggestionsPanel({ welcome = false } = {}) {

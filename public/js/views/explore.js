@@ -4,6 +4,7 @@ import { store } from '../store.js';
 import { navigate, replaceUrl } from '../router.js';
 import { h, icon, count, emptyState } from '../dom.js';
 import { videoGrid } from '../components/grid.js';
+import { openActu, sourceLine } from '../components/actusheet.js';
 
 // Saisie nettoyée (espaces multiples) ; limite du serveur : 80 caractères
 export const cleanQuery = (v) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, 80);
@@ -38,6 +39,17 @@ export async function exploreView(ctx) {
   if (category && !cats.some((c) => c.id === category)) category = '';
   const chips = h('div', { class: 'chips', role: 'tablist', 'aria-label': 'Catégories' });
   const trends = h('section', { class: 'trends' });
+  // L'actu du jour : trois titres, et l'Actu en un toucher
+  const news = h('section', { class: 'explore-news', hidden: true });
+  api.get('/api/actu/une').then((d) => {
+    const items = [...d.lead, ...d.brief].slice(0, 3);
+    if (!items.length || !news.isConnected) return;
+    news.hidden = false;
+    news.replaceChildren(
+      h('div', { class: 'section-row' }, h('h2', { class: 'section-title' }, 'L’actu du jour'), h('a', { href: '/actu', class: 'link-btn' }, 'Toute l’Actu')),
+      h('div', { class: 'explore-news-list' }, items.map((it) => h('a', { href: `/actu/${it.id}`, class: 'explore-news-item', onclick: (e) => { e.preventDefault(); openActu(it); } }, h('b', null, it.title), h('small', null, sourceLine(it))))),
+    );
+  }).catch(() => {});
   const gridHost = h('div');
   let grid = null;
   // Sur ordinateur, la recherche de la barre latérale ferait doublon
@@ -111,5 +123,5 @@ export async function exploreView(ctx) {
     mount();
   }
   ctx.onCleanup(() => grid?.destroy());
-  return h('div', { class: 'page explore' }, h('header', { class: 'page-head sticky' }, searchBar()), chips, trends, h('h2', { class: 'section-title' }, 'Populaire'), gridHost);
+  return h('div', { class: 'page explore' }, h('header', { class: 'page-head sticky' }, searchBar()), chips, news, trends, h('h2', { class: 'section-title' }, 'Populaire'), gridHost);
 }

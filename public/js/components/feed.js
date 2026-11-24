@@ -18,6 +18,7 @@ import { openShare, downloadPost } from './share.js';
 import { openSheet, closeSheet, sidePanelOpen } from './sheet.js';
 import { reportDialog } from './report.js';
 import { translateLink, myLang } from './translate.js';
+import { openActu } from './actusheet.js';
 
 let speed = 1; // vitesse de lecture choisie (pour toute la visite)
 const BG = { violet: 'bg-violet', rose: 'bg-rose', ocean: 'bg-ocean', soleil: 'bg-soleil', menthe: 'bg-menthe', nuit: 'bg-nuit', feu: 'bg-feu', ciel: 'bg-ciel' };
@@ -200,6 +201,11 @@ function slide(post) {
       text = h('div', { class: 'info-desc' }, textBox, h('div', { class: 'info-desc-actions' }, moreBtn, tr));
     }
     const chips = [];
+    // Vidéo qui réagit à une actualité : l'article s'ouvre par-dessus la vidéo
+    if (post.actu) {
+      chips.push(h('a', { class: 'info-chip actu-chip', href: `/actu/${post.actu.id}`, onclick: (e) => { e.preventDefault(); e.stopPropagation(); openActu(post.actu.id); } },
+        icon('newspaper', 'icon-xs'), h('span', null, `Réagit à : ${post.actu.title}`)));
+    }
     if (post.duetOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.duetOf.username)}/video/${post.duetOf.id}` }, icon('duet', 'icon-xs'), `Duo avec @${post.duetOf.username}`));
     if (post.stitchOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.stitchOf.username)}/video/${post.stitchOf.id}` }, icon('scissors', 'icon-xs'), `Stitch avec @${post.stitchOf.username}`));
     if (post.privacy !== 'public') chips.push(h('span', { class: 'info-chip' }, icon(post.privacy === 'private' ? 'lock' : 'friends', 'icon-xs'), post.privacy === 'private' ? 'Moi uniquement' : 'Amis'));
@@ -324,6 +330,10 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     e.stopPropagation();
     unmute();
   });
+  // Un son à la fois : la vidéo qui joue avec le son met en pause l'épisode de podcast en cours
+  const claimSound = () => !player.muted && !player.paused && document.dispatchEvent(new CustomEvent('vibz:sound'));
+  player.addEventListener('playing', claimSound);
+  player.addEventListener('volumechange', claimSound);
 
   const start = () => {
     player.muted = !sound.get();

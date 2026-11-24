@@ -16,6 +16,7 @@ const TABS = [
   ['publications', 'Publications'],
   ['audience', 'Audience'],
   ['legal', 'Légal'],
+  ['actu', 'Actu'],
   ['demo', 'Démo'],
   ['erreurs', 'Erreurs'],
 ];
@@ -268,6 +269,103 @@ async function demo() {
     state, actions, out);
 }
 
+// Actu : sources suivies (médias, podcasts, chaînes vidéo), rubriques, relecture des flux
+async function actuSources() {
+  const KIND = { article: ['newspaper', 'Articles'], podcast: ['headphones', 'Podcast'], video: ['playBadge', 'Vidéos'] };
+  const host = h('div', { class: 'form-stack' });
+  const load = async () => {
+    let d;
+    try {
+      d = await api.get('/api/actu/sources');
+    } catch (err) {
+      host.replaceChildren(emptyState('alert', 'Erreur', err.message));
+      return;
+    }
+    const topicSelect = (value, onChange) => {
+      const sel = h('select', { class: 'input input-sm', 'aria-label': 'Rubrique' }, h('option', { value: '' }, 'Sans rubrique'), d.topics.map((t) => h('option', { value: t.id, selected: value === t.id }, t.label)));
+      sel.addEventListener('change', () => onChange(sel.value || null));
+      return sel;
+    };
+    // Ajouter : flux RSS, site d'un média, chaîne YouTube, page Apple Podcasts
+    const url = h('input', { class: 'input', type: 'url', required: true, placeholder: 'https://… (flux RSS, site, chaîne YouTube, podcast)', 'aria-label': 'Adresse de la source' });
+    const name = h('input', { class: 'input', maxlength: 80, placeholder: 'Nom affiché (facultatif)', 'aria-label': 'Nom affiché' });
+    let topic = null;
+    const add = h('button', { type: 'submit', class: 'btn btn-primary' }, 'Ajouter la source');
+    const form = h('form', { class: 'form-stack set-card pad', onsubmit: async (e) => {
+      e.preventDefault();
+      add.disabled = true;
+      add.textContent = 'Lecture du flux…';
+      try {
+        const r = await api.post('/api/actu/sources', { url: url.value.trim(), title: name.value.trim(), topic });
+        toast(`${r.source.title} ajouté : ${count(r.source.items, 'élément')}`);
+        load();
+      } catch (err) {
+        fieldError(url, err.message);
+      } finally {
+        add.disabled = false;
+        add.textContent = 'Ajouter la source';
+      }
+    } }, h('h3', { class: 'section-title' }, 'Ajouter une source'), url, name, topicSelect(null, (v) => (topic = v)), add);
+    // Trouver un podcast par son nom
+    const q = h('input', { class: 'input', type: 'search', placeholder: 'Nom d’un podcast', 'aria-label': 'Chercher un podcast' });
+    const results = h('div', { class: 'admin-pods' });
+    const search = h('form', { class: 'row-search', onsubmit: async (e) => {
+      e.preventDefault();
+      if (!q.value.trim()) return;
+      results.replaceChildren(spinner());
+      try {
+        const r = await api.post('/api/actu/sources/search', { q: q.value.trim() });
+        results.replaceChildren(...(r.results.length ? r.results.map((p) => h('div', { class: 'tx' }, p.image ? h('img', { class: 'admin-pod-img', src: p.image, alt: '', referrerpolicy: 'no-referrer' }) : null, h('span', { class: 'tx-text' }, p.title, h('small', null, p.author || '')), h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: () => { url.value = p.feedUrl; name.value = p.title; url.scrollIntoView({ block: 'center', behavior: 'smooth' }); } }, 'Choisir'))) : [h('p', { class: 'muted small pad' }, 'Aucun podcast trouvé.')]));
+      } catch (err) {
+        results.replaceChildren(h('p', { class: 'muted small pad' }, err.message));
+      }
+    } }, q, h('button', { type: 'submit', class: 'btn btn-ghost' }, 'Chercher'));
+    const refresh = h('button', { type: 'button', class: 'btn btn-ghost', onclick: async () => {
+      refresh.disabled = true;
+      refresh.textContent = 'Lecture des flux…';
+      try {
+        const r = await api.post('/api/actu/refresh', { force: true });
+        toast(r.skipped ? 'Une relecture est déjà en cours' : `${count(r.added, 'nouvel élément', 'nouveaux éléments')}`);
+        load();
+      } catch (err) {
+        toast(err.message, 'error');
+      } finally {
+        refresh.disabled = false;
+        refresh.textContent = 'Relire tous les flux';
+      }
+    } }, 'Relire tous les flux');
+    const rows = d.sources.map((s) => h('div', { class: 'admin-source' },
+      h('span', { class: 'admin-source-ic' }, icon(KIND[s.kind]?.[0] || 'rss', 'icon-sm')),
+      h('span', { class: 'tx-text' }, s.title, h('small', null, `${KIND[s.kind]?.[1] || s.kind} · ${count(s.items, 'élément')}${s.lastFetchedAt ? ` · lu ${timeAgo(s.lastFetchedAt)}` : ''}`), s.error ? h('small', { class: 'danger-text' }, `Dernière lecture : ${s.error}`) : null),
+      topicSelect(s.topic, async (v) => {
+        try {
+          await api.patch(`/api/actu/sources/${s.id}`, { topic: v });
+          toast('Rubrique enregistrée');
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      }),
+      h('button', { type: 'button', class: 'icon-btn', 'aria-label': `Retirer ${s.title}`, onclick: async () => {
+        if (!(await confirmDialog(`Retirer « ${s.title} » ?`, 'Ses éléments quittent l’Actu (sauf ceux auxquels des vidéos réagissent).', 'Retirer'))) return;
+        try {
+          await api.del(`/api/actu/sources/${s.id}`);
+          toast('Source retirée');
+          load();
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      } }, icon('trash', 'icon-sm'))));
+    host.replaceChildren(
+      h('p', { class: 'muted small' }, 'L’Actu montre le titre, le court résumé et l’image publiés par chaque média dans son flux, avec un lien vers l’article : rien n’est recopié. Les flux sont relus toutes les 20 minutes quand quelqu’un ouvre l’Actu.'),
+      h('div', { class: 'row-end' }, h('small', { class: 'muted' }, d.refreshedAt ? `Dernière relecture ${timeAgo(d.refreshedAt)}` : 'Jamais relue'), refresh),
+      h('section', null, h('h3', { class: 'section-title' }, `Sources suivies · ${d.sources.length}`), d.sources.length ? h('div', { class: 'set-card' }, rows) : h('p', { class: 'muted small pad' }, 'Aucune source pour l’instant.')),
+      form,
+      h('section', { class: 'set-card pad form-stack' }, h('h3', { class: 'section-title' }, 'Trouver un podcast'), search, results));
+  };
+  await load();
+  return host;
+}
+
 async function errors() {
   const { errors: list } = await api.get('/api/admin/errors');
   if (!list.length) return emptyState('check', 'Aucune erreur', 'Les erreurs survenues dans les navigateurs apparaîtront ici.');
@@ -290,7 +388,7 @@ export async function adminView(ctx) {
   const nav = h('nav', { class: 'tabs scroll-x' }, TABS.map(([k, label]) => h('a', { href: `/admin?onglet=${k}`, class: `tab-link${k === tab ? ' on' : ''}` }, label)));
   revealActive(nav);
   const body = h('div', { class: 'admin-body' }, spinner());
-  const views = { apercu: overview, signalements: reports, comptes: users, publications: posts, audience, legal, demo, erreurs: errors };
+  const views = { apercu: overview, signalements: reports, comptes: users, publications: posts, audience, legal, actu: actuSources, demo, erreurs: errors };
   try {
     body.replaceChildren(await views[tab]());
   } catch (err) {

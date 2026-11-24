@@ -13,6 +13,7 @@ import { registerServiceWorker, syncPush } from './push.js';
 import { editPost } from './components/postedit.js';
 import { homeView, videoView, friendsView } from './views/home.js';
 import { exploreView } from './views/explore.js';
+import { actuView } from './views/actu.js';
 import { searchView } from './views/search.js';
 import { profileView } from './views/profile.js';
 import { tagView, soundView } from './views/collections.js';
@@ -46,6 +47,8 @@ const ROUTES = [
   { path: '/salon', view: () => navigate('/', { replace: true }), layout: 'bare' },
   { path: '/videos', view: () => navigate('/', { replace: true }), layout: 'bare' },
   { path: '/explorer', view: exploreView, layout: 'app', nav: 'explore' },
+  { path: '/actu', view: actuView, layout: 'app', nav: 'actu' },
+  { path: '/actu/:id', view: actuView, layout: 'app', nav: 'actu' },
   { path: '/recherche', view: searchView, layout: 'app', nav: 'explore' },
   { path: '/tag/:tag', view: tagView, layout: 'app', nav: 'explore' },
   { path: '/son/:id', view: soundView, layout: 'app', nav: 'explore' },
@@ -188,6 +191,7 @@ function buildShell() {
     wordmark(),
     searchForm,
     side('home', '/', 'home', 'homeFill', 'Pour toi'),
+    side('actu', '/actu', 'newspaper', 'newspaper', 'Actu'),
     side('explore', '/explorer', 'compass', 'compass', 'Explorer'),
     side('following', '/abonnements', 'userCheck', 'userCheck', 'Abonnements', { onclick: (e) => guard(e, 'Connecte-toi pour voir les vidéos des comptes que tu suis.') }),
     side('friends', '/amis', 'friends', 'friendsFill', 'Amis', { onclick: (e) => guard(e, 'Connecte-toi pour voir tes amis.') }),
@@ -205,11 +209,15 @@ function buildShell() {
   const tabAvatar = h('span', { class: 'tab-ic tab-avatar' });
   const tab = (key, href, ic, icOn, label, extra = {}) =>
     register(key, h('a', { href, class: 'tab', onclick: extra.onclick }, h('span', { class: 'tab-ic' }, h('span', { class: 'ic-off' }, icon(ic)), h('span', { class: 'ic-on' }, icon(icOn)), extra.badge || null), h('span', { class: 'tab-label' }, label)));
+  // Accueil : actif aussi sur « Amis » et « Abonnements » (onglets du haut du fil)
+  const homeTab = tab('home', '/', 'home', 'homeFill', 'Accueil', { onclick: () => unlockPlayer() });
+  register('friends', homeTab);
+  register('following', homeTab);
   const tabbar = h(
     'nav',
     { class: 'tabbar', 'aria-label': 'Navigation' },
-    tab('home', '/', 'home', 'homeFill', 'Accueil', { onclick: () => unlockPlayer() }),
-    tab('friends', '/amis', 'friends', 'friendsFill', 'Amis'),
+    homeTab,
+    tab('actu', '/actu', 'newspaper', 'newspaper', 'Actu'),
     h('a', { href: '/creer', class: 'tab tab-create', 'aria-label': 'Créer', onclick: (e) => guard(e, 'Connecte-toi pour publier une vidéo.') }, h('span', { class: 'create-btn' }, icon('plus'))),
     register('messages', tab('inbox', '/boite', 'inbox', 'inboxFill', 'Boîte', { badge: badge('inbox'), onclick: (e) => guard(e, 'Connecte-toi pour voir tes messages et ton activité.') })),
     register('profile', h('a', { href: profileHref(), class: 'tab tab-profile', onclick: (e) => guard(e, 'Connecte-toi pour voir ton profil.') }, tabAvatar, h('span', { class: 'tab-label' }, 'Profil'))),

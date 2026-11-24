@@ -167,6 +167,8 @@ async function viewerView(ctx, username) {
   ctx.title = `${live.host.displayName} en LIVE — Vibz`;
   const video = h('video', { class: 'live-video', autoplay: true, playsinline: true, 'webkit-playsinline': '' });
   video.playsInline = true;
+  // Le son du LIVE remplace l'épisode de podcast en cours
+  video.addEventListener('playing', () => !video.muted && document.dispatchEvent(new CustomEvent('vibz:sound')));
   const status = h('div', { class: 'live-status' }, spinner(), h('span', null, 'Connexion au LIVE…'));
   // Compteur affiché après sa propre arrivée (sinon « 0 spectateur » pendant la connexion)
   const viewersEl = h('small', null, live.viewers ? viewersLabel(live.viewers) : '');

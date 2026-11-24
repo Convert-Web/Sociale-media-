@@ -93,6 +93,7 @@ export async function createView(ctx) {
     cover: null,
     coverAt: 0.5,
     draftId: null,
+    actu: null, // actualité à laquelle la vidéo réagit (« Réagir en vidéo » depuis l'Actu)
   };
   const root = h('div', { class: 'create' });
   document.documentElement.classList.add('feed-mode');
@@ -112,6 +113,16 @@ export async function createView(ctx) {
     history.length > 1 ? history.back() : navigate('/');
   };
 
+  // « Réagir en vidéo » : l'actualité accompagne la publication
+  if (q.get('actu')) {
+    try {
+      const { item } = await api.get(`/api/actu/${Number(q.get('actu'))}`);
+      S.actu = { id: item.id, title: item.title, siteName: item.siteName, kind: item.kind };
+      if (!S.body) S.body = '#actu ';
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
   // Son choisi d'avance (« Utiliser ce son »)
   if (q.get('son')) {
     try {
@@ -464,7 +475,11 @@ export async function createView(ctx) {
     paintModes();
 
     const top = h('header', { class: 'cam-top' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Fermer', onclick: leave }, icon('x')), soundChip, h('span', { class: 'icon-btn' }));
-    const kindNote = S.kind ? h('div', { class: 'cam-kind' }, icon(S.kind === 'duet' ? 'duet' : 'scissors', 'icon-sm'), S.kind === 'duet' ? `Duo avec @${S.source.author.username}` : `Stitch avec @${S.source.author.username}`, S.kind === 'duet' ? h('small', null, 'Avec des écouteurs, le son de l’original ne se mêle pas au tien.') : null) : null;
+    const kindNote = S.kind
+      ? h('div', { class: 'cam-kind' }, icon(S.kind === 'duet' ? 'duet' : 'scissors', 'icon-sm'), S.kind === 'duet' ? `Duo avec @${S.source.author.username}` : `Stitch avec @${S.source.author.username}`, S.kind === 'duet' ? h('small', null, 'Avec des écouteurs, le son de l’original ne se mêle pas au tien.') : null)
+      : S.actu
+        ? h('div', { class: 'cam-kind cam-actu' }, icon('newspaper', 'icon-sm'), h('span', null, `Ta réaction à : ${S.actu.title}`))
+        : null;
     const el = h('div', { class: 'cam' }, camBox, status, countdown, bar, timeEl, top, kindNote, side,
       h('div', { class: 'cam-bottom' }, h('div', { class: 'cam-row' }, h('span', { class: 'cam-slot' }, draftsBtn), redoBtn, recordBtn, doneBtn, h('span', { class: 'cam-slot' }, importBtn)), modeTabs));
     applyFilter();
@@ -896,13 +911,25 @@ export async function createView(ctx) {
         h('label', { class: 'set-row static' }, h('span', { class: 'set-ic' }, icon('compass')), h('span', { class: 'set-text' }, 'Catégorie (Explorer)', category)),
         tComments.el, isVideo ? tDuet.el : null, isVideo ? tStitch.el : null, S.mode !== 'text' ? tDl.el : null),
       S.sound && isVideo ? h('p', { class: 'muted small' }, icon('music', 'icon-xs'), ` Son : ${S.sound.title}`) : null,
+      actuBanner(),
       h('div', { class: 'post-actions' }, draft, publish));
     setStep(el, () => coverUrl && URL.revokeObjectURL(coverUrl));
     attachMentions(body, { placement: 'inline' });
   }
 
+  // L'actualité à laquelle on réagit (retirable)
+  function actuBanner() {
+    if (!S.actu) return null;
+    const el = h('div', { class: 'post-actu' },
+      h('span', { class: 'post-actu-ic' }, icon('newspaper', 'icon-sm')),
+      h('span', { class: 'post-actu-text' }, h('small', null, 'Tu réagis à l’actualité'), h('b', null, S.actu.title), h('small', null, S.actu.siteName)),
+      h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Ne plus lier cette actualité', onclick: () => { S.actu = null; el.remove(); } }, icon('x', 'icon-sm')));
+    return el;
+  }
+
   const pickMeta = () => ({
     mode: S.mode,
+    actu: S.actu,
     fx: S.fx,
     sound: S.sound,
     soundBaked: S.soundBaked,
@@ -963,6 +990,7 @@ export async function createView(ctx) {
       allowDuet: S.allowDuet,
       allowStitch: S.allowStitch,
       allowDownload: S.allowDownload,
+      actuId: S.actu?.id || null,
     };
     try {
       if (S.mode === 'text') {

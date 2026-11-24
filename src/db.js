@@ -371,6 +371,41 @@ CREATE TABLE IF NOT EXISTS settings (
   value  TEXT NOT NULL
 );
 
+-- L'Actu : sources suivies (flux RSS, podcasts, chaînes YouTube) et éléments lus dans ces flux
+-- (titre, court résumé du média, image, lien : jamais l'article lui-même). Mêmes tables que le
+-- Journal d'AURUM : une base reprise garde ses sources.
+CREATE TABLE IF NOT EXISTS journal_sources (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind             TEXT NOT NULL,
+  title            TEXT NOT NULL,
+  url              TEXT NOT NULL UNIQUE,
+  site_url         TEXT,
+  image            TEXT,
+  created_at       INTEGER NOT NULL,
+  last_fetched_at  INTEGER,
+  last_error       TEXT
+);
+CREATE TABLE IF NOT EXISTS journal_items (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_id     INTEGER,
+  kind          TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  summary       TEXT NOT NULL DEFAULT '',
+  url           TEXT NOT NULL UNIQUE,
+  image         TEXT,
+  audio_url     TEXT,
+  embed_url     TEXT,
+  duration      INTEGER,
+  site_name     TEXT NOT NULL DEFAULT '',
+  note          TEXT NOT NULL DEFAULT '',
+  author_id     INTEGER,
+  featured_at   INTEGER,
+  published_at  INTEGER NOT NULL,
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_journal_items_kind ON journal_items(kind, published_at);
+CREATE INDEX IF NOT EXISTS idx_journal_items_source ON journal_items(source_id, published_at);
+
 -- Erreurs survenues dans les navigateurs (anonymes) : suivi par l'administration
 CREATE TABLE IF NOT EXISTS client_errors (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -473,6 +508,11 @@ const COLUMNS = [
   ['posts', 'pinned_comment_id', 'INTEGER'],
   ['posts', 'guest_views', 'INTEGER NOT NULL DEFAULT 0'],
   ['posts', 'share_count', 'INTEGER NOT NULL DEFAULT 0'],
+  // Vidéo qui réagit à une actualité (« Réagir en vidéo »)
+  ['posts', 'journal_id', 'INTEGER'],
+  // Rubrique d'une source et de ses éléments (À la une, Monde, Tech…)
+  ['journal_sources', 'topic', 'TEXT'],
+  ['journal_items', 'topic', 'TEXT'],
   // Vues détaillées
   ['video_views', 'plays', 'INTEGER NOT NULL DEFAULT 1'],
   ['video_views', 'watch_ms', 'INTEGER NOT NULL DEFAULT 0'],
@@ -580,6 +620,7 @@ async function openDatabase({ url, authToken }) {
     CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_id) WHERE parent_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_messages_post ON messages(post_id) WHERE post_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_notifications_comment ON notifications(comment_id) WHERE comment_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_posts_journal ON posts(journal_id) WHERE journal_id IS NOT NULL;
   `);
   await upgradeFromAurum(client, have);
   await tidyLabels(client);

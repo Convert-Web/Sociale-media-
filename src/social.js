@@ -125,6 +125,7 @@ const POST_SELECT = `
          s.title AS s_title, s.post_id AS s_post_id, s.video_id AS s_video_id, s.cover AS s_cover, s.duration AS s_duration,
          su.username AS s_username, su.display_name AS s_display_name, su.avatar AS s_avatar, sv.mime AS s_mime,
          dp.id AS d_id, du.username AS d_username, du.display_name AS d_display_name,
+         p.journal_id, ji.title AS actu_title, ji.site_name AS actu_site, ji.kind AS actu_kind,
          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count,
          (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
          (SELECT COUNT(*) FROM bookmarks b WHERE b.post_id = p.id) AS save_count,
@@ -145,7 +146,8 @@ const POST_SELECT = `
   LEFT JOIN users su ON su.id = s.author_id
   LEFT JOIN videos sv ON sv.id = s.video_id AND sv.complete = 1
   LEFT JOIN posts dp ON dp.id = COALESCE(p.duet_of, p.stitch_of)
-  LEFT JOIN users du ON du.id = dp.user_id`;
+  LEFT JOIN users du ON du.id = dp.user_id
+  LEFT JOIN journal_items ji ON ji.id = p.journal_id`;
 
 function parseFx(value) {
   if (!value) return null;
@@ -228,6 +230,8 @@ function serializePost(ctx, row, viewer) {
     allowDownload: row.allow_download !== 0,
     category: row.category || null,
     fx: parseFx(row.fx),
+    // Vidéo qui réagit à une actualité de l'Actu
+    actu: row.journal_id && row.actu_title ? { id: row.journal_id, title: row.actu_title, siteName: row.actu_site || '', kind: row.actu_kind || 'article' } : null,
     duetOf: row.duet_of && source ? source : null,
     stitchOf: row.stitch_of && source ? source : null,
     pinned: Boolean(row.pinned_at),
