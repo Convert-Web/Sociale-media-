@@ -4,7 +4,7 @@ const express = require('express');
 const { requireAuth } = require('../auth');
 const { fail, text, intParam } = require('../http');
 const { throttle } = require('../antispam');
-const { authorOf, counters, pushCounters, isBlocked, areFriends, flaggedLabels, getPost, prefs } = require('../social');
+const { authorOf, counters, pushCounters, isBlocked, areFriends, flaggedLabels, getPost, prefs, onlineSet, touchPresence, isTyping } = require('../social');
 const { moderate, autoReport } = require('../contentFilter');
 const { sendPush } = require('../push');
 
@@ -75,7 +75,7 @@ module.exports = function messageRoutes(ctx) {
     if (prefs(other).messages) {
       await sendPush(ctx, other.id, {
         title: req.user.display_name,
-        body: flagged ? HIDDEN : postId && !body ? 'a partagé une vidéo avec toi' : body.length > 140 ? `${body.slice(0, 137)}…` : body,
+        body: flagged ? HIDDEN : postId && !body ? 'a partagé une publication avec toi' : body.length > 140 ? `${body.slice(0, 137)}…` : body,
         url: `/messages/${req.user.username}`,
         tag: `dm-${req.user.id}`,
       });
@@ -101,11 +101,13 @@ module.exports = function messageRoutes(ctx) {
        ORDER BY conv.last_id DESC LIMIT 100`,
       me, me, me, me, me, me,
     );
+    const online = await onlineSet(ctx, rows.map((row) => row.user_id));
     res.json({
       conversations: rows.map((row) => ({
-        user: { ...authorOf(row), online: ctx.hub.isOnline(row.user_id) },
+        user: { ...authorOf(row), online: online.has(row.user_id) },
         lastMessage: {
-          body: row.flagged && row.sender_id !== me ? HIDDEN : row.body || (row.post_id ? 'A partagé une vidéo' : ''),
+          // Publication partagée sans texte : le client écrit « Tu as partagé… » ou « A partagé… »
+          body: row.flagged && row.sender_id !== me ? HIDDEN : row.body || '',
           createdAt: row.created_at,
           fromMe: row.sender_id === me,
           seen: Boolean(row.read_at),
@@ -119,6 +121,7 @@ module.exports = function messageRoutes(ctx) {
   r.get('/conversations/:username', async (req, res) => {
     const other = await findUser(req.params.username);
     const me = req.user.id;
+    await touchPresence(ctx, me);
     const before = intParam(req.query.before);
     const after = intParam(req.query.after);
     const limit = 50;
@@ -152,16 +155,23 @@ module.exports = function messageRoutes(ctx) {
                   EXISTS(SELECT 1 FROM follows WHERE follower_id = ? AND followee_id = ?) AS followed_by`,
           other.id, me, other.id, other.id, me,
         );
+    const blockedByMe = Boolean(await db.get('SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_id = ?', me, other.id));
+    const blockedMe = Boolean(await db.get('SELECT 1 FROM blocks WHERE blocker_id = ? AND blocked_id = ?', other.id, me));
+    const online = !blockedMe && (await onlineSet(ctx, [other.id])).has(other.id);
     res.json({
       user: {
         ...authorOf({ ...other, user_id: other.id }),
-        online: ctx.hub.isOnline(other.id),
+        online,
         ...(rel ? { followers: rel.followers, isFollowing: !!rel.following, followsMe: !!rel.followed_by } : {}),
       },
       messages: rows.reverse().map((m) => serializeMessage(m, posts)),
       hasMore: !after && rows.length === limit,
       seenUpTo: seen,
-      blocked: await isBlocked(ctx, me, other.id),
+      // Sans connexion permanente, « écrit… » arrive avec la relecture régulière
+      typing: !blockedByMe && !blockedMe && (await isTyping(ctx, other.id, me)),
+      blocked: blockedByMe || blockedMe,
+      blockedByMe,
+      blockedMe,
       refused: await canMessage(req.user, other),
     });
   });
@@ -189,7 +199,10 @@ module.exports = function messageRoutes(ctx) {
   // « Écrit… » : signal envoyé à l'autre personne si elle est connectée
   r.post('/conversations/:username/typing', async (req, res) => {
     const other = await findUser(req.params.username);
-    if (!(await isBlocked(ctx, req.user.id, other.id))) ctx.hub.send(other.id, 'typing', { from: req.user.id });
+    if (!(await isBlocked(ctx, req.user.id, other.id))) {
+      ctx.hub.send(other.id, 'typing', { from: req.user.id });
+      await touchPresence(ctx, req.user.id, other.id);
+    }
     res.json({ ok: true });
   });
 
@@ -232,7 +245,10 @@ module.exports = function messageRoutes(ctx) {
     res.json({ users: rows.map((row) => authorOf(row)) });
   });
 
-  r.get('/counters', async (req, res) => res.json(await counters(ctx, req.user.id)));
+  r.get('/counters', async (req, res) => {
+    await touchPresence(ctx, req.user.id);
+    res.json(await counters(ctx, req.user.id));
+  });
 
   // Flux temps réel (Server-Sent Events)
   r.get('/stream', async (req, res) => {

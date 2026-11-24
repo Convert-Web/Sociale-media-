@@ -185,7 +185,8 @@ export async function videoView(ctx) {
   ctx.description = post.body?.slice(0, 160) || `Vidéo de ${post.author.displayName} sur Vibz.`;
   // Lien vers un commentaire précis (notification) : la feuille des commentaires s'ouvre dessus
   const focus = Number(ctx.query.get('commentaire'));
-  if (focus) setTimeout(() => openComments(post, { focusId: focus }), 400);
+  const focusParent = Number(ctx.query.get('fil')) || null;
+  if (focus) setTimeout(() => openComments(post, { focusId: focus, focusParent }), 400);
   return h('div', { class: 'feed-page' }, backBar(), feed.el);
 }
 

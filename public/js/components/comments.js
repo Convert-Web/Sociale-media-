@@ -14,7 +14,7 @@ import { translateLink, myLang } from './translate.js';
 const QUICK = ['😂', '😍', '🔥', '👏', '😮', '😢', '🥰', '💯'];
 const label = (n) => (n ? `${short(n)} commentaire${n > 1 ? 's' : ''}` : 'Commentaires');
 
-export function openComments(post, { onCount, focusId = null } = {}) {
+export function openComments(post, { onCount, focusId = null, focusParent = null } = {}) {
   let count = post.commentCount || 0;
   let cursor = null;
   let loading = false;
@@ -90,7 +90,10 @@ export function openComments(post, { onCount, focusId = null } = {}) {
     let timer = 0;
     el.addEventListener('pointerdown', (e) => {
       if (e.target.closest('a, button')) return;
-      timer = setTimeout(() => menu(c, el), 480);
+      timer = setTimeout(() => {
+        swallowNextClick(); // le doigt relevé ne doit ni fermer le menu ni toucher une de ses lignes
+        menu(c, el);
+      }, 480);
     });
     for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) el.addEventListener(ev, () => clearTimeout(timer));
     el.addEventListener('contextmenu', (e) => {
@@ -108,7 +111,7 @@ export function openComments(post, { onCount, focusId = null } = {}) {
     let open = false;
     const btn = h('button', { type: 'button', class: 'cm-more' }, `Afficher ${c.replyCount} réponse${c.replyCount > 1 ? 's' : ''}`, icon('chevronDown', 'icon-xs'));
     const hide = h('button', { type: 'button', class: 'cm-more', hidden: true }, 'Masquer', icon('arrowUp', 'icon-xs'));
-    btn.addEventListener('click', async () => {
+    const loadReplies = async () => {
       btn.disabled = true;
       try {
         const d = await api.get(`/api/comments/${c.id}/replies${rcursor ? `?cursor=${rcursor}` : ''}`);
@@ -126,7 +129,10 @@ export function openComments(post, { onCount, focusId = null } = {}) {
       } finally {
         btn.disabled = false;
       }
-    });
+    };
+    btn.addEventListener('click', loadReplies);
+    const thread = h('div', { class: 'cm-thread' }, box, h('div', { class: 'cm-thread-actions' }, btn, hide));
+    const paintBtn = () => btn.replaceChildren(`Afficher ${c.replyCount} réponse${c.replyCount > 1 ? 's' : ''}`, icon('chevronDown', 'icon-xs'));
     hide.addEventListener('click', () => {
       box.replaceChildren();
       open = false;
@@ -146,11 +152,31 @@ export function openComments(post, { onCount, focusId = null } = {}) {
         // Première réponse : elle est déjà affichée, rien d'autre à « afficher »
         if (!open && !before) btn.hidden = true;
       },
+      // Une réponse supprimée : compteur et boutons à jour ; plus aucune réponse, plus de fil
+      removed: () => {
+        c.replyCount = Math.max(0, (c.replyCount || 0) - 1);
+        if (!c.replyCount) {
+          thread.remove();
+          delete el.__replies;
+          return;
+        }
+        if (!box.children.length) {
+          open = false;
+          hide.hidden = true;
+          btn.hidden = false;
+          paintBtn();
+        }
+      },
       get open() {
         return open;
       },
+      // Lien vers une réponse : le fil s'ouvre (jusqu'à trouver la réponse, quelques pages au plus)
+      reveal: async (id) => {
+        for (let i = 0; i < 5 && !box.querySelector(`[data-id="${id}"]`) && (!open || rcursor); i++) await loadReplies();
+        return box.querySelector(`[data-id="${id}"]`);
+      },
     };
-    return h('div', { class: 'cm-thread' }, box, h('div', { class: 'cm-thread-actions' }, btn, hide));
+    return thread;
   }
 
   function menu(c, el) {
@@ -182,7 +208,9 @@ export function openComments(post, { onCount, focusId = null } = {}) {
       items.push(item('trash', 'Supprimer', async () => {
         try {
           const r = await api.del(`/api/comments/${c.id}`);
+          const parentEl = el.closest('.cm-thread')?.parentElement;
           el.remove();
+          if (parentEl?.__replies) parentEl.__replies.removed();
           setCount(r.count);
           toast('Commentaire supprimé');
         } catch (err) {
@@ -191,6 +219,17 @@ export function openComments(post, { onCount, focusId = null } = {}) {
       }, true));
     }
     const m = openSheetOver(h('div', { class: 'opt-list' }, h('p', { class: 'opt-quote' }, `${c.author.displayName} : ${c.body.slice(0, 80)}`), items));
+  }
+
+  // Après un appui long : le clic du doigt relevé est ignoré (il fermerait le menu à peine ouvert)
+  function swallowNextClick() {
+    const block = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      document.removeEventListener('click', block, true);
+    };
+    document.addEventListener('click', block, true);
+    setTimeout(() => document.removeEventListener('click', block, true), 800);
   }
 
   // Petite feuille d'options par-dessus la feuille des commentaires
@@ -215,7 +254,9 @@ export function openComments(post, { onCount, focusId = null } = {}) {
       for (const c of d.comments) if (!list.querySelector(`.cm[data-id="${c.id}"]`)) list.append(row(c));
       cursor = d.cursor ?? false;
       if (focusId) {
-        const el = list.querySelector(`.cm[data-id="${focusId}"]`);
+        let el = list.querySelector(`.cm[data-id="${focusId}"]`);
+        const parent = !el && focusParent ? list.querySelector(`.cm[data-id="${focusParent}"]`) : null;
+        if (parent?.__replies) el = await parent.__replies.reveal(focusId);
         if (el) {
           el.classList.add('flash');
           el.scrollIntoView({ block: 'center' });

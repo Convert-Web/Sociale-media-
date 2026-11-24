@@ -109,6 +109,22 @@ CREATE TABLE IF NOT EXISTS comment_likes (
 );
 CREATE INDEX IF NOT EXISTS idx_comment_likes_user ON comment_likes(user_id);
 
+-- Anciens noms d'utilisateur : les anciens liens mènent encore au compte
+CREATE TABLE IF NOT EXISTS username_history (
+  old_username  TEXT NOT NULL COLLATE NOCASE,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  changed_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_username_history ON username_history(old_username, changed_at);
+
+-- Présence sans connexion permanente (hébergement serverless) : vu pour la dernière fois, « écrit… »
+CREATE TABLE IF NOT EXISTS presence (
+  user_id    INTEGER PRIMARY KEY,
+  seen_at    INTEGER NOT NULL,
+  typing_to  INTEGER,
+  typing_at  INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS follows (
   follower_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   followee_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -501,6 +517,11 @@ async function migrate(client) {
 // - leurs comptes deviennent privés, une seule fois par compte (ensuite, chacun choisit) ;
 // - les publications des groupes privés et des comptes automatiques restent visibles de leur seul auteur ;
 // - hashtags et sons originaux des vidéos venues d'AURUM sont recensés.
+// Libellés des sons originaux : « Son original - … » (majuscule, comme les autres titres)
+async function tidyLabels(client) {
+  await client.execute("UPDATE sounds SET title = 'S' || substr(title, 2) WHERE substr(title, 1, 12) = 'son original'");
+}
+
 async function upgradeFromAurum(client, have) {
   if (!have.has('users.member_number')) return; // base créée par Vibz : rien à reprendre
   // Un compte venu d'AURUM porte un numéro de membre, une entrée réglée ou une demande d'admission
@@ -534,7 +555,7 @@ async function upgradeFromAurum(client, have) {
   for (const p of vids.rows) {
     const r = await client.execute({
       sql: 'INSERT INTO sounds (title, author_id, post_id, video_id, duration, cover, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      args: [`son original - ${p.display_name}`, p.user_id, p.id, p.video_id, p.duration, p.image, p.created_at],
+      args: [`Son original - ${p.display_name}`, p.user_id, p.id, p.video_id, p.duration, p.image, p.created_at],
     });
     await client.execute({ sql: 'UPDATE posts SET sound_id = ? WHERE id = ? AND sound_id IS NULL', args: [Number(r.lastInsertRowid), p.id] });
   }
@@ -561,6 +582,7 @@ async function openDatabase({ url, authToken }) {
     CREATE INDEX IF NOT EXISTS idx_notifications_comment ON notifications(comment_id) WHERE comment_id IS NOT NULL;
   `);
   await upgradeFromAurum(client, have);
+  await tidyLabels(client);
 
   const db = wrap(client);
   // Transaction : fn reçoit un objet { get, all, run } lié à la transaction.

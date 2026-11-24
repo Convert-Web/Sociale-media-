@@ -9,7 +9,7 @@ import { h, icon, avatar, toast, spinner, emptyState, short, duration, shrinkIma
 import { openSheet, closeSheet } from '../components/sheet.js';
 import { readVideoInfo, isVideoFile, maxSeconds, reportImportIssue } from '../components/video.js';
 import { sendInBackground } from '../components/uploads.js';
-import { FILTERS, filterCss, fxLayer, paintOverlays, TEXT_COLORS, STICKERS } from '../components/fx.js';
+import { FILTERS, filterCss, fxLayer, paintOverlays, overlayEl, fitFor, TEXT_COLORS, STICKERS } from '../components/fx.js';
 import { recorderMime, extFor, loadVideoBlob, mixSound, duet as composeDuet, stitch as composeStitch, frameAt, mediaFor, onScreen } from '../components/compose.js';
 import { attachMentions } from '../components/mentions.js';
 import { toggle, PRIVACY } from '../components/postedit.js';
@@ -107,6 +107,7 @@ export async function createView(ctx) {
     document.documentElement.classList.remove('feed-mode');
   });
   const leave = async () => {
+    if (S.filming && !S.file && !(await confirmDialog('Abandonner ?', 'Ce que tu as filmé sera perdu.', 'Abandonner'))) return;
     if ((S.file || S.photos.length) && !(await confirmDialog('Abandonner ?', 'Ta vidéo et tes modifications seront perdues (sauf si tu les gardes en brouillon).', 'Abandonner'))) return;
     history.length > 1 ? history.back() : navigate('/');
   };
@@ -183,8 +184,16 @@ export async function createView(ctx) {
     const status = h('div', { class: 'cam-status', hidden: true });
     const bar = h('div', { class: 'cam-progress' }, h('i'));
     const timeEl = h('div', { class: 'cam-time' });
-    const countdown = h('div', { class: 'cam-countdown', hidden: true });
+    const countdown = h('div', { class: 'cam-countdown', hidden: true, 'data-hint': 'Toucher pour annuler' });
+    let countdownTimer = 0;
+    const cancelCountdown = () => {
+      clearInterval(countdownTimer);
+      countdownTimer = 0;
+      countdown.hidden = true;
+    };
+    countdown.addEventListener('click', cancelCountdown);
     const paintBar = () => {
+      S.filming = elapsed > 0;
       const p = Math.min(1, elapsed / S.maxDur);
       bar.firstChild.style.transform = `scaleX(${p})`;
       bar.querySelectorAll('.mark').forEach((m) => m.remove());
@@ -315,15 +324,19 @@ export async function createView(ctx) {
     recordBtn.addEventListener('pointerdown', () => {
       pressAt = Date.now();
       if (recording) return;
+      if (countdownTimer) {
+        cancelCountdown();
+        pressAt = 0;
+        return;
+      }
       if (timerSec) {
         let n = timerSec;
         countdown.hidden = false;
         countdown.textContent = String(n);
-        const t = setInterval(() => {
+        countdownTimer = setInterval(() => {
           n -= 1;
           if (n <= 0) {
-            clearInterval(t);
-            countdown.hidden = true;
+            cancelCountdown();
             startRec();
           } else countdown.textContent = String(n);
         }, 1000);
@@ -371,7 +384,9 @@ export async function createView(ctx) {
           wait.remove();
         }
       } else {
-        const imgs = files.filter((f) => f.type.startsWith('image/')).slice(0, MAX_PHOTOS);
+        const all = files.filter((f) => f.type.startsWith('image/'));
+        if (all.length > MAX_PHOTOS) toast(`${MAX_PHOTOS} photos au maximum : les suivantes n’ont pas été ajoutées.`);
+        const imgs = all.slice(0, MAX_PHOTOS);
         if (!imgs.length) return toast('Choisis une vidéo ou des photos.', 'error');
         S.mode = 'photo';
         S.photos = imgs;
@@ -399,7 +414,7 @@ export async function createView(ctx) {
       timerBtn.querySelector('small').textContent = timerSec ? `${timerSec} s` : 'Minuteur';
       timerBtn.classList.toggle('on', Boolean(timerSec));
     });
-    const micBtn = tool(micOn ? 'mic' : 'micOff', 'Micro', () => {
+    const micBtn = tool(micOn ? 'mic' : 'micOff', micOn ? 'Micro' : 'Muet', () => {
       if (rec) return toast('Change le micro avant de commencer à filmer.');
       micOn = !micOn;
       micBtn.replaceChildren(icon(micOn ? 'mic' : 'micOff'), h('small', null, micOn ? 'Micro' : 'Muet'));
@@ -407,7 +422,7 @@ export async function createView(ctx) {
     micBtn.hidden = !S.sound;
     const side = h('div', { class: 'cam-side' },
       tool('flip', 'Retourner', () => { if (rec) return toast('Retourne la caméra avant de filmer.'); facing = facing === 'user' ? 'environment' : 'user'; openCamera(); }),
-      tool('filters', 'Filtres', () => filterSheet(S.fx.filter, (f) => { S.fx.filter = f; applyFilter(); })),
+      tool('filters', 'Filtres', () => filterSheet(S.fx.filter, (f) => { S.fx.filter = f; applyFilter(); }, preview)),
       timerBtn, flashBtn, micBtn);
 
     // Son
@@ -481,6 +496,7 @@ export async function createView(ctx) {
     const paint = () => {
       S.stitchFrom = Number(from.value);
       S.stitchLen = Math.min(Number(len.value), total - S.stitchFrom);
+      if (Number(len.value) !== S.stitchLen) len.value = String(S.stitchLen);
       label.textContent = `Extrait : de ${duration(S.stitchFrom)} à ${duration(S.stitchFrom + S.stitchLen)} (${S.stitchLen.toFixed(1).replace('.', ',')} s)`;
     };
     let stopAt = 0;
@@ -568,6 +584,18 @@ export async function createView(ctx) {
     // Déplacer un texte ou un autocollant au doigt ; le glisser sur la corbeille le retire ;
     // un toucher sans déplacement le modifie
     const trash = h('div', { class: 'edit-trash', hidden: true }, icon('trash'));
+    // Zone visible dans le fil de ce téléphone : les bandes apparaissent pendant un déplacement
+    const safe = (() => {
+      if (S.kind === 'duet' || matchMedia('(min-width: 900px)').matches) return null;
+      const tabH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tab-h')) || 56;
+      const box = { w: innerWidth, h: innerHeight - tabH };
+      if (fitFor(ar, box) !== 'cover') return null;
+      const screen = box.w / box.h;
+      const band = ar > screen ? ((1 - screen / ar) / 2) * 100 : ((1 - ar / screen) / 2) * 100;
+      if (band < 0.5) return null;
+      return h('div', { class: `edit-safe ${ar > screen ? 'x' : 'y'}`, style: { '--band': `${band.toFixed(2)}%` } }, h('i'), h('i'));
+    })();
+    if (safe) stage.append(safe);
     layer.addEventListener('pointerdown', (e) => {
       const item = e.target.closest('.fx-item');
       if (!item) return;
@@ -584,6 +612,7 @@ export async function createView(ctx) {
         if (Math.hypot(dx, dy) > 6) moved = true;
         if (!moved) return;
         trash.hidden = false;
+        stage.classList.add('dragging');
         o.x = Math.min(1, Math.max(0, start.ox + dx / rect.width));
         o.y = Math.min(1, Math.max(0, start.oy + dy / rect.height));
         item.style.left = `${o.x * 100}%`;
@@ -596,6 +625,7 @@ export async function createView(ctx) {
         item.removeEventListener('pointerup', up);
         item.removeEventListener('pointercancel', up);
         const drop = trash.classList.contains('hot');
+        stage.classList.remove('dragging');
         trash.hidden = true;
         trash.classList.remove('hot');
         if (drop) {
@@ -647,9 +677,9 @@ export async function createView(ctx) {
       tool('type', 'Texte', () => textEditor(null, (o) => { if (o) { S.fx.overlays.push(o); applyFx(); } })),
       tool('smile', 'Autocollants', () => stickerSheet((emoji) => { S.fx.overlays.push({ kind: 'sticker', emoji, x: 0.5, y: 0.45, size: 0.16, rot: 0 }); applyFx(); })),
       tool('filters', 'Filtres', () => filterSheet(S.fx.filter, (f) => { S.fx.filter = f; applyFx(); })),
-      soundTool, volTool);
+      S.kind ? null : soundTool, volTool);
     const el = h('div', { class: 'edit' }, stage, trash, soundHint,
-      h('header', { class: 'cam-top' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: async () => { if (await confirmDialog('Revenir à la caméra ?', 'La vidéo filmée sera effacée.', 'Revenir')) { S.file = null; S.info = null; S.soundBaked = false; S.kind === 'stitch' ? stitchClipStep() : captureStep(); } } }, icon('back')), soundChip, h('span', { class: 'icon-btn' })),
+      h('header', { class: 'cam-top' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: async () => { if (await confirmDialog(S.kind === 'stitch' ? 'Revenir au choix de l’extrait ?' : 'Revenir à la caméra ?', 'La vidéo filmée sera effacée.', 'Revenir')) { S.file = null; S.info = null; S.soundBaked = false; S.kind === 'stitch' ? stitchClipStep() : captureStep(); } } }, icon('back')), soundChip, h('span', { class: 'icon-btn' })),
       side,
       h('div', { class: 'edit-bottom' }, h('button', { type: 'button', class: 'btn btn-primary btn-lg', onclick: () => postStep() }, 'Suivant')));
     applyFx();
@@ -667,16 +697,24 @@ export async function createView(ctx) {
     const input = h('textarea', { class: 'textarea text-editor-input', rows: 2, maxlength: 150, placeholder: 'Écris quelque chose…' });
     input.value = cur.text;
     const colors = h('div', { class: 'swatches' });
-    const paintColors = () => colors.replaceChildren(...TEXT_COLORS.map((c) => h('button', { type: 'button', class: `swatch${c === cur.color ? ' on' : ''}`, style: { background: c }, 'aria-label': `Couleur ${c}`, onclick: () => { cur.color = c; paintColors(); } })));
+    // Aperçu en direct : couleur, style et taille se voient avant « OK »
+    const preview = h('div', { class: 'text-preview', 'aria-hidden': 'true' });
+    const paintPreview = () => preview.replaceChildren(overlayEl({ ...cur, text: input.value.trim() || 'Aperçu du texte', x: 0.5, y: 0.5, rot: 0 }));
+    input.addEventListener('input', paintPreview);
+    const paintColors = () => colors.replaceChildren(...TEXT_COLORS.map((c) => h('button', { type: 'button', class: `swatch${c === cur.color ? ' on' : ''}`, style: { background: c }, 'aria-label': `Couleur ${c}`, onclick: () => { cur.color = c; paintColors(); paintPreview(); } })));
     paintColors();
     const styles = h('div', { class: 'chips' });
-    const paintStyles = () => styles.replaceChildren(...[['plain', 'Simple'], ['box', 'Fond'], ['outline', 'Contour']].map(([k, l]) => h('button', { type: 'button', class: `chip${cur.style === k ? ' on' : ''}`, onclick: () => { cur.style = k; paintStyles(); } }, l)));
+    const paintStyles = () => styles.replaceChildren(...[['plain', 'Simple'], ['box', 'Fond'], ['outline', 'Contour']].map(([k, l]) => h('button', { type: 'button', class: `chip${cur.style === k ? ' on' : ''}`, onclick: () => { cur.style = k; paintStyles(); paintPreview(); } }, l)));
     paintStyles();
     const size = h('input', { type: 'range', min: 0.035, max: 0.14, step: 0.005, value: cur.size });
-    size.addEventListener('input', () => (cur.size = Number(size.value)));
+    size.addEventListener('input', () => {
+      cur.size = Number(size.value);
+      paintPreview();
+    });
+    paintPreview();
     openSheet({
       title: o ? 'Modifier le texte' : 'Ajouter un texte',
-      body: h('div', { class: 'form-stack' }, input, h('label', { class: 'field' }, h('span', null, 'Couleur'), colors), styles, h('label', { class: 'field' }, h('span', null, 'Taille'), size),
+      body: h('div', { class: 'form-stack' }, preview, input, h('label', { class: 'field' }, h('span', null, 'Couleur'), colors), styles, h('label', { class: 'field' }, h('span', null, 'Taille'), size),
         h('div', { class: 'row-end' }, o ? h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => { closeSheet(); done(null); } }, 'Retirer') : null, h('button', { type: 'button', class: 'btn btn-primary', onclick: () => { cur.text = input.value.trim(); closeSheet(); done(cur.text ? cur : o ? null : undefined); } }, 'OK'))),
     });
     setTimeout(() => input.focus(), 100);
@@ -686,13 +724,27 @@ export async function createView(ctx) {
     openSheet({ title: 'Autocollants', body: h('div', { class: 'sticker-grid' }, STICKERS.map((e) => h('button', { type: 'button', onclick: () => { closeSheet(); onPick(e); } }, e))) });
   }
 
-  function filterSheet(current, onPick) {
-    const poster = S.info?.poster ? URL.createObjectURL(S.info.poster) : null;
+  function filterSheet(current, onPick, frameFrom = null) {
+    let poster = S.info?.poster ? URL.createObjectURL(S.info.poster) : null;
+    const owned = Boolean(poster);
+    // À la caméra : une image prise sur l'aperçu sert de vignette à chaque filtre
+    if (!poster && frameFrom?.videoWidth) {
+      try {
+        const c = document.createElement('canvas');
+        const k = 240 / Math.max(frameFrom.videoWidth, frameFrom.videoHeight);
+        c.width = Math.round(frameFrom.videoWidth * k);
+        c.height = Math.round(frameFrom.videoHeight * k);
+        c.getContext('2d').drawImage(frameFrom, 0, 0, c.width, c.height);
+        poster = c.toDataURL('image/jpeg', 0.75);
+      } catch {
+        poster = null;
+      }
+    }
     openSheet({
       title: 'Filtres',
       body: h('div', { class: 'filter-strip' }, FILTERS.map((f) => h('button', { type: 'button', class: `filter-opt${f.id === current ? ' on' : ''}`, onclick: (e) => { onPick(f.id); for (const b of e.currentTarget.parentNode.children) b.classList.toggle('on', b === e.currentTarget); } },
         h('span', { class: 'filter-thumb', style: { filter: f.css || 'none' } }, poster ? h('img', { src: poster, alt: '' }) : h('span', { class: 'filter-sample' })), h('small', null, f.label)))),
-      onClose: () => poster && URL.revokeObjectURL(poster),
+      onClose: () => owned && URL.revokeObjectURL(poster),
     });
   }
 
@@ -701,25 +753,51 @@ export async function createView(ctx) {
   // =========================================================================
   function photoStep() {
     const strip = h('div', { class: 'photo-strip' });
+    const title = h('b');
     const more = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+    // Au-delà de 20 photos : on le dit, plutôt que d'ignorer les suivantes en silence
+    const keep = (list) => {
+      if (list.length > MAX_PHOTOS) toast(`${MAX_PHOTOS} photos au maximum : les suivantes n’ont pas été ajoutées.`);
+      return list.slice(0, MAX_PHOTOS);
+    };
     more.addEventListener('change', () => {
-      S.photos.push(...[...more.files].filter((f) => f.type.startsWith('image/')));
-      S.photos = S.photos.slice(0, MAX_PHOTOS);
+      S.photos = keep([...S.photos, ...[...more.files].filter((f) => f.type.startsWith('image/'))]);
       more.value = '';
       paint();
     });
     const urls = [];
+    const move = (i, d) => {
+      const j = i + d;
+      if (j < 0 || j >= S.photos.length) return;
+      [S.photos[i], S.photos[j]] = [S.photos[j], S.photos[i]];
+      paint();
+    };
     const paint = () => {
       urls.splice(0).forEach((u) => URL.revokeObjectURL(u));
+      title.textContent = `${S.photos.length} photo${S.photos.length > 1 ? 's' : ''}`;
+      const last = S.photos.length - 1;
       strip.replaceChildren(...S.photos.map((f, i) => {
         const u = URL.createObjectURL(f);
         urls.push(u);
-        return h('div', { class: 'photo-item' }, h('img', { src: u, alt: '' }), h('span', { class: 'photo-n' }, String(i + 1)), h('button', { type: 'button', class: 'photo-x', 'aria-label': 'Retirer', onclick: () => { S.photos.splice(i, 1); if (!S.photos.length) return captureStep(); paint(); } }, icon('x', 'icon-xs')));
+        return h('div', { class: 'photo-item' },
+          h('img', { src: u, alt: '' }),
+          h('span', { class: 'photo-n' }, String(i + 1)),
+          h('button', { type: 'button', class: 'photo-x', 'aria-label': 'Retirer', onclick: () => { S.photos.splice(i, 1); if (!S.photos.length) return captureStep(); paint(); } }, icon('x', 'icon-xs')),
+          // Changer l'ordre : avant / après
+          S.photos.length > 1 ? h('div', { class: 'photo-move' },
+            h('button', { type: 'button', 'aria-label': 'Placer plus tôt', disabled: i === 0, onclick: () => move(i, -1) }, icon('back', 'icon-sm')),
+            h('button', { type: 'button', 'aria-label': 'Placer plus tard', disabled: i === last, onclick: () => move(i, 1) }, icon('chevron', 'icon-sm'))) : null);
       }), S.photos.length < MAX_PHOTOS ? h('button', { type: 'button', class: 'photo-add', onclick: () => more.click() }, icon('plus'), h('small', null, 'Ajouter')) : null);
     };
     paint();
+    const back = async () => {
+      if (!(await confirmDialog('Revenir à la caméra ?', 'Les photos choisies seront retirées.', 'Revenir'))) return;
+      S.photos = [];
+      S.mode = 'video';
+      captureStep();
+    };
     setStep(h('div', { class: 'photo-edit' },
-      h('header', { class: 'cam-top' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => { S.photos = []; S.mode = 'video'; captureStep(); } }, icon('back')), h('b', null, `${S.photos.length} photo${S.photos.length > 1 ? 's' : ''}`), h('span', { class: 'icon-btn' })),
+      h('header', { class: 'cam-top' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: back }, icon('back')), title, h('span', { class: 'icon-btn' })),
       strip, more,
       h('div', { class: 'edit-bottom' }, h('button', { type: 'button', class: 'btn btn-primary btn-lg', onclick: () => postStep() }, 'Suivant'))), () => urls.forEach((u) => URL.revokeObjectURL(u)));
   }
@@ -744,7 +822,7 @@ export async function createView(ctx) {
   // =========================================================================
   function postStep() {
     const isVideo = S.mode === 'video';
-    const body = h('textarea', { class: 'textarea post-desc', rows: 5, maxlength: 2200, placeholder: S.mode === 'text' ? 'Ton texte' : 'Décris ta vidéo : #hashtags, @mentions…' });
+    const body = h('textarea', { class: 'textarea post-desc', rows: 5, maxlength: 2200, placeholder: S.mode === 'text' ? 'Ton texte' : S.mode === 'photo' ? 'Décris tes photos : #hashtags, @mentions…' : 'Décris ta vidéo : #hashtags, @mentions…' });
     body.value = S.body;
     const count = h('small', { class: 'field-hint right' }, `${body.value.length}/2200`);
     body.addEventListener('input', () => {
@@ -765,8 +843,11 @@ export async function createView(ctx) {
       const blob = S.cover || S.info?.poster || null;
       coverUrl = blob ? URL.createObjectURL(blob) : null;
       if (coverUrl) coverImg.src = coverUrl;
+      coverImg.style.filter = filterCss(S.fx.filter) || '';
     };
-    const coverBtn = isVideo ? h('button', { type: 'button', class: 'post-cover', onclick: () => coverPicker(() => paintCover()) }, coverImg, h('small', null, 'Couverture')) : null;
+    const coverBtn = isVideo && S.kind
+      ? h('div', { class: 'post-cover text bg-nuit' }, icon(S.kind === 'duet' ? 'duet' : 'scissors'), h('small', null, S.kind === 'duet' ? 'Duo' : 'Stitch'))
+      : isVideo ? h('button', { type: 'button', class: 'post-cover', onclick: () => coverPicker(() => paintCover()) }, coverImg, h('small', null, 'Couverture')) : null;
     if (isVideo) paintCover();
     const photoPreview = S.mode === 'photo' ? h('div', { class: 'post-cover' }, h('img', { src: URL.createObjectURL(S.photos[0]), alt: '' }), h('small', null, `${S.photos.length} photo${S.photos.length > 1 ? 's' : ''}`)) : null;
     const textPreview = S.mode === 'text' ? h('div', { class: `post-cover text bg-${S.bg}` }, h('span', null, 'Aa')) : null;
@@ -833,6 +914,7 @@ export async function createView(ctx) {
     allowStitch: S.allowStitch,
     allowDownload: S.allowDownload,
     category: S.category,
+    coverAt: S.coverAt,
   });
 
   // Choisir l'image de couverture en faisant défiler la vidéo
@@ -985,7 +1067,7 @@ export async function createView(ctx) {
         return h('div', { class: 'draft-row' },
           h('a', { href: `/creer?brouillon=${d.id}`, class: 'draft-open', onclick: (e) => { e.preventDefault(); closeSheet(); navigate(`/creer?brouillon=${d.id}`, { replace: true }); } },
             h('span', { class: 'draft-thumb' }, thumb ? h('img', { src: URL.createObjectURL(thumb), alt: '' }) : icon('textPost')),
-            h('span', { class: 'grow' }, h('b', null, (d.body || '').trim().slice(0, 60) || 'Sans description'), h('small', null, `${d.video ? `Vidéo · ${duration(d.video.duration || 0)}` : d.photos?.length ? `${d.photos.length} photo(s)` : 'Texte'} · ${timeAgo(d.updatedAt)}`))),
+            h('span', { class: 'grow' }, h('b', null, (d.body || '').trim().slice(0, 60) || 'Sans description'), h('small', null, `${d.video ? `Vidéo · ${duration(d.video.duration || 0)}` : d.photos?.length ? `${d.photos.length} photo${d.photos.length > 1 ? 's' : ''}` : 'Texte'} · ${timeAgo(d.updatedAt)}`))),
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Supprimer', onclick: async () => { if (await confirmDialog('Supprimer ce brouillon ?', 'Il sera effacé de cet appareil.', 'Supprimer')) { await deleteDraft(d.id); paint(); } } }, icon('trash')));
       }));
     };

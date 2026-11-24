@@ -147,7 +147,7 @@ module.exports = function postRoutes(ctx) {
       if (video && !soundId) {
         const { lastInsertRowid: sid } = await t.run(
           'INSERT INTO sounds (title, author_id, post_id, video_id, duration, cover, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          `son original - ${req.user.display_name}`, req.user.id, id, video.id, video.duration, cover, now,
+          `Son original - ${req.user.display_name}`, req.user.id, id, video.id, video.duration, cover, now,
         );
         await t.run('UPDATE posts SET sound_id = ? WHERE id = ?', sid, id);
       }

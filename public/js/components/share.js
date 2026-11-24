@@ -66,13 +66,14 @@ export async function downloadPost(post) {
   }
 }
 
-export function openShare(post, { onShared, onOptions } = {}) {
+export function openShare(post, { onShared, onOptions, onNotInterested } = {}) {
   const url = `${location.origin}${postPath(post)}`;
   const title = `${post.author.displayName} sur Vibz`;
   const text = post.body ? post.body.slice(0, 120) : title;
 
   // 1. Envoyer en message
   const picked = new Set();
+  const pickedUsers = new Map(); // personnes choisies : restent visibles pendant une recherche
   const people = h('div', { class: 'share-people' });
   const msg = h('input', { class: 'input', type: 'text', maxlength: 500, placeholder: 'Ajoute un message…' });
   const sendBtn = h('button', { type: 'button', class: 'btn btn-primary', disabled: true }, 'Envoyer');
@@ -84,7 +85,7 @@ export function openShare(post, { onShared, onOptions } = {}) {
     sendBtn.textContent = picked.size > 1 ? `Envoyer (${picked.size})` : 'Envoyer';
   };
   const person = (u) =>
-    h('button', { type: 'button', class: 'share-person', dataset: { u: u.username }, onclick: () => { if (picked.has(u.username)) picked.delete(u.username); else picked.add(u.username); paintPick(); } },
+    h('button', { type: 'button', class: 'share-person', dataset: { u: u.username }, onclick: () => { if (picked.has(u.username)) picked.delete(u.username); else { picked.add(u.username); pickedUsers.set(u.username, u); } paintPick(); } },
       h('span', { class: 'share-avatar' }, avatar(u, 'lg'), h('span', { class: 'share-check' }, icon('check', 'icon-xs'))), h('small', null, u.displayName));
   sendBtn.addEventListener('click', async () => {
     sendBtn.disabled = true;
@@ -108,18 +109,25 @@ export function openShare(post, { onShared, onOptions } = {}) {
     if (!q) return loadTargets();
     try {
       const r = await api.get(`/api/search/suggest?q=${enc(q)}`);
-      people.replaceChildren(...r.users.filter((u) => !u.me).map(person));
-      paintPick();
+      if (search.value.trim() !== q) return;
+      const found = r.users.filter((u) => !u.me);
+      showPeople(found, found.length ? null : `Aucun compte trouvé pour « ${q} ».`);
     } catch {
       /* recherche indisponible */
     }
   }, 220));
+  // Personnes choisies d'abord (même si elles ne sont pas dans les résultats), puis la liste
+  function showPeople(users, empty) {
+    const names = new Set(users.map((u) => u.username));
+    const keep = [...picked].filter((n) => !names.has(n)).map((n) => pickedUsers.get(n)).filter(Boolean);
+    people.replaceChildren(...keep.map(person), ...users.map(person));
+    if (empty) people.append(h('p', { class: 'muted small share-empty' }, empty));
+    paintPick();
+  }
   async function loadTargets() {
     try {
       const r = await api.get('/api/share/targets');
-      people.replaceChildren(...r.users.map(person));
-      if (!r.users.length) people.append(h('p', { class: 'muted small' }, 'Abonne-toi à des comptes qui te suivent pour leur envoyer des vidéos.'));
-      paintPick();
+      showPeople(r.users, r.users.length ? null : 'Recherche un compte pour lui envoyer cette publication.');
     } catch {
       people.replaceChildren();
     }
@@ -175,6 +183,7 @@ export function openShare(post, { onShared, onOptions } = {}) {
     !post.mine ? action('eyeOff', 'Pas intéressé', async () => {
       if (needLogin('Connecte-toi pour personnaliser ton fil.')) return;
       await api.post(`/api/posts/${post.id}/not-interested`).catch(() => {});
+      onNotInterested?.();
       toast('Tu verras moins de vidéos comme celle-ci');
     }) : null,
     post.mine ? action('pen', 'Modifier', () => document.dispatchEvent(new CustomEvent('vibz:edit-post', { detail: post }))) : null,

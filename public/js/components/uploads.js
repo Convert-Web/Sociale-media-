@@ -85,8 +85,6 @@ function paint() {
     end.firstChild?.style?.setProperty?.('--p', p.toFixed(3));
   }
   d.hidden = jobs.size === 0;
-  // Les messages flottants s'affichent sous les pastilles d'envoi, sans les cacher
-  document.documentElement.style.setProperty('--dock-h', d.hidden ? '0px' : `${d.offsetHeight + 8}px`);
   document.dispatchEvent(new CustomEvent('vibz:uploads'));
 }
 

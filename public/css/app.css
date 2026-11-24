@@ -8,9 +8,10 @@
   --card: #ffffff;
   --fg: #161823;
   --fg-2: #464854;
-  --muted: #858792;
+  --muted: #6b6d78;
   --line: #e7e7ec;
   --primary: #6c4dff;
+  --primary-fill: #6c4dff;
   --primary-2: #5a3bf0;
   --on-primary: #ffffff;
   --accent: #ff3d7f;
@@ -195,7 +196,7 @@ p {
   transform: scale(0.98);
 }
 .btn-primary {
-  background: var(--primary);
+  background: var(--primary-fill);
   color: var(--on-primary);
 }
 .btn-primary:hover {
@@ -398,7 +399,7 @@ input[type='range'] {
   transition: transform 0.2s;
 }
 .switch-input:checked + .switch {
-  background: var(--primary);
+  background: var(--primary-fill);
 }
 .switch-input:checked + .switch::after {
   transform: translateX(18px);
@@ -1030,6 +1031,58 @@ input[type='range'] {
 .slide.is-ready .slide-poster {
   opacity: 0;
 }
+/* Vidéo illisible : l'affiche reste visible sous le message */
+.slide.is-broken .slide-poster {
+  opacity: 1;
+}
+.slide.is-broken .slide-holder {
+  visibility: hidden;
+}
+/* Fin du fil : « Tu es à jour » */
+.feed-end {
+  height: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 35%, #1c1530, #000 70%);
+  color: #fff;
+  text-align: center;
+}
+.feed-end-card {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 320px;
+}
+.feed-end-card h3 {
+  font-size: 22px;
+}
+.feed-end-card p {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 14.5px;
+}
+.feed-end-card .btn {
+  width: 100%;
+  justify-content: center;
+}
+.feed-end-card .btn-ghost {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.feed-end-ic {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), #ff3d7f);
+}
+.feed-end-ic .icon {
+  width: 30px;
+  height: 30px;
+}
 .slide-shade {
   position: absolute;
   inset: auto 0 0 0;
@@ -1415,7 +1468,9 @@ input[type='range'] {
   cursor: pointer;
   touch-action: none;
 }
-.feed.no-scrub .scrub {
+.feed.no-scrub .scrub,
+.feed.no-scrub .feed-sound,
+.feed.no-scrub .feed-unmute {
   display: none;
 }
 .scrub-bar {
@@ -1682,9 +1737,12 @@ input[type='range'] {
   .feed-top:not(.single) {
     display: none;
   }
+  /* Cadre à la forme de la vidéo (9:16 au plus étroit, plus large pour une vidéo horizontale).
+     Défini sur le fil (barre de lecture, forme de la vidéo à l'écran) et sur chaque diapositive. */
+  .feed,
   .slide {
-    --vw: min(calc((100dvh - 48px) * 0.5625), calc(100% - 200px));
     --vh: calc(100dvh - 48px);
+    --vw: min(calc(var(--vh) * max(0.5625, var(--ar, 0.5625))), calc(100% - 200px));
   }
   .slide-media {
     inset: 24px auto 24px 50%;
@@ -2140,7 +2198,7 @@ input[type='range'] {
   font-weight: 700;
 }
 .opt-speeds button.on {
-  background: var(--primary);
+  background: var(--primary-fill);
   color: #fff;
 }
 .login-sheet {
@@ -2366,7 +2424,11 @@ input[type='range'] {
 
 .share {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
+}
+.share-section {
+  min-width: 0;
 }
 .share-section h4 {
   margin: 0 0 10px;
@@ -2408,7 +2470,7 @@ input[type='range'] {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--primary-fill);
   color: #fff;
   display: none;
   place-items: center;
@@ -2425,6 +2487,13 @@ input[type='range'] {
   display: flex;
   gap: 8px;
   margin-top: 10px;
+}
+.share-send .input {
+  flex: 1;
+  min-width: 0;
+}
+.share-send .btn {
+  flex: none;
 }
 .share-apps,
 .share-acts {
@@ -2488,6 +2557,12 @@ input[type='range'] {
 /* Bannière : sensible, traduction, mentions, envoi en arrière-plan */
 .sensitive {
   position: relative;
+}
+.sensitive:not(.revealed) .sensitive-content {
+  display: none;
+}
+.sensitive.revealed .sensitive-veil {
+  display: none;
 }
 .sensitive-veil {
   display: grid;
@@ -2567,15 +2642,22 @@ input[type='range'] {
   background: var(--bg-3);
   font-weight: 800;
 }
+/* Envois en cours : en bas de l'écran, au-dessus de la barre d'onglets (le haut des pages reste libre) */
 .upload-dock {
   position: fixed;
   z-index: 120;
-  top: calc(10px + var(--safe-t));
+  bottom: calc(var(--tab-h) + var(--safe-b) + 10px);
   left: 50%;
   transform: translateX(-50%);
   display: grid;
   gap: 8px;
-  width: min(380px, calc(100% - 24px));
+  width: min(340px, calc(100% - 24px));
+}
+@media (min-width: 900px) {
+  .upload-dock {
+    bottom: 20px;
+    left: calc(var(--side-w) + (100% - var(--side-w)) / 2);
+  }
 }
 .upload-pill {
   position: relative;
@@ -2660,7 +2742,7 @@ input[type='range'] {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--primary);
+  background: var(--primary-fill);
   border-radius: 99px;
   padding: 8px 14px;
   font-weight: 700;
@@ -3313,10 +3395,15 @@ input[type='range'] {
 }
 .profile-info {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
   text-align: center;
   gap: 10px;
   padding: 6px 0 14px;
+}
+.profile-info > * {
+  max-width: 100%;
+  min-width: 0;
 }
 .profile-pic.is-live .avatar {
   animation: livePulse 1.6s ease-in-out infinite;
@@ -3332,6 +3419,17 @@ input[type='range'] {
   display: flex;
   align-items: center;
   gap: 4px;
+  max-width: 100%;
+}
+.profile-name-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.profile-handle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .demo-chip {
   font-size: 12px;
@@ -3370,6 +3468,23 @@ input[type='range'] {
 }
 .profile-actions .btn {
   flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 360px) {
+  .profile-actions .btn {
+    padding-left: 10px;
+    padding-right: 10px;
+    font-size: 13.5px;
+  }
+}
+.similar-toggle .icon {
+  transition: transform 0.2s;
+}
+.similar-toggle.on .icon {
+  transform: rotate(180deg);
 }
 .profile-actions .btn-icon {
   flex: none;
@@ -3377,14 +3492,23 @@ input[type='range'] {
 .profile-bio {
   max-width: 420px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-size: 14.5px;
 }
+/* Un lien très long reste sur une ligne, coupé par « … » (l'adresse complète est au survol) */
 .profile-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  max-width: min(100%, 420px);
   font-weight: 650;
   font-size: 14px;
+}
+.profile-link span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .profile-tabs {
   display: flex;
@@ -3430,6 +3554,7 @@ input[type='range'] {
 }
 .similar {
   width: 100%;
+  min-width: 0;
   text-align: left;
 }
 .similar h3 {
@@ -3459,6 +3584,20 @@ input[type='range'] {
 }
 .follow-modal .tabs {
   margin-bottom: 4px;
+  gap: 0;
+}
+.follow-modal .tab-link {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 12px 6px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.follow-modal .tab-link.on::after {
+  left: 12%;
+  right: 12%;
 }
 .follow-list {
   min-height: 200px;
@@ -3492,7 +3631,7 @@ input[type='range'] {
   background: var(--heart);
 }
 .inbox-ic.violet {
-  background: var(--primary);
+  background: var(--primary-fill);
 }
 .inbox-text {
   display: grid;
@@ -3512,6 +3651,9 @@ input[type='range'] {
   gap: 12px;
   padding: 10px 8px;
   border-radius: 10px;
+}
+.inbox .conv {
+  margin-inline: -8px;
 }
 .conv:hover,
 .conv.active {
@@ -3604,6 +3746,16 @@ input[type='range'] {
   display: flex;
   gap: 6px;
   flex: none;
+}
+/* Téléphone : Accepter / Refuser sous le texte, qui garde toute la largeur */
+@media (max-width: 480px) {
+  .n-row:has(> .n-req) {
+    flex-wrap: wrap;
+  }
+  .n-row > .n-req {
+    flex-basis: 100%;
+    padding-left: 60px;
+  }
 }
 .requests {
   margin-bottom: 12px;
@@ -3760,8 +3912,15 @@ input[type='range'] {
   font-size: 15px;
 }
 .dm-msg.mine .dm-bubble {
-  background: var(--primary);
+  background: var(--primary-fill);
   color: #fff;
+}
+.dm-text {
+  white-space: pre-wrap;
+}
+.dm-bubble a {
+  color: var(--primary);
+  font-weight: 600;
 }
 .dm-msg.mine .dm-bubble a {
   color: #fff;
@@ -3883,7 +4042,7 @@ input[type='range'] {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--primary-fill);
   color: #fff;
   flex: none;
 }
@@ -3913,6 +4072,19 @@ input[type='range'] {
 }
 .pick-row:hover {
   background: var(--bg-2);
+}
+.pick-head {
+  margin: 4px 4px 2px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--muted);
+}
+.pick-empty {
+  margin: 0;
+  padding: 18px 8px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--muted);
 }
 .pick-row span {
   display: grid;
@@ -5123,7 +5295,7 @@ input[type='range'] {
 .cam-time {
   position: absolute;
   z-index: 6;
-  top: calc(16px + var(--safe-t));
+  top: calc(70px + var(--safe-t));
   left: 50%;
   transform: translateX(-50%);
   font-size: 13px;
@@ -5180,13 +5352,13 @@ input[type='range'] {
   justify-items: center;
   gap: 2px;
   text-align: center;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.72);
   border-radius: 12px;
   padding: 6px 12px;
   font-weight: 650;
   font-size: 13.5px;
   width: max-content;
-  max-width: 90vw;
+  max-width: calc(100vw - 160px);
 }
 .cam-kind small {
   font-weight: 400;
@@ -5213,6 +5385,17 @@ input[type='range'] {
   font-size: 140px;
   font-weight: 900;
   text-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+.cam-countdown::after {
+  content: attr(data-hint);
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 28%;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 650;
 }
 .cam-bottom {
   position: absolute;
@@ -5817,4 +6000,118 @@ input[type='range'] {
   .marquee span {
     animation: none;
   }
+}
+
+/* Choix d'un motif (signalement…) : une ligne par motif, facile à toucher */
+.choices {
+  display: grid;
+  gap: 6px;
+}
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--bg-2);
+  cursor: pointer;
+  font-weight: 550;
+}
+.choice:has(input:checked) {
+  background: color-mix(in srgb, var(--primary) 14%, var(--bg-2));
+  box-shadow: inset 0 0 0 1.5px var(--primary);
+}
+.choice input {
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+/* Commentaires : l'appui long ouvre le menu de Vibz, pas la sélection de texte du téléphone
+   (« Copier » reste dans le menu) */
+.cm {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Éditeur de texte : aperçu en direct sur un fond en damier */
+.text-preview {
+  position: relative;
+  height: 96px;
+  container-type: size;
+  border-radius: 12px;
+  overflow: hidden;
+  background: repeating-conic-gradient(#2a2a33 0% 25%, #1d1d24 0% 50%) 50% / 18px 18px;
+}
+/* Description de la publication : pas de poignée de redimensionnement */
+.post-desc {
+  resize: none;
+}
+
+/* Éditeur de photos : changer l'ordre */
+.photo-move {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+.photo-move button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.photo-move button:disabled {
+  opacity: 0.3;
+}
+
+/* Éditeur : en déplaçant un texte, les bandes montrent ce que le fil coupera sur ce téléphone */
+.edit-safe {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.edit-stage.dragging .edit-safe {
+  opacity: 1;
+}
+.edit-safe i {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.45);
+}
+.edit-safe.x i {
+  top: 0;
+  bottom: 0;
+  width: var(--band);
+}
+.edit-safe.x i:first-child {
+  left: 0;
+  border-right: 1px dashed rgba(255, 255, 255, 0.6);
+}
+.edit-safe.x i:last-child {
+  right: 0;
+  border-left: 1px dashed rgba(255, 255, 255, 0.6);
+}
+.edit-safe.y i {
+  left: 0;
+  right: 0;
+  height: var(--band);
+}
+.edit-safe.y i:first-child {
+  top: 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.6);
+}
+.edit-safe.y i:last-child {
+  bottom: 0;
+  border-top: 1px dashed rgba(255, 255, 255, 0.6);
 }

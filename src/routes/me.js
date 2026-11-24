@@ -35,6 +35,7 @@ module.exports = function meRoutes(ctx) {
       const taken = await db.get('SELECT id FROM users WHERE username = ? AND id != ?', username, u.id);
       if (taken) fail(409, "Ce nom d'utilisateur est déjà pris.");
       const last = await db.get("SELECT value FROM settings WHERE key = ?", `username-changed:${u.id}`);
+      req.oldUsername = u.username;
       if (last && Date.now() - Number(last.value) < 30 * 86400e3 && !u.is_admin) {
         fail(429, 'Tu as déjà changé de nom d’utilisateur ces 30 derniers jours.');
       }
@@ -42,6 +43,10 @@ module.exports = function meRoutes(ctx) {
     }
     assertClean('Profil', displayName, bio, username.replace(/[._]/g, ' '));
     await db.run('UPDATE users SET display_name = ?, bio = ?, website = ?, username = ? WHERE id = ?', displayName, bio, website, username, u.id);
+    // L'ancien nom mène encore au compte (liens partagés, @mentions, notifications)
+    if (req.oldUsername && req.oldUsername.toLowerCase() !== username.toLowerCase()) {
+      await db.run('INSERT INTO username_history (old_username, user_id, changed_at) VALUES (?, ?, ?)', req.oldUsername, u.id, Date.now());
+    }
     res.json({ user: selfUser(ctx, await reload(u.id)) });
   });
 

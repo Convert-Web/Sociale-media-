@@ -136,7 +136,7 @@ async function forYou(ctx, viewer, { exclude = [], limit = 8, rand = Math.random
        EXISTS(SELECT 1 FROM video_views vv WHERE vv.post_id = p.id AND vv.user_id = v.id) AS seen,
        EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = v.id AND f.followee_id = p.user_id) AS follows
      FROM ${VIEWER} CROSS JOIN posts p JOIN users u ON u.id = p.user_id
-     WHERE (p.video_id IS NOT NULL OR p.image IS NOT NULL) AND p.user_id != v.id AND ${VISIBLE}
+     WHERE (p.video_id IS NOT NULL OR p.image IS NOT NULL OR p.bg IS NOT NULL) AND p.user_id != v.id AND ${VISIBLE}
        AND NOT EXISTS (SELECT 1 FROM not_interested ni WHERE ni.user_id = v.id AND (ni.post_id = p.id OR (ni.post_id = 0 AND ni.author_id = p.user_id)))
        ${exSql}
      ORDER BY p.id DESC LIMIT 500`,
@@ -169,7 +169,7 @@ async function followingFeed(ctx, viewer, { before = null, limit = 10 } = {}) {
   const items = await ctx.db.all(
     `SELECT post_id, at, reposter_id FROM (
        SELECT p.id AS post_id, p.created_at AS at, NULL AS reposter_id FROM posts p
-       WHERE p.user_id IN (SELECT followee_id FROM follows WHERE follower_id = ?) AND (p.video_id IS NOT NULL OR p.image IS NOT NULL)
+       WHERE p.user_id IN (SELECT followee_id FROM follows WHERE follower_id = ?) AND (p.video_id IS NOT NULL OR p.image IS NOT NULL OR p.bg IS NOT NULL)
        UNION ALL
        SELECT r.post_id, r.created_at AS at, r.user_id AS reposter_id FROM reposts r
        WHERE r.user_id IN (SELECT followee_id FROM follows WHERE follower_id = ?)
@@ -202,7 +202,7 @@ async function friendsFeed(ctx, viewer, { before = null, limit = 10 } = {}) {
   const rows = await ctx.db.all(
     `SELECT p.id FROM posts p
      WHERE p.user_id IN (SELECT a.followee_id FROM follows a JOIN follows b ON b.follower_id = a.followee_id AND b.followee_id = a.follower_id WHERE a.follower_id = ?)
-       AND (p.video_id IS NOT NULL OR p.image IS NOT NULL) AND (? IS NULL OR p.id < ?)
+       AND (p.video_id IS NOT NULL OR p.image IS NOT NULL OR p.bg IS NOT NULL) AND (? IS NULL OR p.id < ?)
      ORDER BY p.id DESC LIMIT ?`,
     viewer.id, before, before, limit,
   );

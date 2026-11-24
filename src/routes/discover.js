@@ -63,7 +63,7 @@ module.exports = function discoverRoutes(ctx) {
     const offset = Math.min(500, intParam(req.query.cursor) || 0);
     const limit = 18;
     const rows = await db.all(
-      `SELECT * FROM (${POST_SELECT} WHERE (p.video_id IS NOT NULL OR p.image IS NOT NULL) AND p.privacy = 'public' AND (? IS NULL OR p.category = ?) AND ${VISIBLE})
+      `SELECT * FROM (${POST_SELECT} WHERE (p.video_id IS NOT NULL OR p.image IS NOT NULL OR p.bg IS NOT NULL) AND p.privacy = 'public' AND (? IS NULL OR p.category = ?) AND ${VISIBLE})
        ORDER BY ${POPULAR.replace(/p\.created_at/g, 'created_at')} DESC, id DESC LIMIT ? OFFSET ?`,
       vid(req), category, category, limit, offset,
     );
@@ -100,7 +100,7 @@ module.exports = function discoverRoutes(ctx) {
     if (type === 'top' || type === 'videos') {
       const limit = type === 'top' ? 12 : 18;
       const rows = await db.all(
-        `SELECT * FROM (${POST_SELECT} WHERE (p.video_id IS NOT NULL OR p.image IS NOT NULL)
+        `SELECT * FROM (${POST_SELECT} WHERE (p.video_id IS NOT NULL OR p.image IS NOT NULL OR p.bg IS NOT NULL)
            AND (p.body LIKE ? ESCAPE '\\' OR u.username LIKE ? ESCAPE '\\' OR u.display_name LIKE ? ESCAPE '\\' OR s.title LIKE ? ESCAPE '\\'
                 OR (? IS NOT NULL AND EXISTS (SELECT 1 FROM post_tags pt WHERE pt.post_id = p.id AND pt.tag LIKE ? ESCAPE '\\')))
            AND ${VISIBLE})

@@ -3,8 +3,8 @@
 import { api, enc } from './api.js';
 import { store, connectRealtime, disconnectRealtime } from './store.js';
 import { navigate, setRenderer, compile } from './router.js';
-import { h, icon, avatar, spinner, emptyState, closeModal, closeMenu, toast, popMenu, logoMark } from './dom.js';
-import { openSheet, closeSheet } from './components/sheet.js';
+import { h, icon, avatar, spinner, emptyState, closeModal, closeModals, modalOpen, closeMenu, toast, popMenu, logoMark, modal } from './dom.js';
+import { openSheet, closeSheet, sheetOpen } from './components/sheet.js';
 import { installFormValidation } from './forms.js';
 import { trackPage, cookieBanner } from './components/cookies.js';
 import { prefetchReels, unlockPlayer } from './components/video.js';
@@ -107,21 +107,22 @@ function openLoginSheet(reason) {
   const here = location.pathname + location.search;
   const go = (path) => {
     closeSheet();
-    closeModal();
+    closeModals();
     navigate(`${path}?suite=${enc(here)}`);
   };
-  openSheet({
-    title: 'Connecte-toi à Vibz',
-    body: h(
-      'div',
-      { class: 'login-sheet' },
-      h('div', { class: 'login-logo' }, logoMark()),
-      h('p', null, reason || 'Connecte-toi pour continuer.'),
-      h('p', { class: 'muted small' }, 'Suis des créateurs, aime des vidéos, commente et crée les tiennes.'),
-      h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', onclick: () => go('/inscription') }, 'Créer un compte'),
-      h('button', { type: 'button', class: 'btn btn-ghost btn-lg btn-block', onclick: () => go('/connexion') }, 'J’ai déjà un compte'),
-    ),
-  });
+  const body = h(
+    'div',
+    { class: 'login-sheet' },
+    h('div', { class: 'login-logo' }, logoMark()),
+    h('p', null, reason || 'Connecte-toi pour continuer.'),
+    h('p', { class: 'muted small' }, 'Suis des créateurs, aime des vidéos, commente et crée les tiennes.'),
+    h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', onclick: () => go('/inscription') }, 'Créer un compte'),
+    h('button', { type: 'button', class: 'btn btn-ghost btn-lg btn-block', onclick: () => go('/connexion') }, 'J’ai déjà un compte'),
+  );
+  // Une feuille ou une fenêtre est déjà ouverte (commentaires, liste d'abonnés…) : l'invitation
+  // passe par-dessus, sans la fermer
+  if (sheetOpen() || modalOpen()) modal('Connecte-toi à Vibz', h('div', { class: 'modal-body' }, body), { stack: true });
+  else openSheet({ title: 'Connecte-toi à Vibz', body });
 }
 document.addEventListener('vibz:login', (e) => openLoginSheet(e.detail?.reason));
 document.addEventListener('vibz:edit-post', (e) => editPost(e.detail));
@@ -134,7 +135,7 @@ const wordmark = () => h('a', { href: '/', class: 'brand', 'aria-label': 'Vibz, 
 function buildShell() {
   const unsub = [];
   const navEls = new Map();
-  const badges = { inbox: [], messages: [] };
+  const badges = { inbox: [], messages: [], activity: [] };
   const register = (key, el) => {
     if (!navEls.has(key)) navEls.set(key, []);
     navEls.get(key).push(el);
@@ -185,7 +186,7 @@ function buildShell() {
     side('friends', '/amis', 'friends', 'friendsFill', 'Amis', { onclick: (e) => guard(e, 'Connecte-toi pour voir tes amis.') }),
     side('live', '/live', 'live', 'live', 'LIVE'),
     side('messages', '/messages', 'send', 'send', 'Messages', { badge: badge('messages'), onclick: (e) => guard(e, 'Connecte-toi pour envoyer des messages.') }),
-    side('inbox', '/activite', 'bell', 'bellRing', 'Activité', { badge: badge('inbox'), onclick: (e) => guard(e, 'Connecte-toi pour voir ton activité.') }),
+    side('inbox', '/activite', 'bell', 'bellRing', 'Activité', { badge: badge('activity'), onclick: (e) => guard(e, 'Connecte-toi pour voir ton activité.') }),
     side('create', '/creer', 'plus', 'plus', 'Créer', { onclick: (e) => guard(e, 'Connecte-toi pour publier une vidéo.') }),
     profileLink,
     moreBtn,
@@ -203,7 +204,7 @@ function buildShell() {
     tab('home', '/', 'home', 'homeFill', 'Accueil', { onclick: () => unlockPlayer() }),
     tab('friends', '/amis', 'friends', 'friendsFill', 'Amis'),
     h('a', { href: '/creer', class: 'tab tab-create', 'aria-label': 'Créer', onclick: (e) => guard(e, 'Connecte-toi pour publier une vidéo.') }, h('span', { class: 'create-btn' }, icon('plus'))),
-    tab('inbox', '/boite', 'inbox', 'inboxFill', 'Boîte', { badge: badge('inbox'), onclick: (e) => guard(e, 'Connecte-toi pour voir tes messages et ton activité.') }),
+    register('messages', tab('inbox', '/boite', 'inbox', 'inboxFill', 'Boîte', { badge: badge('inbox'), onclick: (e) => guard(e, 'Connecte-toi pour voir tes messages et ton activité.') })),
     register('profile', h('a', { href: profileHref(), class: 'tab tab-profile', onclick: (e) => guard(e, 'Connecte-toi pour voir ton profil.') }, tabAvatar, h('span', { class: 'tab-label' }, 'Profil'))),
   );
   // Un toucher sur l'onglet « Profil » quand on a déjà un compte : son profil
@@ -225,7 +226,7 @@ function buildShell() {
   const el = h('div', { class: 'shell' }, sidebar, main, tabbar);
 
   const paintBadges = (c) => {
-    const values = { inbox: (c.notifications || 0) + (c.requests || 0) + (c.messages || 0), messages: c.messages || 0 };
+    const values = { inbox: (c.notifications || 0) + (c.requests || 0) + (c.messages || 0), messages: c.messages || 0, activity: (c.notifications || 0) + (c.requests || 0) };
     for (const kind of Object.keys(badges)) {
       for (const b of badges[kind]) {
         const v = values[kind] || 0;
@@ -312,7 +313,7 @@ function restoreScroll(target) {
 
 async function render(opts = {}) {
   const token = ++renderToken;
-  closeModal();
+  closeModals();
   closeMenu();
   closeSheet();
   for (const fn of cleanups.splice(0)) {

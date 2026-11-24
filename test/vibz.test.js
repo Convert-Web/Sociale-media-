@@ -63,7 +63,7 @@ test('publication vidéo, son original, hashtags, fil « Pour toi » sans compte
   const post = await publishVideo(base, alice, 'Première vidéo #Danse #fyp avec @second', { category: 'danse', fx: { filter: 'vif', overlays: [{ kind: 'text', text: 'Salut', x: 0.5, y: 0.3, color: '#ffffff' }] } });
   assert.equal(post.kind, 'video');
   assert.equal(post.sound.original, true);
-  assert.match(post.sound.title, /son original/);
+  assert.match(post.sound.title, /^Son original/);
   assert.equal(post.fx.filter, 'vif');
   assert.equal(post.fx.overlays[0].text, 'Salut');
   const guest = client(base);

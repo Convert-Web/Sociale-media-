@@ -38,7 +38,6 @@ async function deletePostIn(t, postId) {
   await t.run('DELETE FROM view_days WHERE post_id = ?', postId);
   await t.run('DELETE FROM comments WHERE post_id = ?', postId);
   await t.run('DELETE FROM notifications WHERE post_id = ?', postId);
-  await t.run('UPDATE messages SET post_id = NULL WHERE post_id = ?', postId);
   await t.run('UPDATE posts SET duet_of = NULL WHERE duet_of = ?', postId);
   await t.run('UPDATE posts SET stitch_of = NULL WHERE stitch_of = ?', postId);
   // Son original de la vidéo : les vidéos qui l'utilisent gardent leur son (enregistré dans leur fichier),
@@ -81,6 +80,8 @@ async function deleteUser(ctx, userId) {
     await t.run(`DELETE FROM notifications WHERE comment_id IN (${mine})`, userId);
     await t.run(`DELETE FROM comments WHERE parent_id IN (${mine})`, userId);
     await t.run('DELETE FROM comments WHERE user_id = ?', userId);
+    await t.run('DELETE FROM username_history WHERE user_id = ?', userId);
+  await t.run('DELETE FROM presence WHERE user_id = ?', userId);
     await t.run('DELETE FROM likes WHERE user_id = ?', userId);
     await t.run('DELETE FROM bookmarks WHERE user_id = ?', userId);
     await t.run('DELETE FROM reposts WHERE user_id = ?', userId);
@@ -90,7 +91,7 @@ async function deleteUser(ctx, userId) {
     await t.run("DELETE FROM interests WHERE kind = 'author' AND key = ?", String(userId));
     await t.run('DELETE FROM sound_favorites WHERE user_id = ?', userId);
     // Ses sons restent dans les vidéos des autres, mais ne portent plus son nom
-    await t.run("UPDATE sounds SET title = 'son original', post_id = NULL, video_id = NULL WHERE author_id = ?", userId);
+    await t.run("UPDATE sounds SET title = 'Son original', post_id = NULL, video_id = NULL WHERE author_id = ?", userId);
     await t.run("DELETE FROM reports WHERE reporter_id = ? OR (target_type = 'user' AND target_id = ?)", userId, userId);
     await t.run('DELETE FROM story_views WHERE user_id = ? OR story_id IN (SELECT id FROM stories WHERE user_id = ?)', userId, userId);
     await t.run('DELETE FROM stories WHERE user_id = ?', userId);

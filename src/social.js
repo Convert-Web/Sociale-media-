@@ -295,11 +295,18 @@ const NOTIF_SELECT = `
   SELECT n.id, n.type, n.post_id, n.comment_id, n.live_id, n.body, n.created_at, n.read_at,
          a.id AS user_id, a.username, a.display_name, a.avatar, a.verified_at,
          p.image AS post_image, CASE WHEN p.flagged IS NULL THEN p.body ELSE '' END AS post_body,
+         p.video_id AS post_video, pu.username AS post_author, c.parent_id AS comment_parent,
+         (SELECT COUNT(*) FROM post_media pm WHERE pm.post_id = p.id) AS post_media_count,
          EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = n.user_id AND f.followee_id = a.id) AS following_back,
          EXISTS(SELECT 1 FROM follow_requests fr WHERE fr.requester_id = a.id AND fr.target_id = n.user_id) AS pending_request
   FROM notifications n
   JOIN users a ON a.id = n.actor_id
-  LEFT JOIN posts p ON p.id = n.post_id`;
+  LEFT JOIN posts p ON p.id = n.post_id
+  LEFT JOIN users pu ON pu.id = p.user_id
+  LEFT JOIN comments c ON c.id = n.comment_id`;
+
+// Nature d'une publication, pour le texte des notifications (« ta vidéo », « tes photos »…)
+const notifPostKind = (row) => (row.post_video ? 'video' : row.post_media_count > 1 ? 'photos' : row.post_image ? 'photo' : 'text');
 
 function serializeNotification(_ctx, row) {
   return {
@@ -311,20 +318,54 @@ function serializeNotification(_ctx, row) {
     followingBack: Boolean(row.following_back),
     pendingRequest: Boolean(row.pending_request),
     body: row.body || '',
-    post: row.post_id ? { id: row.post_id, image: row.post_image || null, excerpt: (row.post_body || '').slice(0, 100) } : null,
+    post: row.post_id ? { id: row.post_id, image: row.post_image || null, excerpt: (row.post_body || '').slice(0, 100), kind: notifPostKind(row), author: row.post_author || null } : null,
     commentId: row.comment_id || null,
+    commentParentId: row.comment_parent || null,
     liveId: row.live_id || null,
   };
 }
 
 async function counters(ctx, userId) {
   const row = await ctx.db.get(
-    `SELECT (SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL) AS n,
-            (SELECT COUNT(*) FROM messages WHERE recipient_id = ? AND read_at IS NULL) AS m,
+    `SELECT (SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL
+               AND actor_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ?)) AS n,
+            (SELECT COUNT(*) FROM messages m JOIN users s ON s.id = m.sender_id
+             WHERE m.recipient_id = ? AND m.read_at IS NULL AND s.banned_at IS NULL
+               AND m.sender_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)) AS m,
             (SELECT COUNT(*) FROM follow_requests WHERE target_id = ?) AS r`,
-    userId, userId, userId,
+    userId, userId, userId, userId, userId, userId,
   );
   return { notifications: row.n, messages: row.m, requests: row.r };
+}
+
+// Présence : connexion permanente (hub) ou, sans elle, dernier passage enregistré en base
+const POLL_ONLINE = 90e3;
+const polling = (ctx) => ctx.config?.realtime === 'poll';
+async function onlineSet(ctx, ids) {
+  const list = [...new Set(ids.filter(Boolean))];
+  if (!polling(ctx)) return new Set(list.filter((id) => ctx.hub.isOnline(id)));
+  if (!list.length) return new Set();
+  const rows = await ctx.db.all(`SELECT user_id FROM presence WHERE seen_at > ? AND user_id IN (${list.map(() => '?').join(',')})`, Date.now() - POLL_ONLINE, ...list);
+  return new Set(rows.map((r) => r.user_id));
+}
+async function touchPresence(ctx, userId, typingTo = null) {
+  if (!polling(ctx) || !userId) return;
+  const now = Date.now();
+  if (typingTo) {
+    await ctx.db.run(
+      `INSERT INTO presence (user_id, seen_at, typing_to, typing_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET seen_at = excluded.seen_at, typing_to = excluded.typing_to, typing_at = excluded.typing_at`,
+      userId, now, typingTo, now,
+    );
+  } else {
+    await ctx.db.run('INSERT INTO presence (user_id, seen_at) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET seen_at = excluded.seen_at', userId, now);
+  }
+}
+// « écrit… » sans connexion permanente : l'autre personne a tapé il y a moins de 6 secondes
+async function isTyping(ctx, from, to) {
+  if (!polling(ctx)) return false;
+  const row = await ctx.db.get('SELECT typing_to, typing_at FROM presence WHERE user_id = ?', from);
+  return Boolean(row && row.typing_to === to && row.typing_at > Date.now() - 6000);
 }
 
 async function pushCounters(ctx, userId) {
@@ -455,6 +496,9 @@ module.exports = {
   serializeComment,
   NOTIF_SELECT,
   serializeNotification,
+  onlineSet,
+  touchPresence,
+  isTyping,
   counters,
   pushCounters,
   notify,

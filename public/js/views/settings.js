@@ -88,9 +88,22 @@ export async function settingsView(ctx) {
     const dm = h('select', { class: 'input' }, [['everyone', 'Tout le monde'], ['friends', 'Amis'], ['none', 'Personne']].map(([v, l]) => h('option', { value: v, selected: s.dmPolicy === v }, l)));
     dm.addEventListener('change', () => saveSettings({ dmPolicy: dm.value }));
     const blocked = h('div', { class: 'set-card' }, spinner());
+    const noneBlocked = () => h('p', { class: 'muted small pad' }, 'Aucun compte bloqué.');
+    const unblock = async (b, btn) => {
+      btn.disabled = true;
+      try {
+        await api.del(`/api/users/${enc(b.username)}/block`);
+        btn.closest('.user-row')?.remove();
+        if (!blocked.querySelector('.user-row')) blocked.replaceChildren(noneBlocked());
+        toast(`${b.displayName} est débloqué`);
+      } catch (err) {
+        btn.disabled = false;
+        toast(err.message, 'error');
+      }
+    };
     api.get('/api/me/blocked').then(({ users }) => {
-      blocked.replaceChildren(...(users.length ? users.map((b) => userRow(b, { action: h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: async (e) => { await api.del(`/api/users/${enc(b.username)}/block`); e.target.closest('.user-row').remove(); toast('Compte débloqué'); } }, 'Débloquer') })) : [h('p', { class: 'muted small pad' }, 'Aucun compte bloqué.')]));
-    }).catch(() => blocked.replaceChildren());
+      blocked.replaceChildren(...(users.length ? users.map((b) => userRow(b, { action: h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: (e) => unblock(b, e.currentTarget) }, 'Débloquer') })) : [noneBlocked()]));
+    }).catch(() => blocked.replaceChildren(h('p', { class: 'muted small pad' }, 'Impossible de charger la liste. Réessaie plus tard.')));
     return h('div', { class: 'page settings' }, head('Confidentialité'),
       group('Visibilité', priv.el, liked.el),
       group('Messages', h('label', { class: 'set-row static' }, h('span', { class: 'set-ic' }, icon('send')), h('span', { class: 'set-text' }, 'Qui peut t’envoyer des messages', dm))),

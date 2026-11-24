@@ -13,7 +13,8 @@ const fail = (status, message, code) => {
 };
 
 // Nom d'utilisateur : 2 à 24 caractères, lettres, chiffres, « _ » et « . » (pas de point final)
-const USERNAME_RE = /^[a-z0-9_](?:[a-z0-9_.]{0,22}[a-z0-9_])?$/i;
+// 2 à 24 caractères : lettres, chiffres, « _ » ou « . » (pas de point au début ni à la fin)
+const USERNAME_RE = /^[a-z0-9_][a-z0-9_.]{0,22}[a-z0-9_]$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const RESERVED = new Set([
   'admin', 'administrateur', 'vibz', 'vibz.officiel', 'support', 'help', 'aide', 'root', 'system', 'systeme',

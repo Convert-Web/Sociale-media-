@@ -56,8 +56,19 @@ module.exports = function authRoutes(ctx) {
     const name = String(req.query.u || '').replace(/^@/, '');
     if (!USERNAME_RE.test(name)) return res.json({ ok: false, reason: '2 à 24 caractères : lettres, chiffres, « _ » ou « . ».' });
     if (RESERVED.has(name.toLowerCase())) return res.json({ ok: false, reason: 'Ce nom est réservé.' });
-    const taken = await db.get('SELECT 1 FROM users WHERE username = ?', name);
-    res.json({ ok: !taken, reason: taken ? 'Ce nom est déjà pris.' : null });
+    // Son propre nom (même dans une autre casse) n'est pas « déjà pris »
+    const taken = await db.get('SELECT 1 FROM users WHERE username = ? AND id != ?', name, req.user?.id || 0);
+    if (taken) return res.json({ ok: false, reason: 'Ce nom est déjà pris.' });
+    // Déjà changé ces 30 derniers jours : on le dit tout de suite, pas seulement à l'enregistrement
+    if (req.user && !req.user.is_admin && name.toLowerCase() !== req.user.username.toLowerCase()) {
+      const last = await db.get('SELECT value FROM settings WHERE key = ?', `username-changed:${req.user.id}`);
+      const next = last ? Number(last.value) + 30 * 86400e3 : 0;
+      if (next > Date.now()) {
+        const day = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' }).format(new Date(next));
+        return res.json({ ok: false, reason: `Prochain changement de nom possible le ${day}.` });
+      }
+    }
+    res.json({ ok: true, reason: null });
   });
 
   r.post('/auth/signup', async (req, res) => {

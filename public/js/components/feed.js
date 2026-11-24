@@ -6,7 +6,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, richText, short, count, toast, emptyState, spinner, onTaps, heartBurst, verifiedMark, timeAgo, confirmDialog } from '../dom.js';
+import { h, icon, avatar, richText, short, count, toast, emptyState, spinner, onTaps, heartBurst, verifiedMark, timeAgo, confirmDialog, deName } from '../dom.js';
 import {
   sound, reelsPlayer, preloadVideo, preloadStart, localVideo, sameVideo, setSource, PRIO, preloadEta, cancelPreload, holdPreloads, releasePreloads,
   clockLabel, canProgressive, progressiveReady, progressiveCheck, playProgressive, disableProgressive, downloadedBytes, relaxPreload, reportVideoIssue, videoBlob,
@@ -58,6 +58,7 @@ function slide(post) {
   box.__post = post;
   const v = post.video;
   const ar = v?.width && v?.height ? v.width / v.height : 9 / 16;
+  if (post.kind === 'video') box.style.setProperty('--ar', String(ar));
 
   // Média : vidéo (lecteur partagé), photos (carrousel) ou texte sur fond coloré
   let media;
@@ -131,7 +132,7 @@ function slide(post) {
   const shareBtn = railButton('shareFill', 'Partager', short(post.shareCount), 'share');
   shareBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    openShare(post, { onShared: () => (shareBtn.__count.textContent = short(post.shareCount)), onOptions: () => box.__options?.() });
+    openShare(post, { onShared: () => (shareBtn.__count.textContent = short(post.shareCount)), onOptions: () => box.__options?.(), onNotInterested: () => box.__notInterested?.() });
   });
 
   // Photo du créateur, avec « + » pour s'abonner sans quitter la vidéo
@@ -164,7 +165,7 @@ function slide(post) {
   // (reconstruites quand la publication est modifiée : description, confidentialité, épinglage)
   const views = h('span', { class: 'info-views' });
   box.__paintViews = () => {
-    views.textContent = post.kind === 'video' && (post.mine || post.viewCount > 0) ? count(post.viewCount, 'vue') : '';
+    views.textContent = post.kind === 'video' && (post.mine || post.viewCount > 0) ? `· ${count(post.viewCount, 'vue')}` : '';
   };
   box.__paintViews();
   const buildInfo = () => {
@@ -209,7 +210,6 @@ function slide(post) {
       'div',
       { class: 'info' },
       post.repostedBy ? h('a', { class: 'info-repost', href: `/@${enc(post.repostedBy.username)}` }, icon('repost', 'icon-xs'), `${post.repostedBy.displayName} a republié`) : null,
-      post.pinned ? h('span', { class: 'info-pinned' }, 'Épinglée') : null,
       h('div', { class: 'info-who' }, h('a', { href: `/@${enc(post.author.username)}`, class: 'info-user' }, h('b', null, post.author.displayName), post.author.verified ? verifiedMark() : null), h('span', { class: 'info-date' }, `· ${timeAgo(post.createdAt)}`), views),
       text,
       chips.length ? h('div', { class: 'info-chips' }, chips) : null,
@@ -446,6 +446,17 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     for (const x of [...withImages]) if (!near.has(x)) releaseImages(x);
   }
 
+  function leaveForEnd() {
+    if (!active) return;
+    endWatch();
+    setBuffering(false);
+    stopProgressive();
+    player.pause();
+    active.classList.remove('is-active', 'is-ready', 'paused');
+    active = null;
+    actToken++;
+  }
+
   function activate(box) {
     if (active === box || !box?.__post || destroyed) return;
     keepNear(box);
@@ -455,6 +466,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     active = box;
     const token = ++actToken;
     box.classList.add('is-active');
+    root.style.setProperty('--ar', box.style.getPropertyValue('--ar') || '0.5625');
     userPaused = false;
     pendingSeek = null;
     setBuffering(box.__post.kind === 'video');
@@ -541,6 +553,12 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
   const onPlaying = () => {
     if (!active?.__post.video || !sameVideo(player, active.__post.video)) return;
     active.classList.add('is-ready');
+    // Le son joue mais aucune image n'est décodée (format non pris en charge par l'appareil)
+    const shown = active;
+    const tok = actToken;
+    setTimeout(() => {
+      if (tok === actToken && shown === active && !player.paused && player.readyState >= 2 && player.videoWidth === 0) shown.classList.add('is-broken');
+    }, 1500);
     if (watch && !watch.playing) {
       watch.playing = true;
       watch.since = performance.now();
@@ -827,11 +845,11 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
         removeSlides((p) => p.id === post.id);
         toast('Tu verras moins de vidéos comme celle-ci');
       }),
-      !post.mine && item('ban', `Masquer les vidéos de ${post.author.displayName}`, async () => {
+      !post.mine && item('ban', `Masquer les vidéos ${deName(post.author.displayName)}`, async () => {
         if (needLogin('Connecte-toi pour personnaliser ton fil.')) return;
         await api.post(`/api/posts/${post.id}/not-interested`, { author: true }).catch(() => {});
         removeSlides((p) => p.author.id === post.author.id);
-        toast(`Les vidéos de ${post.author.displayName} sont masquées`);
+        toast(`Les vidéos ${deName(post.author.displayName)} sont masquées`);
       }),
       (post.allowDownload || post.mine) && post.kind !== 'text' && item('download', 'Enregistrer la vidéo', () => downloadPost(post)),
       item(post.saved ? 'bookmarkFill' : 'bookmark', post.saved ? 'Retirer des favoris' : 'Ajouter aux favoris', () => toggleSave(post, box.__paintSave)),
@@ -880,7 +898,11 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
 
   const io = new IntersectionObserver(
     (entries) => {
-      for (const e of entries) if (e.isIntersecting && e.intersectionRatio >= 0.6) activate(e.target);
+      for (const e of entries) {
+        if (!e.isIntersecting || e.intersectionRatio < 0.6) continue;
+        if (e.target.__end) leaveForEnd();
+        else activate(e.target);
+      }
     },
     { root: track, threshold: [0.6] },
   );
@@ -896,6 +918,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       all.push(p);
       const s = slide(p);
       s.__options = () => openOptions(s);
+      s.__notInterested = () => removeSlides((x) => x.id === s.__post.id);
       withImages.add(s);
       track.append(s);
       io.observe(s);
@@ -920,7 +943,25 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     } finally {
       loading = false;
       if (!destroyed && !track.querySelector('.slide')) showEmpty();
+      else if (!destroyed && !more) showEnd();
     }
+  }
+
+  // Tout a été vu : une dernière page, plutôt qu'un fil qui s'arrête sans rien dire
+  function showEnd() {
+    if (track.querySelector('.feed-end')) return;
+    const again = onRefresh
+      ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => onRefresh() }, icon('refresh', 'icon-sm'), 'Voir d’autres vidéos')
+      : h('button', { type: 'button', class: 'btn btn-primary', onclick: () => track.scrollTo({ top: 0, behavior: 'smooth' }) }, icon('arrowUp', 'icon-sm'), 'Revenir au début');
+    const end = h('section', { class: 'feed-end' }, h('div', { class: 'feed-end-card' },
+      h('span', { class: 'feed-end-ic' }, icon('check')),
+      h('h3', null, 'Tu es à jour'),
+      h('p', null, onRefresh ? 'Tu as vu les nouveautés du moment. Reviens bientôt, ou revois des vidéos.' : 'Tu as tout vu.'),
+      again,
+      h('a', { href: '/explorer', class: 'btn btn-ghost' }, icon('compass', 'icon-sm'), 'Explorer')));
+    end.__end = true;
+    track.append(end);
+    io.observe(end);
   }
 
   function showEmpty() {
@@ -931,7 +972,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
   function step(dir) {
     const cur = active || track.querySelector('.slide');
     const target = dir > 0 ? cur?.nextElementSibling : cur?.previousElementSibling;
-    if (target?.__post) track.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
+    if (target?.__post || target?.__end) track.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
   }
 
   // Clavier (ordinateur) : flèches haut / bas, espace, M pour le son, L pour aimer
@@ -1063,6 +1104,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       all.unshift(post);
       const s = slide(post);
       s.__options = () => openOptions(s);
+      s.__notInterested = () => removeSlides((x) => x.id === s.__post.id);
       withImages.add(s);
       track.prepend(s);
       io.observe(s);

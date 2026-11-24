@@ -15,7 +15,12 @@ module.exports = function userRoutes(ctx) {
   // Compte par son nom (ligne brute) ; introuvable s'il est suspendu (sauf pour l'administration)
   async function findUser(req, username = req.params.username) {
     const name = String(username || '').replace(/^@/, '');
-    const u = name && (await db.get('SELECT * FROM users WHERE username = ? AND is_bot = 0', name));
+    let u = name && (await db.get('SELECT * FROM users WHERE username = ? AND is_bot = 0', name));
+    // Ancien nom (lien partagé, @mention, notification) : le compte qui le portait
+    if (!u && name) {
+      const was = await db.get('SELECT user_id FROM username_history WHERE old_username = ? ORDER BY changed_at DESC LIMIT 1', name);
+      if (was) u = await db.get('SELECT * FROM users WHERE id = ? AND is_bot = 0', was.user_id);
+    }
     if (!u || (u.banned_at && !req.user?.is_admin)) fail(404, 'Ce compte est introuvable.');
     return u;
   }
@@ -63,7 +68,7 @@ module.exports = function userRoutes(ctx) {
   // Republications du compte
   r.get('/users/:username/reposts', async (req, res) => {
     const u = await findUser(req);
-    if (!(await canSeeContent(req, u))) return res.json({ posts: [], locked: true, cursor: null });
+    if (!(await canSeeContent(req, u)) || (await isBlocked(ctx, vid(req), u.id))) return res.json({ posts: [], locked: true, cursor: null });
     const before = intParam(req.query.cursor);
     const rows = await db.all(
       `${POST_SELECT} JOIN reposts rr ON rr.post_id = p.id AND rr.user_id = ? WHERE (? IS NULL OR rr.created_at < ?) AND ${VISIBLE}
@@ -81,7 +86,7 @@ module.exports = function userRoutes(ctx) {
   r.get('/users/:username/liked', async (req, res) => {
     const u = await findUser(req);
     const mine = req.user?.id === u.id;
-    if (!mine && (!u.show_liked || !(await canSeeContent(req, u)))) return res.json({ posts: [], hidden: true, cursor: null });
+    if (!mine && (!u.show_liked || !(await canSeeContent(req, u)) || (await isBlocked(ctx, vid(req), u.id)))) return res.json({ posts: [], hidden: true, cursor: null });
     const before = intParam(req.query.cursor);
     const rows = await db.all(
       `${POST_SELECT} JOIN likes ll ON ll.post_id = p.id AND ll.user_id = ? WHERE (? IS NULL OR ll.created_at < ?) AND ${VISIBLE}
@@ -138,7 +143,7 @@ module.exports = function userRoutes(ctx) {
   // Listes : abonnés, abonnements, amis
   async function list(req, res, kind) {
     const u = await findUser(req);
-    if (!(await canSeeContent(req, u))) return res.json({ users: [], locked: true, cursor: null });
+    if (!(await canSeeContent(req, u)) || (await isBlocked(ctx, vid(req), u.id))) return res.json({ users: [], locked: true, cursor: null });
     const before = intParam(req.query.cursor);
     const limit = 30;
     const where = {
