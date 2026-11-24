@@ -101,7 +101,7 @@ export function dayLabel(ts) {
   const d = new Date(ts);
   const today = new Date();
   const yesterday = new Date(Date.now() - 86400000);
-  if (d.toDateString() === today.toDateString()) return "Aujourd'hui";
+  if (d.toDateString() === today.toDateString()) return 'Aujourd’hui';
   if (d.toDateString() === yesterday.toDateString()) return 'Hier';
   return dateFmtY.format(d);
 }

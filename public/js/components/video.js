@@ -328,7 +328,7 @@ export async function uploadVideo(file, info, onStep, memo = {}) {
   if (file.size > maxVideoBytes()) throw new Error(tooBig(file.size));
   const t0 = Date.now();
   const mime = fileMime(file);
-  // Fiche technique (diagnostic de la Direction si une vidéo lit mal) : rien de personnel
+  // Fiche technique (diagnostic de l'administration si une vidéo lit mal) : rien de personnel
   const meta = memo.meta || (memo.meta = {
     methode: 'originale',
     appareil: navigator.userAgent.slice(0, 180),

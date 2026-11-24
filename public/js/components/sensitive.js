@@ -9,7 +9,7 @@ export function sensitive(content, labels, { mine = false, extra = null } = {}) 
       'div',
       { class: 'sensitive-own' },
       content,
-      h('p', { class: 'sensitive-note' }, icon('shield', 'icon-sm'), 'Masqué aux autres membres derrière un avertissement : transmis à la Direction.'),
+      h('p', { class: 'sensitive-note' }, icon('shield', 'icon-sm'), 'Masqué aux autres membres derrière un avertissement : transmis à l’équipe de modération.'),
     );
   }
   const wrap = h('div', { class: 'sensitive' });
@@ -32,9 +32,9 @@ export function sensitive(content, labels, { mine = false, extra = null } = {}) 
   return wrap;
 }
 
-// Après un envoi : prévenir l'auteur que son texte est masqué et transmis à la Direction.
+// Après un envoi : prévenir l'auteur que son texte est masqué et transmis à l'équipe de modération.
 export function flaggedNotice(item) {
   if (item?.flagged) {
-    toast('Envoyé, mais masqué derrière un avertissement : ces propos ont été transmis à la Direction.', 'error');
+    toast('Envoyé, mais masqué derrière un avertissement : ces propos ont été transmis à l’équipe de modération.', 'error');
   }
 }

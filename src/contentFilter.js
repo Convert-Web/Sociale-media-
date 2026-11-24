@@ -266,7 +266,7 @@ async function autoReport(ctx, type, id, flagged) {
     sendPush(ctx, a.id, {
       title: 'Contenu signalé automatiquement',
       body: `${labels(flagged.split(',')).join(', ')} — à examiner dans l’administration.`,
-      url: '/admin',
+      url: '/admin?onglet=signalements',
       tag: 'auto-report',
     }).catch(() => {});
   }

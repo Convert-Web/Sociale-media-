@@ -169,7 +169,7 @@ function buildShell() {
   const sideAvatar = h('span', { class: 'side-ic side-avatar' });
   const profileLink = register('profile', h('a', { href: profileHref(), class: 'side-link' }, sideAvatar, h('span', { class: 'side-label' }, 'Profil')));
   const sideAccount = h('div', { class: 'side-account' });
-  const moreBtn = h('button', { type: 'button', class: 'side-link' }, h('span', { class: 'side-ic' }, icon('moreH')), h('span', { class: 'side-label' }, 'Plus'));
+  const moreBtn = register('more', h('button', { type: 'button', class: 'side-link' }, h('span', { class: 'side-ic' }, icon('moreH')), h('span', { class: 'side-label' }, 'Plus')));
   moreBtn.addEventListener('click', () => {
     const items = [
       me() && { icon: 'wallet', label: 'Portefeuille', action: () => navigate('/portefeuille') },
@@ -342,7 +342,10 @@ async function render(opts = {}) {
   if (route) {
     if (route.access === 'guest' && u) return navigate(url.searchParams.get('suite') || '/', { replace: true });
     if ((route.access === 'auth' || route.access === 'admin') && !u) return navigate(`/connexion?suite=${enc(here)}`, { replace: true });
-    if (route.access === 'admin' && !u.isAdmin) return navigate('/', { replace: true });
+    if (route.access === 'admin' && !u.isAdmin) {
+      toast('Cette page est réservée à l’administration.', 'error');
+      return navigate('/', { replace: true });
+    }
   }
 
   const layout = !route ? 'app' : route.layout === 'auto' ? 'app' : route.layout;
@@ -461,7 +464,8 @@ window.addEventListener('vibz:auth', async (e) => {
     disconnectRealtime();
     await store.refresh().catch(() => store.setUser(null));
     if (!store.user) {
-      toast('Ta session a expiré. Reconnecte-toi.');
+      // Compte suspendu pendant la visite : on dit pourquoi
+      toast(e.detail.code === 'BANNED' ? e.detail.message : 'Ta session a expiré. Reconnecte-toi.', e.detail.code === 'BANNED' ? 'error' : 'ok');
       render({ same: true });
     }
   }

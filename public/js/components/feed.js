@@ -863,7 +863,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       }),
       !post.mine && item('flag', 'Signaler', () => !needLogin('Connecte-toi pour signaler.') && reportDialog('post', post.id, 'Signaler la vidéo'), true),
       post.canDelete && item('trash', 'Supprimer', async () => {
-        if (!(await confirmDialog('Supprimer cette publication ?', 'Elle disparaîtra de ton profil et de tous les fils. C’est définitif.', 'Supprimer'))) return;
+        if (!(await confirmDialog('Supprimer cette publication ?', post.mine ? 'Elle disparaîtra de ton profil et de tous les fils. C’est définitif.' : `Elle disparaîtra du profil de @${post.author.username} et de tous les fils. C’est définitif.`, 'Supprimer'))) return;
         try {
           await api.del(`/api/posts/${post.id}`);
           removeSlides((p) => p.id === post.id);

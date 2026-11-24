@@ -275,6 +275,8 @@ async function viewerView(ctx, username) {
   function showEnded() {
     ended = true;
     pc?.close();
+    status.hidden = true;
+    unmute.hidden = true;
     root.classList.add('ended');
     root.append(h('div', { class: 'live-ended' }, h('h2', null, 'Le LIVE est terminé'), avatar(live.host, 'xl'), h('b', null, live.host.displayName), !following ? h('button', { type: 'button', class: 'btn btn-primary', onclick: () => followBtn.click() }, 'Suivre') : null, h('a', { href: `/@${enc(live.host.username)}`, class: 'btn btn-ghost' }, 'Voir le profil'), h('a', { href: '/live', class: 'link-btn' }, 'Autres LIVE')));
   }

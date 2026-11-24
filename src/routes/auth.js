@@ -38,6 +38,7 @@ module.exports = function authRoutes(ctx) {
   r.get('/session', async (req, res) => {
     res.json({
       user: req.user ? selfUser(ctx, req.user) : null,
+      banned: Boolean(req.banned) || undefined,
       counters: req.user ? await counters(ctx, req.user.id) : null,
       config: {
         appName: config.appName,

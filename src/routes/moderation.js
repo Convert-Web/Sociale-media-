@@ -62,10 +62,22 @@ module.exports = function moderationRoutes(ctx) {
               rep.username AS reporter,
               (SELECT COUNT(*) FROM reports r2 WHERE r2.target_type = r.target_type AND r2.target_id = r.target_id AND r2.resolved_at IS NULL) AS total
        FROM reports r LEFT JOIN users rep ON rep.id = r.reporter_id
-       WHERE r.resolved_at IS NULL ORDER BY r.id DESC LIMIT 100`,
+       WHERE r.resolved_at IS NULL ORDER BY r.id DESC LIMIT 300`,
     );
-    const reports = [];
+    // Un même contenu signalé par plusieurs personnes : une seule carte (motifs et auteurs réunis)
+    const byTarget = new Map();
     for (const row of rows) {
+      const key = `${row.target_type}:${row.target_id}`;
+      const g = byTarget.get(key);
+      if (g) {
+        if (row.reporter && !g.reporters.includes(row.reporter)) g.reporters.push(row.reporter);
+        g.reasons.add(row.reason.split(': ')[0]);
+      } else {
+        byTarget.set(key, { ...row, reporters: row.reporter ? [row.reporter] : [], reasons: new Set([row.reason.split(': ')[0]]) });
+      }
+    }
+    const reports = [];
+    for (const row of [...byTarget.values()].slice(0, 100)) {
       let target = null;
       if (row.target_type === 'post') {
         const p = await db.get('SELECT p.id, p.body, p.image, u.username, u.display_name FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ?', row.target_id);
@@ -77,7 +89,7 @@ module.exports = function moderationRoutes(ctx) {
         );
         if (c) target = { id: c.id, text: c.body, author: c.username, authorName: c.display_name, link: `/@${c.owner}/video/${c.post_id}?commentaire=${c.id}` };
       } else if (row.target_type === 'message') {
-        // Seul le message signalé est montré à la Direction, jamais le reste de la conversation
+        // Seul le message signalé est montré à l'administration, jamais le reste de la conversation
         const m = await db.get(
           `SELECT m.id, m.body, s.username, s.display_name, r.username AS to_username, r.display_name AS to_name
            FROM messages m JOIN users s ON s.id = m.sender_id JOIN users r ON r.id = m.recipient_id WHERE m.id = ?`,
@@ -98,6 +110,8 @@ module.exports = function moderationRoutes(ctx) {
         reason: REASONS[code] || code,
         details: rest.join(': ') || null,
         reporter: row.reporter,
+        reporters: row.reporters,
+        reasons: [...row.reasons].map((c) => REASONS[c] || c),
         automatic: code === 'auto',
         total: row.total,
         createdAt: row.created_at,
