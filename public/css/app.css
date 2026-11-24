@@ -29,6 +29,9 @@
   --side-w: 236px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
+  /* Hauteur réelle de l'écran, mesurée au démarrage (boot.js) : sur iOS 26, les unités vh peuvent
+     compter la barre d'état en trop */
+  --app-h: 100dvh;
   --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   color-scheme: light;
 }
@@ -556,7 +559,7 @@ input[type='range'] {
   padding-bottom: calc(var(--tab-h) + var(--safe-b));
 }
 .shell.is-feed .main {
-  height: calc(100dvh - var(--tab-h) - var(--safe-b));
+  height: calc(var(--app-h) - var(--tab-h) - var(--safe-b));
   min-height: 0;
   padding-bottom: 0;
   background: #000;
@@ -633,15 +636,15 @@ input[type='range'] {
 .create-btn {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 31px;
-  border-radius: 9px;
+  width: 48px;
+  height: 34px;
+  border-radius: 12px;
   background: var(--grad);
   color: #fff;
-  box-shadow: -3px 0 0 #20d5ec inset, 3px 0 0 #ffd84d inset;
+  box-shadow: 0 4px 12px rgba(108, 77, 255, 0.32);
 }
 .shell.is-feed .create-btn {
-  box-shadow: none;
+  box-shadow: 0 4px 12px rgba(108, 77, 255, 0.45);
 }
 .create-btn .icon {
   width: 22px;
@@ -681,7 +684,7 @@ input[type='range'] {
     padding-bottom: 40px;
   }
   .shell.is-feed .main {
-    height: 100dvh;
+    height: var(--app-h);
   }
   .shell.wide .main {
     padding-bottom: 0;
@@ -831,7 +834,7 @@ input[type='range'] {
   place-items: center;
 }
 .boot {
-  min-height: 100dvh;
+  min-height: var(--app-h);
   display: grid;
   place-items: center;
 }
@@ -903,8 +906,10 @@ input[type='range'] {
   display: grid;
   grid-template-columns: 48px 1fr 48px;
   align-items: center;
-  padding: calc(6px + var(--safe-t)) 6px 0;
+  padding: calc(6px + var(--safe-t)) 6px 22px;
   pointer-events: none;
+  /* Léger voile en haut : onglets et loupe lisibles même sur une vidéo claire */
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0.12) 65%, rgba(0, 0, 0, 0));
 }
 .feed-top > * {
   pointer-events: auto;
@@ -1292,14 +1297,15 @@ input[type='range'] {
 .rail-btn small {
   font-size: 12.5px;
   font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75), 0 0 6px rgba(0, 0, 0, 0.35);
 }
 .rail-ic {
   display: grid;
   place-items: center;
   width: 44px;
   height: 44px;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+  /* Icônes lisibles sur une vidéo claire */
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 6px rgba(0, 0, 0, 0.22));
 }
 .rail-ic .icon {
   width: 34px;
@@ -1773,7 +1779,7 @@ input[type='range'] {
      Défini sur le fil (barre de lecture, forme de la vidéo à l'écran) et sur chaque diapositive. */
   .feed,
   .slide {
-    --vh: calc(100dvh - 48px);
+    --vh: calc(var(--app-h) - 48px);
     --vw: min(calc(var(--vh) * max(0.5625, var(--ar, 0.5625))), calc(100% - 200px));
   }
   .slide-media {
@@ -1967,7 +1973,7 @@ input[type='range'] {
     left: auto;
     width: var(--side-panel, 420px);
     margin-left: 0;
-    height: 100dvh;
+    height: var(--app-h);
     max-height: none;
     border-radius: 0;
     border-left: 1px solid var(--line);
@@ -2060,7 +2066,7 @@ input[type='range'] {
 }
 .modal {
   width: min(480px, 100%);
-  max-height: calc(100dvh - 32px);
+  max-height: calc(var(--app-h) - 32px);
   overflow-y: auto;
   background: var(--bg);
   color: var(--fg);
@@ -2455,7 +2461,7 @@ input[type='range'] {
   font-weight: 700;
 }
 
-.share {
+.share-sheet {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 18px;
@@ -2920,8 +2926,9 @@ input[type='range'] {
 }
 .section-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
+  gap: 12px;
 }
 .section-row .section-title {
   margin: 22px 0 10px;
@@ -3920,7 +3927,7 @@ body.no-side-search .side-search {
 /* Messagerie */
 .dm {
   display: grid;
-  height: calc(100dvh - var(--tab-h) - var(--safe-b));
+  height: calc(var(--app-h) - var(--tab-h) - var(--safe-b));
 }
 .dm .dm-thread {
   display: none;
@@ -3934,7 +3941,7 @@ body.no-side-search .side-search {
 @media (min-width: 900px) {
   .dm {
     grid-template-columns: 340px 1fr;
-    height: 100dvh;
+    height: var(--app-h);
   }
   .dm .dm-side,
   .dm.has-thread .dm-side {
@@ -3989,7 +3996,7 @@ body.no-side-search .side-search {
     display: none;
   }
   body.in-chat .dm {
-    height: 100dvh;
+    height: var(--app-h);
   }
   body.in-chat .main {
     padding-bottom: 0;
@@ -4320,7 +4327,7 @@ body.no-side-search .side-search {
 
 /* Connexion, inscription, premier lancement */
 .auth {
-  min-height: 100dvh;
+  min-height: var(--app-h);
   background: var(--bg);
   display: flex;
   flex-direction: column;
@@ -5554,7 +5561,7 @@ body.no-side-search .side-search {
   .cam,
   .stitch-pick {
     inset: 16px auto 16px 50%;
-    width: min(calc((100dvh - 32px) * 0.5625), 100%);
+    width: min(calc((var(--app-h) - 32px) * 0.5625), 100%);
     transform: translateX(-50%);
     border-radius: 16px;
     overflow: hidden;
@@ -5834,15 +5841,15 @@ body.no-side-search .side-search {
   position: absolute;
   inset: 0;
   margin: auto;
-  width: min(100%, calc(100dvh * var(--ar)));
-  height: min(100dvh, calc(100vw / var(--ar)));
+  width: min(100%, calc(var(--app-h) * var(--ar)));
+  height: min(var(--app-h), calc(100vw / var(--ar)));
   container-type: size;
   overflow: hidden;
 }
 @media (min-width: 900px) {
   .edit-stage {
-    width: min(100%, calc((100dvh - 32px) * var(--ar)));
-    height: min(calc(100dvh - 32px), calc(100vw / var(--ar)));
+    width: min(100%, calc((var(--app-h) - 32px) * var(--ar)));
+    height: min(calc(var(--app-h) - 32px), calc(100vw / var(--ar)));
     border-radius: 16px;
   }
 }
@@ -6434,20 +6441,21 @@ body.no-side-search .side-search {
   border-top: 1px dashed rgba(255, 255, 255, 0.6);
 }
 
-/* iPhone, application sur l'écran d'accueil : la barre d'état (heure, batterie) est écrite en
-   blanc ; une bande sombre derrière elle la garde lisible sur les pages claires (pas sur le fil) */
-@media (display-mode: standalone) {
-  html:not(.feed-mode) body::before {
-    content: '';
-    position: fixed;
-    z-index: 9000;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: env(safe-area-inset-top, 0px);
-    background: #0e0e13;
-    pointer-events: none;
-  }
+/* Derrière l'heure et la batterie : un bandeau plein, de la couleur de la page (noir sur le fil, le
+   LIVE et la caméra). Safari 26 colore la barre d'état d'après ce bandeau fixe au lieu de flouter
+   le haut de la page ; le contenu qui défile passe dessous. Sans zone de barre d'état (ordinateur,
+   application installée), il a une hauteur nulle. */
+.status-band {
+  position: fixed;
+  z-index: 38;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--safe-t);
+  background: var(--bg);
+}
+:root.feed-mode .status-band {
+  background: #000;
 }
 
 /* ===========================================================================

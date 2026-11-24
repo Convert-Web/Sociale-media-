@@ -72,17 +72,36 @@ async function refreshSource(db, source) {
 
 // Premier lancement : les sources de l'Actu ; une base reprise d'AURUM garde ses sources du
 // Journal (rangées dans les rubriques)
+// Sources de langue anglaise du Journal d'AURUM (art de vivre, enchères) : retirées une fois de
+// l'Actu, qui est en français (l'administration peut les remettre)
+const ENGLISH_LEGACY = [/robbreport\.com/, /wallpaper\.com/, /dezeen\.com/, /UCelkSnSbxvIfjjD01uPHHbg|UCSbY5GF1eSKtT6d32qC7Krw|UCad9XfyHa3dikbSSLyOiguQ|UC0k238zFx-Z8xFH0sxCrPJg/];
+
+// Vérifié une fois par base ouverte (pas à chaque requête)
+const seedChecked = new WeakSet();
 async function seedSources(db) {
-  if (await setting(db, 'actu_seeded')) return;
-  const now = Date.now();
-  for (const s of DEFAULT_SOURCES) {
-    await db.run('INSERT OR IGNORE INTO journal_sources (kind, title, url, topic, created_at) VALUES (?, ?, ?, ?, ?)', s.kind, s.title, s.url, s.topic, now);
+  if (seedChecked.has(db)) return;
+  if (!(await setting(db, 'actu_seeded'))) {
+    const now = Date.now();
+    for (const s of DEFAULT_SOURCES) {
+      await db.run('INSERT OR IGNORE INTO journal_sources (kind, title, url, topic, created_at) VALUES (?, ?, ?, ?, ?)', s.kind, s.title, s.url, s.topic, now);
+    }
+    for (const s of await db.all('SELECT id, url FROM journal_sources WHERE topic IS NULL')) {
+      const topic = legacyTopic(s.url);
+      if (topic) await db.run('UPDATE journal_sources SET topic = ? WHERE id = ?', topic, s.id);
+    }
+    await putSetting(db, 'actu_seeded', now);
   }
-  for (const s of await db.all('SELECT id, url FROM journal_sources WHERE topic IS NULL')) {
-    const topic = legacyTopic(s.url);
-    if (topic) await db.run('UPDATE journal_sources SET topic = ? WHERE id = ?', topic, s.id);
+  if (!(await setting(db, 'actu_english_removed'))) {
+    for (const s of await db.all('SELECT id, url FROM journal_sources')) {
+      if (!ENGLISH_LEGACY.some((re) => re.test(s.url))) continue;
+      // Les éléments auxquels des vidéos réagissent restent (leur lien ne casse pas)
+      await db.run('DELETE FROM journal_items WHERE source_id = ? AND id NOT IN (SELECT journal_id FROM posts WHERE journal_id IS NOT NULL)', s.id);
+      await db.run('UPDATE journal_items SET source_id = NULL WHERE source_id = ?', s.id);
+      await db.run('DELETE FROM journal_sources WHERE id = ?', s.id);
+    }
+    await putSetting(db, 'actu_english_removed', Date.now());
   }
-  await putSetting(db, 'actu_seeded', now);
+  seedChecked.add(db);
 }
 
 // Relit toutes les sources (en parallèle) ; une seule relecture à la fois

@@ -9,7 +9,6 @@
   <meta name="color-scheme" content="light dark">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Vibz">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Vibz">
@@ -76,6 +75,8 @@
   <script type="module" src="/js/app.js"></script>
 </head>
 <body>
+  <!-- Derrière l'heure et la batterie : la couleur de la page (Safari et iOS 26 la reprennent) -->
+  <div class="status-band" aria-hidden="true"></div>
   <div id="app">
     <div class="boot"><div class="boot-logo">vibz</div></div>
   </div>
