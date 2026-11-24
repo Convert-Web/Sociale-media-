@@ -2,7 +2,7 @@
 // Adresses des pages de l'application (mêmes que public/js/app.js) : elles renvoient la page
 // de l'application avec le statut 200 ; toute autre adresse renvoie la page 404 (statut 404).
 // La même liste figure dans vercel.json (réécriture vers index.html) : un test vérifie l'accord.
-const PAGE_SOURCE = '(?:|abonnements|amis|explorer|actu(?:/[0-9]+)?|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?';
+const PAGE_SOURCE = '(?:|abonnements|amis|explorer|actu(?:/[0-9]+)?|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?';
 const PAGE_RE = new RegExp(`^/${PAGE_SOURCE}$`);
 
 const isPage = (path) => PAGE_RE.test(path);
@@ -10,9 +10,7 @@ const isPage = (path) => PAGE_RE.test(path);
 // Pages publiques, proposées aux moteurs de recherche
 const PUBLIC_PAGES = [
   { path: '/', priority: '1.0', changefreq: 'hourly' },
-  { path: '/explorer', priority: '0.9', changefreq: 'hourly' },
-  { path: '/actu', priority: '0.9', changefreq: 'hourly' },
-  { path: '/live', priority: '0.7', changefreq: 'hourly' },
+  { path: '/rejoindre', priority: '0.9', changefreq: 'monthly' },
   { path: '/inscription', priority: '0.6', changefreq: 'monthly' },
   { path: '/connexion', priority: '0.4', changefreq: 'yearly' },
   { path: '/aide', priority: '0.5', changefreq: 'monthly' },
