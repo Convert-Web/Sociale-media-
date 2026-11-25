@@ -21,13 +21,13 @@ export async function profileView(ctx) {
   try {
     ({ user } = await api.get(`/api/users/${enc(username)}`));
   } catch (err) {
-    ctx.title = 'Compte introuvable — Vibz';
+    ctx.title = 'Compte introuvable — AURUM';
     return h('div', { class: 'page' }, h('header', { class: 'page-head' }, backBtn()), emptyState('user', 'Ce compte est introuvable', err.status === 404 ? 'Vérifie le nom d’utilisateur, ou ce compte a été supprimé.' : err.message));
   }
   // Adresse avec l'ancienne casse ou un ancien nom : la bonne adresse
   if (user.username !== username) history.replaceState(history.state, '', `/@${user.username}${location.search}`);
-  ctx.title = `${user.displayName} (@${user.username}) — Vibz`;
-  ctx.description = user.bio || `Les vidéos de ${user.displayName} sur Vibz.`;
+  ctx.title = `${user.displayName} (@${user.username}) — AURUM`;
+  ctx.description = user.bio || `Les vidéos de ${user.displayName} sur AURUM.`;
   const me = user.me;
   const root = h('div', { class: 'page profile' });
   let grid = null;
@@ -57,7 +57,7 @@ export async function profileView(ctx) {
     if (me) {
       actions.replaceChildren(
         h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => editProfile(user, (u) => { Object.assign(user, u); render(); }) }, 'Modifier le profil'),
-        h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => shareLink(`${user.displayName} sur Vibz`, `/@${user.username}`) }, 'Partager le profil'),
+        h('button', { type: 'button', class: 'btn btn-ghost', onclick: () => shareLink(`${user.displayName} sur AURUM`, `/@${user.username}`) }, 'Partager le profil'),
         h('a', { href: '/studio', class: 'btn btn-ghost btn-icon', 'aria-label': 'Studio créateur' }, icon('creator')),
       );
       return;
@@ -121,7 +121,7 @@ export async function profileView(ctx) {
       body: h(
         'div',
         { class: 'opt-list' },
-        item('share', 'Partager le profil', () => shareLink(`${user.displayName} sur Vibz`, `/@${user.username}`)),
+        item('share', 'Partager le profil', () => shareLink(`${user.displayName} sur AURUM`, `/@${user.username}`)),
         item('send', 'Envoyer un message', () => !needLogin('Connecte-toi pour envoyer un message.') && navigate(`/messages/${enc(user.username)}`)),
         user.followsYou ? item('userMinus', 'Retirer cet abonné', async () => {
           if (!(await confirmDialog('Retirer cet abonné ?', `${user.displayName} ne te suivra plus. Cette personne ne sera pas prévenue.`, 'Retirer'))) return;

@@ -99,7 +99,7 @@ function tap(j) {
   } else if (j.state === 'error') {
     run(j); // reprise là où l'envoi s'était arrêté
   } else {
-    toast('Garde Vibz ouvert : la vidéo part en qualité d’origine. En cas de coupure, l’envoi reprend là où il s’était arrêté.');
+    toast('Garde AURUM ouvert : la vidéo part en qualité d’origine. En cas de coupure, l’envoi reprend là où il s’était arrêté.');
   }
 }
 

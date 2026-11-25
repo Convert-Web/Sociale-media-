@@ -97,7 +97,7 @@ const appEl = document.getElementById('app');
 // ---------------------------------------------------------------------------
 // Titre de l'onglet (avec compteur de non-lus)
 // ---------------------------------------------------------------------------
-let baseTitle = 'Vibz';
+let baseTitle = 'AURUM';
 function paintTitle() {
   const c = store.counters;
   const n = store.user ? (c.notifications || 0) + (c.messages || 0) + (c.requests || 0) : 0;
@@ -126,13 +126,13 @@ function openLoginSheet(reason) {
   );
   // Une feuille ou une fenêtre est déjà ouverte (commentaires, liste d'abonnés…) : l'invitation
   // passe par-dessus, sans la fermer
-  if (sheetOpen() || modalOpen()) modal('Connecte-toi à Vibz', h('div', { class: 'modal-body' }, body), { stack: true });
-  else openSheet({ title: 'Connecte-toi à Vibz', body });
+  if (sheetOpen() || modalOpen()) modal('Connecte-toi à AURUM', h('div', { class: 'modal-body' }, body), { stack: true });
+  else openSheet({ title: 'Connecte-toi à AURUM', body });
 }
 document.addEventListener('vibz:login', (e) => openLoginSheet(e.detail?.reason));
 document.addEventListener('vibz:edit-post', (e) => editPost(e.detail));
 
-const wordmark = () => h('a', { href: '/', class: 'brand', 'aria-label': 'Vibz, accueil' }, logoMark(34), h('span', { class: 'brand-name' }, 'vibz'));
+const wordmark = () => h('a', { href: '/', class: 'brand', 'aria-label': 'AURUM, accueil' }, logoMark(34), h('span', { class: 'brand-name' }, 'AURUM'));
 
 // Apparence sans compte : le choix est gardé dans ce navigateur
 function themePicker() {
@@ -204,7 +204,7 @@ function buildShell() {
     profileLink,
     moreBtn,
     sideAccount,
-    h('footer', { class: 'side-foot' }, h('a', { href: '/aide' }, 'Aide'), h('a', { href: '/regles' }, 'Règles'), h('a', { href: '/cgu' }, 'CGU'), h('a', { href: '/cgv' }, 'CGV'), h('a', { href: '/confidentialite' }, 'Confidentialité'), h('a', { href: '/mentions-legales' }, 'Mentions légales'), h('span', null, `© ${new Date().getFullYear()} Vibz`)),
+    h('footer', { class: 'side-foot' }, h('a', { href: '/aide' }, 'Aide'), h('a', { href: '/regles' }, 'Règles'), h('a', { href: '/cgu' }, 'CGU'), h('a', { href: '/cgv' }, 'CGV'), h('a', { href: '/confidentialite' }, 'Confidentialité'), h('a', { href: '/mentions-legales' }, 'Mentions légales'), h('span', null, `© ${new Date().getFullYear()} AURUM`)),
   );
 
   // Barre du bas (téléphone)
@@ -291,7 +291,7 @@ function errorView(err) {
 }
 
 function notFoundView(ctx) {
-  ctx.title = 'Page introuvable — Vibz';
+  ctx.title = 'Page introuvable — AURUM';
   return h('section', { class: 'nf' }, h('div', { class: 'nf-code', 'aria-hidden': 'true' }, '404'), h('h1', null, 'Cette page n’existe pas.'), h('p', null, 'Le lien est peut-être incomplet, ou la page a été retirée.'), h('a', { href: '/', class: 'btn btn-primary btn-lg' }, 'Retour à l’accueil'));
 }
 
@@ -405,7 +405,7 @@ async function render(opts = {}) {
   if (back) restoreScroll(back);
   else if (location.hash) setTimeout(() => document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView(), 50);
   else if (!opts.same) scroller().scrollTop = 0;
-  baseTitle = ctx.title || 'Vibz';
+  baseTitle = ctx.title || 'AURUM';
   paintTitle();
   if (window.__vibzStarted && url.pathname !== '/rejoindre') cookieBanner();
   const desc = document.querySelector('meta[name="description"]');

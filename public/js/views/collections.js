@@ -15,22 +15,22 @@ const notFound = (ic, title) =>
 
 export async function tagView(ctx) {
   const name = ctx.params.tag.replace(/^#+/, '').toLocaleLowerCase('fr');
-  ctx.title = `#${name} — Vibz`;
-  ctx.description = `Les vidéos #${name} sur Vibz.`;
+  ctx.title = `#${name} — AURUM`;
+  ctx.description = `Les vidéos #${name} sur AURUM.`;
   let info = { tag: name, posts: 0, views: 0 };
   try {
     info = (await api.get(`/api/tags/${enc(name)}`)).tag;
   } catch {
-    ctx.title = 'Hashtag introuvable — Vibz';
+    ctx.title = 'Hashtag introuvable — AURUM';
     return notFound('hashtag', 'Hashtag introuvable');
   }
-  ctx.title = `#${info.tag} — Vibz`;
+  ctx.title = `#${info.tag} — AURUM`;
   const grid = videoGrid({ fetchPage: async (cursor) => api.get(`/api/tags/${enc(info.tag)}/posts${cursor ? `?cursor=${cursor}` : ''}`), empty: emptyState('hashtag', 'Aucune vidéo', `Sois la première personne à publier avec #${info.tag}.`) });
   ctx.onCleanup(grid.destroy);
   return h(
     'div',
     { class: 'page collection' },
-    h('header', { class: 'page-head' }, backBtn(), h('span', { class: 'grow' }), h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Partager', onclick: () => shareLink(`#${info.tag} sur Vibz`, `/tag/${enc(info.tag)}`) }, icon('share'))),
+    h('header', { class: 'page-head' }, backBtn(), h('span', { class: 'grow' }), h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Partager', onclick: () => shareLink(`#${info.tag} sur AURUM`, `/tag/${enc(info.tag)}`) }, icon('share'))),
     h('div', { class: 'collection-head' }, h('span', { class: 'collection-cover tag' }, '#'), h('div', null, h('h1', null, `#${info.tag}`), h('p', null, `${count(info.posts, 'publication')} · ${count(info.views, 'vue')}`))),
     h('a', { href: `/creer?tag=${enc(info.tag)}`, class: 'btn btn-primary btn-block collection-cta', onclick: (e) => needLogin('Connecte-toi pour publier une vidéo.') && e.preventDefault() }, icon('video', 'icon-sm'), `Publier avec #${info.tag}`),
     grid.el,
@@ -43,10 +43,10 @@ export async function soundView(ctx) {
   try {
     ({ sound } = await api.get(`/api/sounds/${id}`));
   } catch {
-    ctx.title = 'Son introuvable — Vibz';
+    ctx.title = 'Son introuvable — AURUM';
     return notFound('music', 'Son introuvable');
   }
-  ctx.title = `${sound.title} — Vibz`;
+  ctx.title = `${sound.title} — AURUM`;
   // Écoute du son (le fichier de la vidéo d'origine)
   const audio = sound.url ? h('audio', { src: sound.url, preload: 'none' }) : null;
   const playBtn = h('button', { type: 'button', class: 'sound-play', 'aria-label': 'Écouter', disabled: !audio }, icon('play'));
@@ -78,7 +78,7 @@ export async function soundView(ctx) {
   return h(
     'div',
     { class: 'page collection' },
-    h('header', { class: 'page-head' }, backBtn(), h('span', { class: 'grow' }), h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Partager', onclick: () => shareLink(`${sound.title} sur Vibz`, `/son/${id}`) }, icon('share'))),
+    h('header', { class: 'page-head' }, backBtn(), h('span', { class: 'grow' }), h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Partager', onclick: () => shareLink(`${sound.title} sur AURUM`, `/son/${id}`) }, icon('share'))),
     h(
       'div',
       { class: 'collection-head' },

@@ -32,8 +32,8 @@ let cache = null;
 const CACHE_MS = 10 * 60e3;
 
 export async function exploreView(ctx) {
-  ctx.title = 'Explorer — Vibz';
-  ctx.description = 'Les vidéos, hashtags et créateurs du moment sur Vibz.';
+  ctx.title = 'Explorer — AURUM';
+  ctx.description = 'Les vidéos, hashtags et créateurs du moment sur AURUM.';
   const cats = store.config?.categories || [];
   let category = ctx.query.get('categorie') || '';
   if (category && !cats.some((c) => c.id === category)) category = '';

@@ -1,5 +1,5 @@
 'use strict';
-// Tests d'intégration de l'API de Vibz : comptes, vidéos, fil « Pour toi », interactions,
+// Tests d'intégration de l'API d’AURUM : comptes, vidéos, fil « Pour toi », interactions,
 // commentaires, abonnements (comptes privés), blocages, messages, recherche, sons, LIVE,
 // portefeuille, administration, suppression de compte.
 const { test, before, after } = require('node:test');
@@ -20,7 +20,7 @@ test('session sans compte : configuration publique', async () => {
   const r = await client(base).get('/api/session');
   assert.equal(r.status, 200);
   assert.equal(r.data.user, null);
-  assert.equal(r.data.config.appName, 'Vibz');
+  assert.equal(r.data.config.appName, 'AURUM');
   assert.ok(r.data.config.categories.length > 5);
 });
 

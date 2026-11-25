@@ -24,8 +24,8 @@ function intent(suite) {
 }
 
 export function landingView(ctx) {
-  ctx.title = 'Vibz — Crée ton compte ou connecte-toi';
-  ctx.description = 'Des vidéos courtes, l’actu du jour et ta communauté. Crée ton compte Vibz gratuitement.';
+  ctx.title = 'AURUM — Crée ton compte ou connecte-toi';
+  ctx.description = 'Des vidéos courtes, l’actu du jour et ta communauté. Crée ton compte AURUM gratuitement.';
   // Page toujours sombre (comme le fil) : barre d'état et bandeau du haut en noir
   document.documentElement.classList.add('feed-mode');
   for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = '#000000';
@@ -42,7 +42,7 @@ export function landingView(ctx) {
   return h('div', { class: 'land' },
     h('div', { class: 'land-bg', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
     h('div', { class: 'land-main' },
-      h('div', { class: 'land-brand' }, logoMark(56), h('span', { class: 'land-name' }, 'vibz')),
+      h('div', { class: 'land-brand' }, logoMark(56), h('span', { class: 'land-name' }, 'AURUM')),
       h('h1', null, 'Des vidéos courtes,', h('br'), 'l’actu du jour,', h('br'), h('span', { class: 'land-accent' }, 'et toi.')),
       why
         ? h('p', { class: 'land-why' }, icon('lock', 'icon-sm'), h('span', null, why))

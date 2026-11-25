@@ -17,7 +17,7 @@ const fail = (status, message, code) => {
 const USERNAME_RE = /^[a-z0-9_][a-z0-9_.]{0,22}[a-z0-9_]$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const RESERVED = new Set([
-  'admin', 'administrateur', 'vibz', 'vibz.officiel', 'support', 'help', 'aide', 'root', 'system', 'systeme',
+  'admin', 'administrateur', 'aurum', 'aurum.officiel', 'vibz', 'vibz.officiel', 'support', 'help', 'aide', 'root', 'system', 'systeme',
   'api', 'moderation', 'staff', 'equipe', 'contact', 'security', 'securite', 'null', 'undefined', 'live', 'explorer',
   'recherche', 'reglages', 'messages', 'boite', 'activite', 'studio', 'portefeuille', 'creer', 'tag', 'son', 'amis',
   'abonnements', 'connexion', 'inscription', 'media', 'static', 'aurum',

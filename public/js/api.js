@@ -1,4 +1,4 @@
-// Client HTTP minimal pour l'API de Vibz.
+// Client HTTP minimal pour l'API d’AURUM.
 export class ApiError extends Error {
   constructor(status, message, code) {
     super(message);

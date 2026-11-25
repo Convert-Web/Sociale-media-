@@ -28,7 +28,7 @@ function checkBirthdate(value) {
   const now = new Date();
   let age = now.getFullYear() - birth.getFullYear();
   if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) age--;
-  if (age < MIN_AGE) fail(403, `Vibz est réservé aux personnes de ${MIN_AGE} ans et plus.`, 'TOO_YOUNG');
+  if (age < MIN_AGE) fail(403, `AURUM est réservé aux personnes de ${MIN_AGE} ans et plus.`, 'TOO_YOUNG');
 }
 
 module.exports = function authRoutes(ctx) {

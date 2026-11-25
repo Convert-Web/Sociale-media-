@@ -151,8 +151,8 @@ export function playItem(item) {
   if ('mediaSession' in navigator && 'MediaMetadata' in window) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: item.title,
-      artist: item.siteName || 'Vibz',
-      album: 'L’Actu — Vibz',
+      artist: item.siteName || 'AURUM',
+      album: 'L’Actu — AURUM',
       artwork: item.image ? [{ src: item.image, sizes: '512x512' }] : [{ src: '/img/icon-512.png', sizes: '512x512', type: 'image/png' }],
     });
   }

@@ -1,6 +1,6 @@
 // L'Actu : l'actualité du jour en un coup d'œil — la une, le brief, les podcasts à écouter, les
 // vidéos des médias, et l'actualité qui fait réagir la communauté en vidéo. Les articles se lisent
-// chez les médias ; « Réagir en vidéo » relie une création de Vibz à l'actualité.
+// chez les médias ; « Réagir en vidéo » relie une création d’AURUM à l'actualité.
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { replaceUrl } from '../router.js';
@@ -69,8 +69,8 @@ const today = () => {
 };
 
 export async function actuView(ctx) {
-  ctx.title = 'Actu — Vibz';
-  ctx.description = 'L’actualité du jour en un coup d’œil : articles, podcasts et vidéos des médias, et les réactions en vidéo de la communauté Vibz.';
+  ctx.title = 'Actu — AURUM';
+  ctx.description = 'L’actualité du jour en un coup d’œil : articles, podcasts et vidéos des médias, et les réactions en vidéo de la communauté AURUM.';
   let filter = FILTERS.some(([k]) => k === ctx.query.get('rubrique')) ? ctx.query.get('rubrique') : '';
   const chips = h('div', { class: 'chips actu-chips', role: 'tablist', 'aria-label': 'Rubriques' });
   const content = h('div', { class: 'actu-content' });

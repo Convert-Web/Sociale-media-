@@ -560,6 +560,8 @@ async function migrate(client) {
 // Libellés des sons originaux : « Son original - … » (majuscule, comme les autres titres)
 async function tidyLabels(client) {
   await client.execute("UPDATE sounds SET title = 'S' || substr(title, 2) WHERE substr(title, 1, 12) = 'son original'");
+  // L'application s'appelle de nouveau AURUM : la mention des comptes de démonstration suit
+  await client.execute("UPDATE users SET bio = replace(bio, 'Compte de démonstration de Vibz', 'Compte de démonstration d’AURUM') WHERE is_demo = 1 AND bio LIKE '%démonstration de Vibz%'");
 }
 
 async function upgradeFromAurum(client, have) {

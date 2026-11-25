@@ -201,7 +201,7 @@ module.exports = function userRoutes(ctx) {
     );
     const users = rows.map((row) => serializeUser(ctx, row, req.user));
     // Raison affichée sous le nom (comme « Suit ton compte », « Populaire »)
-    for (const u of users) u.reason = u.followsYou ? 'Abonné à ton compte' : u.counts.followers > 0 ? `${u.counts.followers} abonné${u.counts.followers > 1 ? 's' : ''}` : 'Nouveau sur Vibz';
+    for (const u of users) u.reason = u.followsYou ? 'Abonné à ton compte' : u.counts.followers > 0 ? `${u.counts.followers} abonné${u.counts.followers > 1 ? 's' : ''}` : 'Nouveau sur AURUM';
     res.json({ users });
   });
 

@@ -9,7 +9,7 @@ import { suggestionsPanel } from './home.js';
 export const validatePasswordHint = '8 caractères au moins, avec des lettres et un chiffre ou un symbole.';
 
 export function welcomeView(ctx) {
-  ctx.title = 'Bienvenue — Vibz';
+  ctx.title = 'Bienvenue — AURUM';
   const next = safePath(ctx.query.get('suite'), '/');
   const picked = new Set();
   const cats = store.config?.categories || [];

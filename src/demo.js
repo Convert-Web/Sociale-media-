@@ -12,7 +12,7 @@ const { deleteUploads } = require('./uploads');
 const V = require('./videos');
 
 const DIR = path.join(__dirname, '..', 'public', 'demo');
-const DEMO_BIO = 'Compte de démonstration de Vibz';
+const DEMO_BIO = 'Compte de démonstration d’AURUM';
 
 const USERS = [
   { username: 'atelier.pixel', name: 'Atelier Pixel', bio: 'Art génératif et pixels qui bougent ✨' },
@@ -49,7 +49,7 @@ const POSTS = [
 
 const COMMENTS = [
   'Trop bien 😍', 'Je pourrais regarder ça toute la journée', 'Le son est incroyable 🔥', 'Comment tu fais ça ?!', 'Enregistré pour plus tard 📌',
-  'Ça m’apaise direct', 'Partie 2 stp 🙏', 'J’ai essayé, c’est validé ✅', 'Le meilleur compte de Vibz', 'Je viens de découvrir, abonné·e !',
+  'Ça m’apaise direct', 'Partie 2 stp 🙏', 'J’ai essayé, c’est validé ✅', 'Le meilleur compte d’AURUM', 'Je viens de découvrir, abonné·e !',
   'Mon cerveau a fondu 🤯', 'Qui est là en 2026 ? 😂', 'Tellement satisfaisant', 'Je partage à mes potes', 'Ça mérite plus de vues',
 ];
 

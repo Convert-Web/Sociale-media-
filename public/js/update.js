@@ -69,7 +69,7 @@ function showButton() {
     pill = h(
       'div',
       { class: 'update-pill', role: 'status', 'aria-live': 'polite' },
-      h('button', { type: 'button', class: 'update-go', onclick: applyUpdate, title: 'Une nouvelle version de Vibz est prête' }, icon('refresh', 'icon-sm'), label),
+      h('button', { type: 'button', class: 'update-go', onclick: applyUpdate, title: 'Une nouvelle version d’AURUM est prête' }, icon('refresh', 'icon-sm'), label),
       h('button', { type: 'button', class: 'update-later', 'aria-label': 'Plus tard', onclick: later }, icon('x', 'icon-xs')),
     );
   }

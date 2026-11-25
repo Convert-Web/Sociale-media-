@@ -265,7 +265,7 @@ async function demo() {
   const d = await api.get('/api/admin/overview').catch(() => null);
   paint(d?.totals?.demoUsers || 0);
   return h('div', { class: 'form-stack' },
-    h('p', null, 'Ajoute 12 comptes de démonstration (signalés comme tels sur leur profil) et 14 vidéos originales générées par calcul — visuels mathématiques, textes et musiques synthétisées — avec des sons réutilisés, des abonnements, des J’aime et des commentaires. Pratique pour présenter Vibz ; à retirer avant d’ouvrir au public.'),
+    h('p', null, 'Ajoute 12 comptes de démonstration (signalés comme tels sur leur profil) et 14 vidéos originales générées par calcul — visuels mathématiques, textes et musiques synthétisées — avec des sons réutilisés, des abonnements, des J’aime et des commentaires. Pratique pour présenter AURUM ; à retirer avant d’ouvrir au public.'),
     state, actions, out);
 }
 
@@ -383,7 +383,7 @@ async function errors() {
 }
 
 export async function adminView(ctx) {
-  ctx.title = 'Administration — Vibz';
+  ctx.title = 'Administration — AURUM';
   const tab = TABS.some(([k]) => k === ctx.query.get('onglet')) ? ctx.query.get('onglet') : 'apercu';
   const nav = h('nav', { class: 'tabs scroll-x' }, TABS.map(([k, label]) => h('a', { href: `/admin?onglet=${k}`, class: `tab-link${k === tab ? ' on' : ''}` }, label)));
   revealActive(nav);

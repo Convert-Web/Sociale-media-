@@ -207,7 +207,7 @@ async function renderScenes({ width, height, scenes, ac, onProgress, bitrate = 6
   await stopped;
   stream.getTracks().forEach((t) => t.stop());
   const type = (rec.mimeType || mime || 'video/webm').split(';')[0];
-  return new File([new Blob(chunks, { type })], `vibz-${Date.now()}.${extFor(type)}`, { type });
+  return new File([new Blob(chunks, { type })], `aurum-${Date.now()}.${extFor(type)}`, { type });
 }
 
 const evenSize = (w, hgt, max = 1280) => {

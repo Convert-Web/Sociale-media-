@@ -1,4 +1,4 @@
-// Bannière cookies et mesure d'audience anonyme (sans cookie, hébergée par Vibz).
+// Bannière cookies et mesure d'audience anonyme (sans cookie, hébergée par AURUM).
 import { h } from '../dom.js';
 
 const KEY = 'vibz:cookies'; // « ok » ou « no » (mesure d'audience refusée)
@@ -72,7 +72,7 @@ export function cookieBanner(force = false) {
       'p',
       null,
       h('b', null, 'Ni publicité, ni pistage. '),
-      'Vibz utilise un seul cookie, indispensable pour rester connecté, et compte ses visites de façon anonyme, sans cookie. ',
+      'AURUM utilise un seul cookie, indispensable pour rester connecté, et compte ses visites de façon anonyme, sans cookie. ',
       h('a', { href: '/confidentialite#cookies' }, 'En savoir plus'),
     ),
     h(
