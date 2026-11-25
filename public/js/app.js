@@ -259,7 +259,9 @@ function buildShell() {
     el,
     main,
     setActive(key) {
-      for (const [k, els] of navEls) for (const x of els) x.classList.toggle('active', k === key);
+      // Un même onglet peut servir plusieurs clés (Accueil : fil, Abonnements, Amis)
+      const on = new Set(navEls.get(key) || []);
+      for (const els of navEls.values()) for (const x of els) x.classList.toggle('active', on.has(x));
     },
     destroy() {
       unsub.forEach((fn) => fn());

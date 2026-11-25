@@ -85,14 +85,14 @@ async function liveBadge(btn) {
   }
 }
 
-// Haut des fils : LIVE, onglets « Amis · Abonnements · Pour toi », et la loupe (Explorer et recherche)
+// Haut des fils : LIVE, onglets « Pour toi · Abonnements · Amis » (commande segmentée), et la loupe
 function feedTop(active) {
   const tab = (href, label, key) => h('a', { href, class: `top-tab${active === key ? ' on' : ''}`, 'aria-current': active === key ? 'page' : null }, label);
   return h(
     'header',
     { class: 'feed-top' },
     h('a', { href: '/live', class: 'top-icon live-link', 'aria-label': 'LIVE' }, icon('live')),
-    h('nav', { class: 'top-tabs', 'aria-label': 'Fils' }, tab('/amis', 'Amis', 'friends'), tab('/abonnements', 'Abonnements', 'following'), tab('/', 'Pour toi', 'foryou')),
+    h('nav', { class: 'top-tabs', 'aria-label': 'Fils' }, tab('/', 'Pour toi', 'foryou'), tab('/abonnements', 'Abonnements', 'following'), tab('/amis', 'Amis', 'friends')),
     h('a', { href: '/explorer', class: 'top-icon', 'aria-label': 'Explorer et rechercher' }, icon('search')),
   );
 }
