@@ -4,6 +4,7 @@ import { store } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, toast, confirmDialog, modal, emptyState, spinner, syncThemeColor } from '../dom.js';
 import { pushState, enablePush, disablePush } from '../push.js';
+import { notifSettings, playNotifSound, unlockSound } from '../notify.js';
 import { LANG_CHOICES } from '../components/translate.js';
 import { toggle } from '../components/postedit.js';
 import { userRow } from '../components/userlist.js';
@@ -155,9 +156,28 @@ export async function settingsView(ctx) {
       t.input.addEventListener('change', () => saveSettings({ notify: { [key]: t.input.checked } }));
       return t.el;
     };
+    // Dans l'application ouverte : le son et la bannière (réglages propres à cet appareil)
+    const local = (key, label, hint) => {
+      const t = toggle(label, notifSettings[key], hint);
+      t.input.addEventListener('change', () => {
+        notifSettings[key] = t.input.checked;
+        if (key === 'sound' && t.input.checked) {
+          unlockSound();
+          playNotifSound('notif', { force: true });
+        }
+        toast('Réglage enregistré');
+      });
+      return t.el;
+    };
+    const listen = button('sound', 'Écouter le son', () => {
+      unlockSound();
+      playNotifSound('notif', { force: true });
+      setTimeout(() => playNotifSound('message', { force: true }), 900);
+    });
     return h('div', { class: 'page settings' }, head('Notifications'),
       h('section', { class: 'set-group' }, h('h2', null, 'Sur cet appareil'), pushRow),
-      group('Me prévenir pour', pref('messages', 'Messages'), pref('comments', 'Commentaires et réponses'), pref('mentions', 'Mentions'), pref('follows', 'Nouveaux abonnés'), pref('live', 'LIVE des comptes suivis'), pref('likes', 'Cadeaux reçus')),
+      group('Dans l’application', local('sound', 'Son des notifications', 'Un petit son quand quelque chose arrive'), local('banner', 'Bannières', 'Un aperçu en haut de l’écran, à toucher pour l’ouvrir'), listen),
+      group('Me prévenir pour', pref('messages', 'Messages'), pref('comments', 'Commentaires et réponses'), pref('mentions', 'Mentions'), pref('follows', 'Nouveaux abonnés'), pref('live', 'LIVE des comptes suivis'), pref('likes', 'J’aime et cadeaux')),
     );
   }
 

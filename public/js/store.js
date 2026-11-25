@@ -7,6 +7,9 @@ export const store = {
   user: null,
   config: null,
   counters: { notifications: 0, messages: 0, requests: 0 },
+  // Repères : dernière notification et dernier message déjà vus par l'application (relecture
+  // régulière) ; ce qui arrive après est annoncé (bannière et son, voir notify.js)
+  seen: { n: null, m: null },
 
   on(event, fn) {
     if (!listeners.has(event)) listeners.set(event, new Set());
@@ -62,8 +65,13 @@ async function poll() {
   if (document.hidden || !store.user) return;
   const before = { ...store.counters };
   try {
-    const c = await api.get('/api/counters');
+    const first = store.seen.n === null;
+    const { fresh, ...c } = await api.get(`/api/counters?n=${first ? '' : store.seen.n}&m=${first ? '' : store.seen.m}`);
     store.setCounters(c);
+    if (fresh) {
+      store.seen = { n: Math.max(store.seen.n || 0, fresh.top.n), m: Math.max(store.seen.m || 0, fresh.top.m) };
+      if (!first && (fresh.notification || fresh.message)) store.emit('notify:fresh', fresh);
+    }
     // Ce qui est arrivé depuis le dernier tour : les pages ouvertes se mettent à jour comme avec
     // le temps réel (liste des conversations, activité, demandes d'abonnement)
     if (c.messages > (before.messages || 0)) store.emit('rt:message', { message: null });
@@ -94,6 +102,11 @@ function onVisible() {
   if (!document.hidden) poll();
 }
 
+// Relecture immédiate (une notification du téléphone vient d'arriver, application ouverte)
+export function pollNow() {
+  if (isPolling() && store.user) poll();
+}
+
 // Rythme adaptatif : toutes les 15 s quand on utilise l'application, toutes les 60 s au repos
 let lastActive = Date.now();
 for (const ev of ['pointerdown', 'keydown', 'scroll']) addEventListener(ev, () => (lastActive = Date.now()), { passive: true });
@@ -110,6 +123,7 @@ export function connectRealtime() {
   if (!store.user) return;
   if (isPolling()) {
     if (pollTimer) return;
+    poll(); // repères posés tout de suite : ce qui arrive ensuite est annoncé
     schedule();
     document.addEventListener('visibilitychange', onVisible);
     return;
@@ -135,6 +149,7 @@ export function connectRealtime() {
 export function disconnectRealtime() {
   clearTimeout(pollTimer);
   pollTimer = null;
+  store.seen = { n: null, m: null };
   document.removeEventListener('visibilitychange', onVisible);
   clearTimeout(retryTimer);
   source?.close();

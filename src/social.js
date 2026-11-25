@@ -379,23 +379,80 @@ async function pushCounters(ctx, userId) {
 // Une seule notification par action répétée (J'aime retiré puis remis, etc.)
 const DEDUP = ['like', 'comment_like', 'follow', 'follow_request', 'follow_accept', 'repost', 'favorite'];
 
-// Texte des notifications sur le téléphone (pas pour les J'aime : trop fréquents)
-function pushText(type, actorName, body, user) {
+// Texte des notifications sur le téléphone : le nom de la personne en titre, l'action en dessous.
+// Les J'aime d'une même publication se regroupent en une seule notification (voir sw.js).
+function pushText(type, body, user, what = 'ta vidéo') {
   const p = prefs(user);
   const clip = (s) => (s.length > 120 ? `${s.slice(0, 117)}…` : s);
   switch (type) {
-    case 'follow': return p.follows && `${actorName} a commencé à te suivre.`;
-    case 'follow_request': return p.follows && `${actorName} souhaite s’abonner à ton compte.`;
-    case 'follow_accept': return p.follows && `${actorName} a accepté ta demande d’abonnement.`;
-    case 'comment': return p.comments && `${actorName} a commenté : ${clip(body)}`;
-    case 'reply': return p.comments && `${actorName} a répondu : ${clip(body)}`;
-    case 'mention': return p.mentions && `${actorName} parle de toi : ${clip(body)}`;
-    case 'live': return p.live && `${actorName} est en LIVE${body ? ` : ${clip(body)}` : ''}`;
-    case 'duet': return p.comments && `${actorName} a fait un Duo avec ta vidéo.`;
-    case 'stitch': return p.comments && `${actorName} a fait un Stitch de ta vidéo.`;
-    case 'gift': return p.likes && `${actorName} t’a envoyé ${body}.`;
+    case 'like': return p.likes && `a aimé ${what}.`;
+    case 'follow': return p.follows && 'a commencé à te suivre.';
+    case 'follow_request': return p.follows && 'souhaite s’abonner à ton compte.';
+    case 'follow_accept': return p.follows && 'a accepté ta demande d’abonnement.';
+    case 'comment': return p.comments && `a commenté : ${clip(body)}`;
+    case 'reply': return p.comments && `a répondu : ${clip(body)}`;
+    case 'mention': return p.mentions && `parle de toi : ${clip(body)}`;
+    case 'live': return p.live && `est en LIVE${body ? ` : ${clip(body)}` : ''}`;
+    case 'duet': return p.comments && 'a fait un Duo avec ta vidéo.';
+    case 'stitch': return p.comments && 'a fait un Stitch de ta vidéo.';
+    case 'gift': return p.likes && `t’a envoyé ${body}.`;
     default: return null;
   }
+}
+
+// Adresse complète d'une image (photo de profil) pour les notifications du téléphone
+function absoluteUrl(ctx, src) {
+  if (!src) return null;
+  try {
+    return new URL(src, ctx.config.baseUrl).href;
+  } catch {
+    return null;
+  }
+}
+
+// Total non lu (notifications, messages, demandes) : pastille sur l'icône de l'application
+async function unreadTotal(ctx, userId) {
+  const c = await counters(ctx, userId);
+  return c.notifications + c.messages + c.requests;
+}
+
+// Ce qui est arrivé depuis les derniers éléments vus par l'application (repères n et m) :
+// la dernière notification et le dernier message reçus, pour la bannière dans l'application.
+async function freshSince(ctx, userId, { n = null, m = null } = {}) {
+  const top = await ctx.db.get(
+    `SELECT (SELECT COALESCE(MAX(id), 0) FROM notifications WHERE user_id = ?) AS n,
+            (SELECT COALESCE(MAX(id), 0) FROM messages WHERE recipient_id = ?) AS m`,
+    userId, userId,
+  );
+  const out = { top: { n: top.n, m: top.m }, notification: null, message: null };
+  if (n !== null && top.n > n) {
+    const row = await ctx.db.get(
+      `${NOTIF_SELECT} WHERE n.user_id = ? AND n.id > ? AND n.read_at IS NULL
+         AND n.actor_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ?)
+       ORDER BY n.id DESC LIMIT 1`,
+      userId, n, userId,
+    );
+    if (row) out.notification = serializeNotification(ctx, row);
+  }
+  if (m !== null && top.m > m) {
+    const row = await ctx.db.get(
+      `SELECT m.id, m.body, m.flagged, m.post_id, m.created_at, u.id AS user_id, u.username, u.display_name, u.avatar, u.verified_at
+       FROM messages m JOIN users u ON u.id = m.sender_id
+       WHERE m.recipient_id = ? AND m.id > ? AND m.read_at IS NULL AND u.banned_at IS NULL
+         AND m.sender_id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = ? UNION SELECT blocker_id FROM blocks WHERE blocked_id = ?)
+       ORDER BY m.id DESC LIMIT 1`,
+      userId, m, userId, userId,
+    );
+    if (row) {
+      out.message = {
+        id: row.id,
+        from: authorOf(row),
+        body: row.flagged ? 'Message masqué' : row.body || (row.post_id ? 'a partagé une publication avec toi' : ''),
+        createdAt: row.created_at,
+      };
+    }
+  }
+  return out;
 }
 
 function notificationUrl(type, n, actorUsername, ownerUsername) {
@@ -426,20 +483,30 @@ async function notify(ctx, { userId, actorId, type, postId = null, commentId = n
     await pushCounters(ctx, userId);
   }
   // Notification sur le téléphone, selon les réglages de la personne
-  const [user, actor] = await Promise.all([
+  const [user, actor, post] = await Promise.all([
     ctx.db.get('SELECT id, username, notify_prefs FROM users WHERE id = ?', userId),
-    ctx.db.get('SELECT username, display_name FROM users WHERE id = ?', actorId),
+    ctx.db.get('SELECT username, display_name, avatar FROM users WHERE id = ?', actorId),
+    postId
+      ? ctx.db.get('SELECT u.username, p.video_id, p.image, (SELECT COUNT(*) FROM post_media pm WHERE pm.post_id = p.id) AS media FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ?', postId)
+      : null,
   ]);
-  const text = user && actor && pushText(type, actor.display_name, body || '', user);
+  const what = !post || post.video_id ? 'ta vidéo' : post.media > 1 ? 'tes photos' : post.image ? 'ta photo' : 'ta publication';
+  const text = user && actor && pushText(type, body || '', user, what);
   if (text) {
     const { sendPush } = require('./push');
-    let owner = user.username;
-    if (postId) owner = (await ctx.db.get('SELECT u.username FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ?', postId))?.username || owner;
     await sendPush(ctx, userId, {
-      title: ctx.config.appName,
+      title: actor.display_name,
       body: text,
-      url: notificationUrl(type, { postId, commentId }, actor.username, owner),
-      tag: `${type}-${postId || actorId}`,
+      icon: absoluteUrl(ctx, actor.avatar),
+      url: notificationUrl(type, { postId, commentId }, actor.username, post?.username || user.username),
+      // Un J'aime de plus sur la même publication met à jour la notification existante, sans resonner
+      tag: type === 'like' ? `like-${postId}` : `${type}-${postId || actorId}`,
+      renotify: type !== 'like',
+      kind: type,
+      actor: actor.display_name,
+      what,
+      nid: Number(lastInsertRowid),
+      count: await unreadTotal(ctx, userId),
     });
   }
 }
@@ -506,6 +573,9 @@ module.exports = {
   counters,
   pushCounters,
   notify,
+  freshSince,
+  unreadTotal,
+  absoluteUrl,
   retractNotification,
   notifyMentions,
   isBlocked,

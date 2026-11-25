@@ -73,11 +73,18 @@ function groupRow(items) {
   );
 }
 
-function notifLink(n) {
+export function notifLink(n) {
   if (['follow', 'follow_accept', 'follow_request'].includes(n.type)) return `/@${n.actor.username}`;
   if (n.type === 'live') return `/live/${n.actor.username}`;
   if (n.post) return `/@${enc(n.post.author || store.user.username)}/video/${n.post.id}${n.commentId ? `?commentaire=${n.commentId}${n.commentParentId ? `&fil=${n.commentParentId}` : ''}` : ''}`;
   return `/@${n.actor.username}`;
+}
+
+// Texte court d'une notification (bannière dans l'application) : « a aimé ta vidéo. », « a commenté : … »
+export function notifSummary(n) {
+  const text = say(TEXTS[n.type], n) || 'a interagi avec toi.';
+  const quoted = n.body && ['comment', 'reply', 'mention', 'live'].includes(n.type);
+  return quoted ? `${text.replace(/\.$/, '')} : ${n.body.slice(0, 120)}` : text;
 }
 
 function notifRow(n) {

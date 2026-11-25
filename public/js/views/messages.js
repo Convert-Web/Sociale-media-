@@ -9,6 +9,7 @@ import { sensitive } from '../components/sensitive.js';
 import { reportDialog } from '../components/report.js';
 import { openSheet, closeSheet } from '../components/sheet.js';
 import { convRow } from './inbox.js';
+import { playNotifSound } from '../notify.js';
 
 // Choisir un compte (nouveau message)
 export function pickUser(title, onPick) {
@@ -265,6 +266,8 @@ export async function messagesView(ctx) {
     if (!d) return;
     const atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
     for (const m of d.messages) appendMsg(m);
+    // Un message de l'autre personne arrive dans la conversation ouverte : petite bulle sonore
+    if (d.messages.some((m) => m.senderId === other.id)) playNotifSound('soft');
     seenUpTo = d.seenUpTo;
     paintSeen();
     if (d.messages.length && atBottom) toBottom();
