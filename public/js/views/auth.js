@@ -61,7 +61,7 @@ async function afterAuth(ctx, user, { fresh = false } = {}) {
 }
 
 export function loginView(ctx) {
-  ctx.title = 'Connexion — Vibz';
+  ctx.title = 'Connexion — AURUM';
   const login = h('input', { class: 'input', type: 'text', autocomplete: 'username', required: true, placeholder: 'E-mail ou nom d’utilisateur', autocapitalize: 'none' });
   const pw = passwordInput({ placeholder: 'Mot de passe' });
   const submit = h('button', { type: 'submit', class: 'btn btn-primary btn-lg btn-block' }, 'Se connecter');
@@ -94,11 +94,11 @@ export function loginView(ctx) {
     error.el,
     submit,
   );
-  return frame(ctx, 'Connexion à Vibz', 'Retrouve tes abonnements, tes messages et tes vidéos.', form, h('p', { class: 'auth-switch' }, 'Pas encore de compte ? ', h('a', { href: `/inscription${location.search}` }, 'S’inscrire')));
+  return frame(ctx, 'Connexion à AURUM', 'Retrouve tes abonnements, tes messages et tes vidéos.', form, h('p', { class: 'auth-switch' }, 'Pas encore de compte ? ', h('a', { href: `/inscription${location.search}` }, 'S’inscrire')));
 }
 
 export function signupView(ctx) {
-  ctx.title = 'Inscription — Vibz';
+  ctx.title = 'Inscription — AURUM';
   const shownAt = Date.now();
   // Étape 1 : date de naissance (comme les grands réseaux : 13 ans au moins)
   const day = h('select', { class: 'input', required: true, 'aria-label': 'Jour' }, h('option', { value: '' }, 'Jour'), Array.from({ length: 31 }, (_, i) => h('option', { value: String(i + 1) }, String(i + 1))));
@@ -176,7 +176,7 @@ export function signupView(ctx) {
             website: trap.value,
             elapsed: Date.now() - shownAt,
           });
-          toast(`Bienvenue sur Vibz, ${user.displayName} !`);
+          toast(`Bienvenue sur AURUM, ${user.displayName} !`);
           await afterAuth(ctx, user, { fresh: true });
         } catch (err) {
           submit.disabled = false;
@@ -196,11 +196,11 @@ export function signupView(ctx) {
     error.el,
     submit,
   );
-  return frame(ctx, 'Inscris-toi sur Vibz', 'Crée un compte pour suivre d’autres comptes, aimer des vidéos et créer les tiennes.', form, h('p', { class: 'auth-switch' }, 'Tu as déjà un compte ? ', h('a', { href: `/connexion${location.search}` }, 'Se connecter')));
+  return frame(ctx, 'Inscris-toi sur AURUM', 'Crée un compte pour suivre d’autres comptes, aimer des vidéos et créer les tiennes.', form, h('p', { class: 'auth-switch' }, 'Tu as déjà un compte ? ', h('a', { href: `/connexion${location.search}` }, 'Se connecter')));
 }
 
 export function forgotView(ctx) {
-  ctx.title = 'Mot de passe oublié — Vibz';
+  ctx.title = 'Mot de passe oublié — AURUM';
   const email = h('input', { class: 'input', type: 'email', required: true, autocomplete: 'email', placeholder: 'adresse@exemple.fr' });
   const submit = h('button', { type: 'submit', class: 'btn btn-primary btn-lg btn-block' }, 'Recevoir le lien');
   const done = h('p', { class: 'auth-done', hidden: true }, 'Si un compte existe avec cette adresse, un lien vient de partir. Pense à regarder dans les indésirables.');
@@ -225,7 +225,7 @@ export function forgotView(ctx) {
 }
 
 export async function resetView(ctx) {
-  ctx.title = 'Nouveau mot de passe — Vibz';
+  ctx.title = 'Nouveau mot de passe — AURUM';
   const token = ctx.query.get('jeton') || '';
   const expired = () =>
     frame(ctx, 'Lien expiré', 'Ce lien a expiré ou a déjà été utilisé. Demande un nouveau lien : il est valable une heure.',

@@ -54,7 +54,7 @@ const liveRow = (l) => h('a', { href: `/live/${enc(l.host.username)}`, class: 'l
 export async function searchView(ctx) {
   const q = cleanQuery(ctx.query.get('q'));
   const type = TABS.some(([k]) => k === ctx.query.get('type')) ? ctx.query.get('type') : 'top';
-  ctx.title = q ? `${q} — Recherche Vibz` : 'Recherche — Vibz';
+  ctx.title = q ? `${q} — Recherche AURUM` : 'Recherche — AURUM';
   const bar = searchBar(q, { autofocus: !q });
   const back = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => (history.length > 1 ? history.back() : navigate('/explorer')) }, icon('back'));
   const head = h('header', { class: 'page-head sticky search-head' }, back, bar);

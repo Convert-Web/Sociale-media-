@@ -1,4 +1,4 @@
-/* Vibz — démarrage. Script classique, minuscule et indépendant du reste.
+/* AURUM — démarrage. Script classique, minuscule et indépendant du reste.
    Mises à jour : une fois l'application lancée, c'est elle qui propose le bouton « Mettre à jour »
    (js/update.js). Filet de sécurité : si l'application gardée sur le téléphone ne démarre pas,
    la version est vérifiée ici et la nouvelle se charge d'office. */

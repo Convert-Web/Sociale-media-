@@ -27,7 +27,7 @@ async function destroySession(ctx, req, res) {
   res.clearCookie(SESSION_COOKIE, { path: '/' });
 }
 
-// Charge le compte connecté (ou rien : on peut regarder Vibz sans compte)
+// Charge le compte connecté (ou rien : on peut regarder AURUM sans compte)
 function loadUser(ctx) {
   let lastCleanup = 0;
   return async (req, _res, next) => {

@@ -74,7 +74,7 @@ function bubble(m, meId, other) {
 
 export async function messagesView(ctx) {
   const username = ctx.params.username || null;
-  ctx.title = 'Messages — Vibz';
+  ctx.title = 'Messages — AURUM';
   const listHost = h('div', { class: 'dm-list' }, spinner());
   const newBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Nouveau message', onclick: () => pickUser('Nouveau message', (u) => navigate(`/messages/${enc(u.username)}`)) }, icon('pen'));
   const side = h('aside', { class: 'dm-side' }, h('header', { class: 'page-head' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => navigate('/boite') }, icon('back')), h('h1', null, 'Messages'), newBtn), listHost);

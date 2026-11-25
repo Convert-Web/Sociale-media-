@@ -110,7 +110,7 @@ function notifRow(n) {
 }
 
 export async function inboxView(ctx) {
-  ctx.title = 'Boîte de réception — Vibz';
+  ctx.title = 'Boîte de réception — AURUM';
   const c = store.counters;
   const row = (href, ic, cls, title, sub, count) =>
     h('a', { href, class: 'inbox-row' }, h('span', { class: `inbox-ic ${cls}` }, icon(ic)), h('span', { class: 'inbox-text' }, h('b', null, title), h('small', null, sub)), count ? h('span', { class: 'badge-count' }, count > 99 ? '99+' : String(count)) : icon('chevron', 'icon-sm'));
@@ -196,7 +196,7 @@ const FILTERS = [
 export async function activityView(ctx) {
   const type = ctx.query.get('type') || '';
   const requestsOnly = type === 'demandes';
-  ctx.title = requestsOnly ? 'Demandes d’abonnement — Vibz' : 'Activité — Vibz';
+  ctx.title = requestsOnly ? 'Demandes d’abonnement — AURUM' : 'Activité — AURUM';
   const back = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => (history.length > 1 ? history.back() : navigate('/boite')) }, icon('back'));
   const chips = requestsOnly ? null : h('div', { class: 'chips' }, FILTERS.map(([k, label]) => h('a', { href: k ? `/activite?type=${k}` : '/activite', class: `chip${k === type ? ' on' : ''}` }, label)));
   const list = h('div', { class: 'n-list' }, spinner());

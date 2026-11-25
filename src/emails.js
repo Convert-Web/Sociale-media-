@@ -1,5 +1,5 @@
 'use strict';
-// Modèles des courriels de Vibz : tableaux et styles en ligne (lisibles dans Gmail, Apple Mail et
+// Modèles des courriels d’AURUM : tableaux et styles en ligne (lisibles dans Gmail, Apple Mail et
 // Outlook), avec une version texte pour chaque courriel.
 
 const esc = (s) =>
@@ -17,13 +17,16 @@ function button(label, url) {
   </td></tr></table>`;
 }
 
-function layout({ preheader = '', body, footer = '', baseUrl, appName = 'Vibz' }) {
+// « de Vibz », mais « d’AURUM » : élision devant une voyelle
+const ofName = (name) => (/^[aeiouyàâéèêëîïôöûüh]/i.test(name) ? `d’${name}` : `de ${name}`);
+
+function layout({ preheader = '', body, footer = '', baseUrl, appName = 'AURUM' }) {
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(appName)}</title></head>
 <body style="margin:0;padding:0;background:#f4f3f8">
 <span style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(preheader)}</span>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f3f8"><tr><td align="center" style="padding:28px 14px">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
-    <tr><td align="center" style="padding:6px 0 22px"><a href="${esc(baseUrl)}" style="font:800 26px ${FONT};letter-spacing:-0.03em;color:#6c4dff;text-decoration:none">${esc(appName.toLowerCase())}</a></td></tr>
+    <tr><td align="center" style="padding:6px 0 22px"><a href="${esc(baseUrl)}" style="font:800 26px ${FONT};letter-spacing:0.02em;color:#6c4dff;text-decoration:none">${esc(appName)}</a></td></tr>
     <tr><td style="background:#ffffff;border-radius:18px;padding:34px 30px;font:16px/1.55 ${FONT};color:#161823">${body}</td></tr>
     <tr><td align="center" style="padding:22px 18px;font:12.5px/1.5 ${FONT};color:#8a8b91">${footer || `${esc(appName)} — des vidéos courtes, créées par toi.`}</td></tr>
   </table>
@@ -44,7 +47,7 @@ function welcomeEmail(config, user) {
       h1(`Bienvenue sur ${esc(config.appName)}, ${esc(firstName(user.display_name))} !`) +
       p(`Ton compte <b>@${esc(user.username)}</b> est prêt.`) +
       p('Fais défiler « Pour toi » : plus tu regardes, aimes et commentes, plus le fil te ressemble. Et quand tu veux, touche + pour filmer ta première vidéo.') +
-      button('Ouvrir Vibz', url),
+      button('Ouvrir AURUM', url),
   });
   const text = `Bienvenue sur ${config.appName}, ${firstName(user.display_name)} !\n\nTon compte @${user.username} est prêt.\n\nOuvrir ${config.appName} : ${url}`;
   return { subject: `Bienvenue sur ${config.appName} !`, html, text };
@@ -72,9 +75,9 @@ function testEmail(config, user) {
     baseUrl: config.baseUrl,
     appName: config.appName,
     preheader: 'Les courriels fonctionnent.',
-    body: h1('Courriel d’essai') + p(`Bonjour ${esc(firstName(user.display_name))}, l’envoi des courriels de ${esc(config.appName)} fonctionne.`),
+    body: h1('Courriel d’essai') + p(`Bonjour ${esc(firstName(user.display_name))}, l’envoi des courriels ${esc(ofName(config.appName))} fonctionne.`),
   });
-  return { subject: `${config.appName} — Courriel d’essai`, html, text: `L'envoi des courriels de ${config.appName} fonctionne.` };
+  return { subject: `${config.appName} — Courriel d’essai`, html, text: `L’envoi des courriels ${ofName(config.appName)} fonctionne.` };
 }
 
 module.exports = { welcomeEmail, resetEmail, testEmail, layout, esc };

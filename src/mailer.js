@@ -3,15 +3,17 @@
 // sinon un serveur SMTP classique, sinon simple affichage dans la console (développement).
 const nodemailer = require('nodemailer');
 
-function parseFrom(from) {
+// Nom affiché de l'expéditeur : celui de l'application (l'ancien nom « Vibz » est remplacé)
+function parseFrom(from, appName = 'AURUM') {
   const m = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(from || '');
-  return m ? { name: m[1].trim() || 'Vibz', email: m[2].trim() } : { name: 'Vibz', email: (from || '').trim() };
+  const name = m?.[1].trim();
+  return m ? { name: name && name.toLowerCase() !== 'vibz' ? name : appName, email: m[2].trim() } : { name: appName, email: (from || '').trim() };
 }
 
 function createMailer(config) {
   const brevoKey = config.mail?.brevoKey || '';
   const transport = !brevoKey && config.smtp.url ? nodemailer.createTransport(config.smtp.url) : null;
-  const sender = parseFrom(config.smtp.from);
+  const sender = parseFrom(config.smtp.from, config.appName);
   const provider = brevoKey ? 'brevo' : transport ? 'smtp' : null;
 
   async function brevo(payload) {

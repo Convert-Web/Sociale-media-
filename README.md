@@ -1,4 +1,4 @@
-# Vibz — des vidéos courtes, créées par toi
+# AURUM — des vidéos courtes, créées par toi
 
 Application complète de vidéos courtes en plein écran, avec ce qui la distingue : **l'Actu**,
 l'actualité du jour des médias (articles, podcasts, vidéos) à laquelle chacun peut **réagir en
@@ -7,12 +7,12 @@ sons réutilisables, Duo, Stitch, LIVE avec cadeaux, messagerie, profils, recher
 et administration. Entièrement en français, pensée d'abord pour le téléphone, installable comme une
 application.
 
-Vibz a sa propre identité (nom, logo, couleurs) : aucune marque, aucun logo ni aucun contenu d'un
+AURUM a sa propre identité (nom, logo, couleurs) : aucune marque, aucun logo ni aucun contenu d'un
 autre service n'est repris. Les vidéos et musiques de démonstration sont générées par calcul
 (`scripts/make-demo.js`).
 
-**Le design de Vibz** : fond « encre » le soir, « papier » chaud le jour, dégradé de marque violet →
-rose et le point « soleil » jaune du logo, qui marque l'onglet ouvert. Formes douces reprises du logo
+**Le design d’AURUM** : fond « encre » le soir, « papier » chaud le jour, dégradé de marque violet →
+rose et le point d'or du logo (le « A » d'AURUM), qui marque aussi l'onglet ouvert. Formes douces reprises du logo
 (photos de profil et icônes en « squircle », boutons en pilule), commandes en verre dépoli posées
 sur les vidéos. Dans le fil, chaque vidéo est une carte aux coins arrondis, avec le dock de
 navigation flottant en dessous, la barre d'actions (J'aime, commentaires, favoris, partage) en bas
@@ -30,7 +30,7 @@ de la carte et le bouton « Suivre » à côté du nom. Titres en Bricolage Grot
 | **« Pour toi »** | Algorithme maison : qualité (J'aime, commentaires, partages, favoris, republications rapportés aux spectateurs), temps regardé, fraîcheur, coup de pouce aux nouvelles vidéos, variété (créateurs et sons), part de découverte, et centres d'intérêt appris de chaque compte (créateurs, hashtags, sons, catégories) qui s'estompent avec le temps. Choix des thèmes à l'inscription, remise à zéro et fil non personnalisé dans les réglages. Ouvert sans compte. |
 | **Abonnements, Amis** | Onglets du haut du fil : « Pour toi », « Abonnements » (vidéos et republications des comptes suivis), « Amis » (abonnements réciproques, comptes suggérés). |
 | **Interactions** | J'aime, commentaires (réponses, J'aime, « Aimé par le créateur », épinglage, suppression, signalement, @mentions et #hashtags suggérés ; sur ordinateur, dans un panneau à côté de la vidéo), favoris privés, republications, partage (message à plusieurs amis, copier le lien, WhatsApp, Facebook, X, e-mail, SMS, partage du téléphone), enregistrement de la vidéo. |
-| **Créer** | Caméra : 15 s, 60 s ou 3 min, en plusieurs prises (toucher ou maintenir), minuteur 3 s / 10 s, filtres, flash, caméra avant/arrière, son ajouté joué pendant le tournage. Import depuis l'appareil (vidéos .MOV d'iPhone comprises, H.264 ou HEVC, filmées debout ou à l'horizontale : durée et dimensions lues dans le fichier lui-même). Montage : textes (couleurs, fond, contour, taille) et autocollants déplaçables au doigt, filtres, son ajouté avec volumes, couverture choisie image par image. Description avec hashtags et mentions, catégorie, « Qui peut voir » (tout le monde, amis, moi), commentaires / Duo / Stitch / téléchargement autorisés ou non, brouillons gardés sur l'appareil. Mode Photo (jusqu'à 20 photos) et mode Texte. Envoi en arrière-plan, en qualité d'origine, reprenable après une coupure, avec sa vignette de progression en tête du profil ; la vidéo y prend sa place dès qu'elle est en ligne. Modifier, épingler ou supprimer une publication depuis le partage, l'appui long ou le clic droit. |
+| **Créer** | Caméra : image entière au format réel de la caméra (ce qu'on voit est ce qui est filmé), zoom comme sur l'iPhone (0,5× ultra grand-angle quand le téléphone en a un, 1×, 2×, et pincer pour ajuster, même pendant le tournage), 15 s, 60 s ou 3 min, en plusieurs prises (toucher ou maintenir), minuteur 3 s / 10 s, filtres, flash, caméra avant/arrière (changeable entre deux prises), son ajouté joué pendant le tournage. Import depuis l'appareil (vidéos .MOV d'iPhone comprises, H.264 ou HEVC, filmées debout ou à l'horizontale : durée et dimensions lues dans le fichier lui-même). Montage : textes (couleurs, fond, contour, taille) et autocollants déplaçables au doigt, filtres, son ajouté avec volumes, couverture choisie image par image. Description avec hashtags et mentions, catégorie, « Qui peut voir » (tout le monde, amis, moi), commentaires / Duo / Stitch / téléchargement autorisés ou non, brouillons gardés sur l'appareil. Mode Photo (jusqu'à 20 photos) et mode Texte. Envoi en arrière-plan, en qualité d'origine, reprenable après une coupure, avec sa vignette de progression en tête du profil ; la vidéo y prend sa place dès qu'elle est en ligne. Modifier, épingler ou supprimer une publication depuis le partage, l'appui long ou le clic droit. |
 | **Sons** | Chaque vidéo crée son « son original », réutilisable par tous (« Utiliser ce son ») ; page du son (écoute, favoris, vidéos qui l'utilisent), bibliothèque de sons populaires et favoris. |
 | **Duo et Stitch** | Duo : ta vidéo à côté de l'originale, sons mélangés. Stitch : jusqu'à 5 s de l'originale, puis ta suite. Montés dans le navigateur, autorisés ou non par chaque créateur. |
 | **LIVE** | Passer en LIVE depuis la caméra (titre, retourner, couper le micro), abonnés prévenus, spectateurs avec ou sans compte, commentaires, cœurs, cadeaux animés, compteur de spectateurs, bilan (durée, spectateurs, cœurs, diamants, nouveaux abonnés). Vidéo directe entre appareils (WebRTC), reconnexion automatique. |
@@ -110,7 +110,7 @@ dimensionnés pour une communauté qui démarre :
 - **Montage** : filtres, textes et autocollants sont appliqués à la lecture (la vidéo d'origine
   n'est jamais recompressée) ; les sons ajoutés, Duos et Stitchs sont montés dans le navigateur, en
   temps réel. Pas d'effets de réalité augmentée ni de bibliothèque de musiques sous licence : les
-  sons sont ceux des vidéos publiées sur Vibz.
+  sons sont ceux des vidéos publiées sur AURUM.
 - **Rémunération** : les diamants sont comptés mais pas encore convertibles en argent (il faudrait
   Stripe Connect). Pas de publicité ni de boutique intégrée.
 

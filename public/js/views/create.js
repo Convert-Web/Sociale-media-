@@ -18,6 +18,23 @@ import { saveDraft, listDrafts, deleteDraft, getDraft, countDrafts } from '../dr
 const BGS = ['violet', 'rose', 'ocean', 'soleil', 'menthe', 'nuit', 'feu', 'ciel'];
 const MAX_PHOTOS = 20;
 
+// Dernière caméra utilisée (avant ou arrière) : retrouvée à la prochaine ouverture
+const FACING = 'vibz:camera';
+function savedFacing() {
+  try {
+    return localStorage.getItem(FACING) === 'environment' ? 'environment' : 'user';
+  } catch {
+    return 'user';
+  }
+}
+function saveFacing(v) {
+  try {
+    localStorage.setItem(FACING, v);
+  } catch {
+    /* navigation privée : sans importance */
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Choisir un son (populaires, favoris, recherche ; écoute avant de choisir)
 // ---------------------------------------------------------------------------
@@ -64,7 +81,7 @@ export function pickSound(onPick) {
 // L'écran de création
 // ---------------------------------------------------------------------------
 export async function createView(ctx) {
-  ctx.title = 'Créer — Vibz';
+  ctx.title = 'Créer — AURUM';
   const q = ctx.query;
   const me = store.user;
   const S = {
@@ -168,8 +185,17 @@ export async function createView(ctx) {
   // 1. Caméra
   // =========================================================================
   function captureStep() {
-    let stream = null;
-    let facing = 'user';
+    let videoTrack = null; // l'image de la caméra
+    let micTrack = null; // le micro : gardé quand on change de caméra ou d'objectif
+    let facing = savedFacing();
+    let lens = 'main'; // objectif arrière : « main » (1×) ou « ultra » (ultra grand-angle, 0,5×)
+    let lenses = null; // objectifs trouvés sur l'appareil (connus après l'autorisation)
+    let hwZoom = null; // zoom de la caméra elle-même, quand le navigateur le propose
+    let zoom = 1; // zoom affiché : 0,5×, 1×, 2×…
+    let digital = 1; // part du zoom faite en agrandissant l'image (aperçu et vidéo enregistrée)
+    let drawRec = null; // enregistrement à travers un canevas : zoom, changement de caméra entre deux prises
+    let opening = 0;
+    let closed = false;
     let rec = null;
     let chunks = [];
     let recording = false;
@@ -186,7 +212,13 @@ export async function createView(ctx) {
     const preview = h('video', { class: 'cam-video mirror', autoplay: true, muted: true, playsinline: true });
     preview.muted = true;
     preview.playsInline = true;
-    const camBox = h('div', { class: `cam-box${S.kind === 'duet' ? ' duet' : ''}` }, preview);
+    // L'aperçu garde le format réel de l'image (comme l'appareil photo de l'iPhone) : ce qu'on voit
+    // est exactement ce qui est filmé
+    const paintAspect = () => preview.videoWidth && preview.videoHeight && el.style.setProperty('--cam-ar', (preview.videoWidth / preview.videoHeight).toFixed(4));
+    preview.addEventListener('loadedmetadata', paintAspect);
+    preview.addEventListener('resize', paintAspect);
+    const camFrame = h('div', { class: 'cam-frame' }, preview);
+    const camBox = h('div', { class: `cam-box${S.kind === 'duet' ? ' duet' : ''}` }, camFrame);
     if (S.kind === 'duet') {
       origEl = onScreen(mediaFor(S.sourceBlob));
       origEl.className = 'cam-orig';
@@ -217,30 +249,204 @@ export async function createView(ctx) {
     };
     const applyFilter = () => (preview.style.filter = filterCss(S.fx.filter));
 
-    async function openCamera() {
-      stream?.getTracks().forEach((t) => t.stop());
+    async function openCamera({ zoomTo } = {}) {
+      const my = ++opening;
+      videoTrack?.stop();
+      videoTrack = null;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1080 }, height: { ideal: 1920 }, frameRate: { ideal: 30 } }, audio: { echoCancellation: true, noiseSuppression: true } });
-        preview.srcObject = stream;
+        const video = {
+          // Format demandé « à l'horizontale » (1920 × 1080) : téléphone tenu droit, l'image arrive en
+          // portrait et entière. Demandée en portrait (1080 × 1920), Safari sur iPhone n'en gardait que
+          // le centre : une image beaucoup trop zoomée.
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
+          zoom: true, // Chrome : donne accès au zoom de la caméra
+          ...(lens === 'ultra' && lenses?.ultra ? { deviceId: { exact: lenses.ultra.deviceId } } : { facingMode: facing }),
+        };
+        const s = await navigator.mediaDevices.getUserMedia({ video, audio: micTrack ? false : { echoCancellation: true, noiseSuppression: true } });
+        if (my !== opening || closed) return s.getTracks().forEach((t) => t.stop());
+        videoTrack = s.getVideoTracks()[0];
+        if (!micTrack) micTrack = s.getAudioTracks()[0] || null;
+        preview.srcObject = new MediaStream([videoTrack]);
         preview.classList.toggle('mirror', facing === 'user');
         status.hidden = true;
         recordBtn.disabled = false;
-        const caps = stream.getVideoTracks()[0]?.getCapabilities?.();
-        flashBtn.hidden = !caps?.torch;
+        const caps = videoTrack.getCapabilities?.() || {};
+        hwZoom = caps.zoom && caps.zoom.max > caps.zoom.min ? caps.zoom : null;
+        flashBtn.hidden = !caps.torch;
+        torch = false;
+        flashBtn.classList.remove('on');
+        if (!lenses) lenses = await findLenses();
+        setZoom(zoomTo ?? (lens === 'ultra' ? 0.5 : 1));
       } catch (err) {
+        if (my !== opening || closed) return;
+        // Objectif ultra grand-angle indisponible : retour au 1×
+        if (lens === 'ultra') {
+          lens = 'main';
+          return openCamera();
+        }
         status.hidden = false;
         recordBtn.disabled = true;
         status.replaceChildren(icon('videoOff'), h('p', null, err?.name === 'NotAllowedError' ? 'Autorise la caméra et le micro pour filmer, ou importe une vidéo.' : 'Aucune caméra disponible : importe une vidéo depuis ton appareil.'), h('button', { type: 'button', class: 'btn btn-primary', onclick: () => fileInput.click() }, 'Importer'));
       }
     }
 
+    // iPhone : chaque objectif arrière est une caméra à part (« … ultra grand-angle », « … Ultra Wide »).
+    // Les caméras « doubles » ou « triples », qui changent d'objectif toutes seules, sont écartées.
+    async function findLenses() {
+      try {
+        const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput' && d.label);
+        const ultra = cams.find((d) => /ultra/i.test(d.label) && !/dual|double|triple|front|avant/i.test(d.label));
+        return { ultra: ultra || null };
+      } catch {
+        return { ultra: null };
+      }
+    }
+
+    // ---- Zoom, comme sur l'iPhone : 0,5× (ultra grand-angle), 1×, 2×, et pincer pour ajuster ----
+    // Zoom de la caméra quand le navigateur le permet (Chrome sur Android), sinon zoom numérique :
+    // l'aperçu est agrandi au centre et la vidéo enregistrée l'est de la même façon (voir drawFrame).
+    const canDraw = typeof HTMLCanvasElement !== 'undefined' && 'captureStream' in HTMLCanvasElement.prototype;
+    const lensBase = () => (lens === 'ultra' ? 0.5 : 1);
+    const zoomMax = () => {
+      if (!hwZoom && !canDraw) return lensBase();
+      if (lens === 'ultra') return 1; // au-delà, l'objectif principal prend le relais
+      return hwZoom ? Math.min(hwZoom.max / hwZoom.min, 10) : 3;
+    };
+    let hwBusy = false;
+    let hwWant = null;
+    async function hwApply(value) {
+      hwWant = value;
+      if (hwBusy) return;
+      hwBusy = true;
+      while (hwWant !== null) {
+        const z = hwWant;
+        hwWant = null;
+        try {
+          await videoTrack?.applyConstraints({ advanced: [{ zoom: z }] });
+        } catch {
+          /* zoom refusé par la caméra : le précédent reste */
+        }
+      }
+      hwBusy = false;
+    }
+    function setZoom(z) {
+      const base = lensBase();
+      zoom = Math.min(zoomMax(), Math.max(base, z));
+      const rel = zoom / base;
+      if (hwZoom) {
+        digital = 1;
+        hwApply(Math.min(hwZoom.max, hwZoom.min * rel));
+      } else digital = rel;
+      preview.style.setProperty('--zoom', digital.toFixed(3));
+      paintZoom();
+    }
+    // Changer de caméra ou d'objectif : possible entre deux prises quand la vidéo passe par le canevas
+    function canSwitch(what, quiet) {
+      const why = recording ? `Mets en pause pour ${what}.` : rec && !drawRec ? `Pour ${what}, fais-le avant de commencer à filmer.` : '';
+      if (why && !quiet) toast(why);
+      return !why;
+    }
+    async function switchLens(to, zoomTo, quiet) {
+      if (lens === to) return setZoom(zoomTo ?? lensBase());
+      if (!canSwitch('changer d’objectif', quiet)) return;
+      lens = to;
+      await openCamera({ zoomTo });
+    }
+    function pickZoom(level) {
+      if (level === 0.5) return switchLens('ultra', 0.5);
+      if (lens === 'ultra') return switchLens('main', level);
+      setZoom(level);
+    }
+    const zoomBar = h('div', { class: 'cam-zoom', role: 'group', 'aria-label': 'Zoom', hidden: true });
+    const fmtZoom = (z) => (Math.round(z * 10) / 10).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+    function paintZoom() {
+      const levels = [];
+      if (facing === 'environment' && lenses?.ultra) levels.push(0.5);
+      levels.push(1);
+      if (hwZoom || canDraw) levels.push(2);
+      const current = levels.filter((l) => l <= zoom + 0.001).pop() ?? levels[0];
+      zoomBar.hidden = levels.length < 2;
+      zoomBar.replaceChildren(...levels.map((l) => h('button', { type: 'button', class: `cam-zoom-btn${l === current ? ' on' : ''}`, 'aria-label': `Zoom ${fmtZoom(l)}×`, 'aria-pressed': String(l === current), onclick: () => pickZoom(l) }, l === current ? `${fmtZoom(zoom)}×` : fmtZoom(l))));
+    }
+    // Pincer l'image : zoom continu ; au-delà d'un objectif, l'autre prend le relais (au relâcher)
+    let pinch = null;
+    const fingers = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY) || 1;
+    camBox.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 2 || !videoTrack) return;
+      e.preventDefault();
+      pinch = { d: fingers(e.touches), z: zoom, want: zoom };
+    }, { passive: false });
+    camBox.addEventListener('touchmove', (e) => {
+      if (!pinch || e.touches.length !== 2) return;
+      e.preventDefault();
+      pinch.want = pinch.z * (fingers(e.touches) / pinch.d);
+      setZoom(pinch.want);
+    }, { passive: false });
+    const endPinch = (e) => {
+      if (!pinch || e.touches.length >= 2) return;
+      const want = pinch.want;
+      pinch = null;
+      if (lens === 'ultra' && want >= 0.98) switchLens('main', Math.min(want, 2), true);
+      else if (lens === 'main' && want < 0.8 && facing === 'environment' && lenses?.ultra) switchLens('ultra', 0.5, true);
+    };
+    camBox.addEventListener('touchend', endPinch);
+    camBox.addEventListener('touchcancel', endPinch);
+
+    // Vidéo enregistrée à travers un canevas : l'image de la caméra y est recopiée à chaque image,
+    // avec le zoom numérique. La vidéo continue d'une prise à l'autre même si l'on change de caméra.
+    function drawFrame() {
+      const c = drawRec;
+      const vw = preview.videoWidth;
+      const vh = preview.videoHeight;
+      if (!c || !vw || !vh) return;
+      const { width: cw, height: ch } = c.canvas;
+      const k = Math.max(cw / vw, ch / vh) * digital;
+      const sw = cw / k;
+      const sh = ch / k;
+      c.g.drawImage(preview, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, cw, ch);
+    }
+    function startDrawing() {
+      const c = drawRec;
+      if (!c || c.on) return;
+      c.on = true;
+      const loop = (c.loop || 0) + 1; // une seule boucle à la fois (l'ancienne s'arrête d'elle-même)
+      c.loop = loop;
+      const step = () => {
+        if (!c.on || c.loop !== loop) return;
+        drawFrame();
+        if (preview.requestVideoFrameCallback && !document.hidden) preview.requestVideoFrameCallback(step);
+        else setTimeout(step, 33);
+      };
+      step();
+    }
+    const stopDrawing = () => drawRec && (drawRec.on = false);
+    // Après un changement de caméra, la boucle reprend sur la nouvelle image
+    preview.addEventListener('playing', () => {
+      if (drawRec?.on) {
+        drawRec.on = false;
+        startDrawing();
+      }
+    });
+    function videoForRecorder() {
+      if (!canDraw || !preview.videoWidth) return videoTrack;
+      const k = Math.min(1, 1920 / Math.max(preview.videoWidth, preview.videoHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round((preview.videoWidth * k) / 2) * 2;
+      canvas.height = Math.round((preview.videoHeight * k) / 2) * 2;
+      drawRec = { canvas, g: canvas.getContext('2d'), on: false };
+      drawFrame();
+      return canvas.captureStream(30).getVideoTracks()[0];
+    }
+
     // Flux enregistré : caméra + micro, ou caméra + son ajouté (et le micro si activé)
     function recorderStream() {
-      const v = stream.getVideoTracks()[0];
-      if (!S.sound) return stream;
+      const v = videoForRecorder();
+      if (!S.sound) return new MediaStream([v, ...(micTrack ? [micTrack] : [])]);
       ac = ac || new AudioContext();
       const dest = ac.createMediaStreamDestination();
-      if (micOn && stream.getAudioTracks().length) ac.createMediaStreamSource(new MediaStream(stream.getAudioTracks())).connect(dest);
+      if (micOn && micTrack) ac.createMediaStreamSource(new MediaStream([micTrack])).connect(dest);
       if (!soundEl) {
         soundEl = mediaFor(S.sound.url, { video: false });
         const src = ac.createMediaElementSource(soundEl);
@@ -251,7 +457,7 @@ export async function createView(ctx) {
     }
 
     function startRec() {
-      if (!stream) return;
+      if (!videoTrack) return;
       if (!rec) {
         const mime = recorderMime();
         if (mime === null) return toast('Ce navigateur ne sait pas enregistrer de vidéo : importe-en une.', 'error');
@@ -265,6 +471,7 @@ export async function createView(ctx) {
       ac?.resume();
       soundEl?.play().catch(() => {});
       origEl?.play().catch(() => {});
+      startDrawing();
       recording = true;
       since = performance.now();
       recordBtn.classList.add('on');
@@ -285,6 +492,7 @@ export async function createView(ctx) {
       clearInterval(tick);
       elapsed += (performance.now() - since) / 1000;
       rec?.pause();
+      stopDrawing();
       soundEl?.pause();
       origEl?.pause();
       recording = false;
@@ -301,7 +509,7 @@ export async function createView(ctx) {
       r.stop();
       await stopped;
       const type = (r.mimeType || recorderMime() || 'video/webm').split(';')[0];
-      const file = new File(chunks, `vibz-${Date.now()}.${extFor(type)}`, { type });
+      const file = new File(chunks, `aurum-${Date.now()}.${extFor(type)}`, { type });
       try {
         const info = await readVideoInfo(file, { knownDuration: elapsed });
         S.file = file;
@@ -321,6 +529,8 @@ export async function createView(ctx) {
         /* déjà arrêté */
       }
       rec = null;
+      stopDrawing();
+      drawRec = null;
       chunks = [];
       elapsed = 0;
       marks.length = 0;
@@ -413,7 +623,7 @@ export async function createView(ctx) {
     const flashBtn = tool('flash', 'Flash', async () => {
       torch = !torch;
       try {
-        await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ torch }] });
+        await videoTrack.applyConstraints({ advanced: [{ torch }] });
         flashBtn.classList.toggle('on', torch);
       } catch {
         toast('Flash indisponible sur cette caméra.', 'error');
@@ -432,7 +642,13 @@ export async function createView(ctx) {
     });
     micBtn.hidden = !S.sound;
     const side = h('div', { class: 'cam-side' },
-      tool('flip', 'Retourner', () => { if (rec) return toast('Retourne la caméra avant de filmer.'); facing = facing === 'user' ? 'environment' : 'user'; openCamera(); }),
+      tool('flip', 'Retourner', () => {
+        if (!canSwitch('retourner la caméra')) return;
+        facing = facing === 'user' ? 'environment' : 'user';
+        lens = 'main';
+        saveFacing(facing);
+        openCamera();
+      }),
       tool('filters', 'Filtres', () => filterSheet(S.fx.filter, (f) => { S.fx.filter = f; applyFilter(); }, preview)),
       timerBtn, flashBtn, micBtn);
 
@@ -481,18 +697,21 @@ export async function createView(ctx) {
         ? h('div', { class: 'cam-kind cam-actu' }, icon('newspaper', 'icon-sm'), h('span', null, `Ta réaction à : ${S.actu.title}`))
         : null;
     const el = h('div', { class: 'cam' }, camBox, status, countdown, bar, timeEl, top, kindNote, side,
-      h('div', { class: 'cam-bottom' }, h('div', { class: 'cam-row' }, h('span', { class: 'cam-slot' }, draftsBtn), redoBtn, recordBtn, doneBtn, h('span', { class: 'cam-slot' }, importBtn)), modeTabs));
+      h('div', { class: 'cam-bottom' }, zoomBar, h('div', { class: 'cam-row' }, h('span', { class: 'cam-slot' }, draftsBtn), redoBtn, recordBtn, doneBtn, h('span', { class: 'cam-slot' }, importBtn)), modeTabs));
     applyFilter();
     paintBar();
     openCamera();
     setStep(el, () => {
+      closed = true;
       clearInterval(tick);
       try {
         rec?.stop();
       } catch {
         /* déjà arrêté */
       }
-      stream?.getTracks().forEach((t) => t.stop());
+      stopDrawing();
+      videoTrack?.stop();
+      micTrack?.stop();
       soundEl?.pause();
       origEl?.pause();
       ac?.close?.().catch(() => {});

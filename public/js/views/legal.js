@@ -29,10 +29,10 @@ function pages(d) {
   return {
     'mentions-legales': {
       title: 'Mentions légales',
-      description: 'Éditeur, hébergeur et contact de Vibz.',
+      description: 'Éditeur, hébergeur et contact d’AURUM.',
       body: [
         h2('Éditeur'),
-        p('Le site et l’application Vibz sont édités par ', ...editor(), '.'),
+        p('Le site et l’application AURUM sont édités par ', ...editor(), '.'),
         p('Adresse : ', v('address'), '.'),
         p('SIREN / SIRET : ', v('siren'), L.registry ? ` — ${L.registry}` : '', '.'),
         L.vat ? p('TVA : ', L.vat, '.') : null,
@@ -43,7 +43,7 @@ function pages(d) {
         h2('Point de contact (règlement européen sur les services numériques)'),
         p('Autorités et utilisateurs peuvent joindre l’éditeur à ', mail(), ', en français ou en anglais.'),
         h2('Propriété intellectuelle'),
-        p('La marque Vibz, son logo, l’interface et les textes du service sont protégés. Les vidéos, photos et textes publiés restent la propriété de leurs auteurs.'),
+        p('La marque AURUM, son logo, l’interface et les textes du service sont protégés. Les vidéos, photos et textes publiés restent la propriété de leurs auteurs.'),
         h2('Signaler un contenu'),
         p('Chaque vidéo, commentaire, message, LIVE et compte peut être signalé depuis son menu (appui long ou « … »). Tu peux aussi écrire à ', mail(), ' en indiquant l’adresse du contenu et la raison.'),
         h2('Documents'),
@@ -53,14 +53,14 @@ function pages(d) {
 
     cgu: {
       title: 'Conditions d’utilisation',
-      description: 'Règles d’accès et d’usage de Vibz.',
+      description: 'Règles d’accès et d’usage d’AURUM.',
       body: [
         h2('1. Le service'),
-        p('Vibz permet de regarder, créer et partager des vidéos courtes, des photos et des textes, de commenter, d’envoyer des messages, de suivre des comptes et de diffuser des LIVE. Le service est gratuit ; seules les pièces virtuelles sont payantes (voir les ', h('a', { href: '/cgv' }, 'CGV'), ').'),
+        p('AURUM permet de regarder, créer et partager des vidéos courtes, des photos et des textes, de commenter, d’envoyer des messages, de suivre des comptes et de diffuser des LIVE. Le service est gratuit ; seules les pièces virtuelles sont payantes (voir les ', h('a', { href: '/cgv' }, 'CGV'), ').'),
         h2('2. Ton compte'),
         ul('Il faut avoir 13 ans au moins. Avant 15 ans, parles-en à un parent : il peut t’aider à régler la confidentialité de ton compte.', 'Les informations données doivent être exactes ; le compte est personnel et son mot de passe confidentiel.', 'Tu peux modifier ou supprimer ton compte à tout moment (Réglages → Compte).'),
         h2('3. Tes contenus'),
-        p('Tu restes propriétaire de ce que tu publies. Tu accordes à l’éditeur, pour la durée de leur mise en ligne, une licence gratuite et mondiale pour les héberger, les afficher et les diffuser dans Vibz (fils, recherche, partages). Selon tes réglages, d’autres comptes peuvent réutiliser ta vidéo en Duo, en Stitch ou son son (« Utiliser ce son ») ; tu peux désactiver ces options pour chaque vidéo.'),
+        p('Tu restes propriétaire de ce que tu publies. Tu accordes à l’éditeur, pour la durée de leur mise en ligne, une licence gratuite et mondiale pour les héberger, les afficher et les diffuser dans AURUM (fils, recherche, partages). Selon tes réglages, d’autres comptes peuvent réutiliser ta vidéo en Duo, en Stitch ou son son (« Utiliser ce son ») ; tu peux désactiver ces options pour chaque vidéo.'),
         p('Tu garantis disposer des droits sur ce que tu publies (images, musiques, personnes filmées). Une musique protégée ne doit pas être utilisée sans autorisation.'),
         h2('4. Règles de la communauté'),
         p('Sont interdits notamment : contenus illégaux, haineux ou harcelants, violence, nudité, mise en danger, atteinte aux mineurs, usurpation, spam et arnaques. Le détail est dans les ', h('a', { href: '/regles' }, 'Règles de la communauté'), '.'),
@@ -79,12 +79,12 @@ function pages(d) {
 
     cgv: {
       title: 'Conditions de vente des pièces',
-      description: 'Achat de pièces virtuelles sur Vibz.',
+      description: 'Achat de pièces virtuelles sur AURUM.',
       body: [
         h2('1. Les pièces'),
         p('Les pièces sont un contenu numérique qui permet d’offrir des cadeaux pendant les LIVE. Elles ne sont ni remboursables, ni échangeables contre de l’argent, ni transférables entre comptes.'),
         h2('2. Prix et paiement'),
-        p('Les prix sont indiqués TTC dans le portefeuille avant tout achat. Le paiement est traité par Stripe (carte bancaire, et Apple Pay / Google Pay selon l’appareil) ; Vibz ne voit jamais tes coordonnées bancaires.'),
+        p('Les prix sont indiqués TTC dans le portefeuille avant tout achat. Le paiement est traité par Stripe (carte bancaire, et Apple Pay / Google Pay selon l’appareil) ; AURUM ne voit jamais tes coordonnées bancaires.'),
         h2('3. Livraison et droit de rétractation'),
         p('Les pièces sont créditées immédiatement après le paiement. En demandant cette livraison immédiate, tu renonces expressément à ton droit de rétractation (article L221-28, 13° du Code de la consommation), ce que tu confirmes en cochant la case prévue avant de payer.'),
         h2('4. Cadeaux'),
@@ -96,7 +96,7 @@ function pages(d) {
 
     confidentialite: {
       title: 'Politique de confidentialité',
-      description: 'Données personnelles traitées par Vibz et tes droits (RGPD).',
+      description: 'Données personnelles traitées par AURUM et tes droits (RGPD).',
       body: [
         h2('Responsable du traitement'),
         p(...editor(), ' — ', v('address'), ' — ', mail(), '.'),
@@ -137,7 +137,7 @@ export async function legalView(ctx) {
     d = { legal: {} };
   }
   const page = pages(d)[key];
-  ctx.title = `${page.title} — Vibz`;
+  ctx.title = `${page.title} — AURUM`;
   ctx.description = page.description;
   return h(
     'article',

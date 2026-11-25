@@ -39,7 +39,8 @@ function iceServers() {
 const config = {
   isProd,
   port,
-  appName: env.APP_NAME || 'Vibz',
+  // L'application s'appelle AURUM (l'ancien nom « Vibz », s'il est encore réglé chez l'hébergeur, est remplacé)
+  appName: env.APP_NAME && env.APP_NAME.trim().toLowerCase() !== 'vibz' ? env.APP_NAME.trim() : 'AURUM',
   // Version déployée (change à chaque mise en ligne) : rafraîchit l'application gardée sur le téléphone
   version: env.VERCEL_GIT_COMMIT_SHA || env.VERCEL_DEPLOYMENT_ID || env.APP_VERSION || `local-${Date.now()}`,
   baseUrl: (
@@ -71,7 +72,7 @@ const config = {
     .filter(Boolean),
   smtp: {
     url: env.SMTP_URL || '',
-    from: env.MAIL_FROM || 'Vibz <no-reply@vibz.local>',
+    from: env.MAIL_FROM || 'AURUM <no-reply@aurum.local>',
   },
   // Traduction : DeepL si une clé est fournie, sinon MyMemory (gratuit, sans compte).
   translate: {

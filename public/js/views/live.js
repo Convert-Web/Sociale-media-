@@ -32,8 +32,8 @@ function waitIce(pc, ms = 2500) {
 // Liste des directs
 // ---------------------------------------------------------------------------
 export async function liveListView(ctx) {
-  ctx.title = 'LIVE — Vibz';
-  ctx.description = 'Les LIVE en cours sur Vibz.';
+  ctx.title = 'LIVE — AURUM';
+  ctx.description = 'Les LIVE en cours sur AURUM.';
   const list = h('div', { class: 'live-grid' }, spinner());
   const go = () => h('a', { href: store.user ? `/live/${enc(store.user.username)}` : '/connexion?suite=/live', class: 'btn btn-primary', onclick: (e) => needLogin('Connecte-toi pour passer en LIVE.') && e.preventDefault() }, icon('broadcast', 'icon-sm'), 'Passer en LIVE');
   const cta = h('div', { class: 'live-cta' }, go());
@@ -154,7 +154,7 @@ async function viewerView(ctx, username) {
   try {
     data = await api.get(`/api/live/user/${enc(username)}`);
   } catch (err) {
-    ctx.title = 'LIVE — Vibz';
+    ctx.title = 'LIVE — AURUM';
     const closeX = h('button', { type: 'button', class: 'icon-btn live-close live-ended-close', 'aria-label': 'Fermer', onclick: () => (history.length > 1 ? history.back() : navigate('/live')) }, icon('x'));
     const body = err.code === 'USER_NOT_FOUND'
       ? emptyState('user', 'Ce compte est introuvable', 'Le lien est peut-être incomplet, ou le compte a été supprimé.')
@@ -164,7 +164,7 @@ async function viewerView(ctx, username) {
     return h('div', { class: 'live-room ended' }, closeX, h('div', { class: 'live-ended' }, body, h('a', { href: '/live', class: 'link-btn' }, 'Autres LIVE')));
   }
   const live = data.live;
-  ctx.title = `${live.host.displayName} en LIVE — Vibz`;
+  ctx.title = `${live.host.displayName} en LIVE — AURUM`;
   const video = h('video', { class: 'live-video', autoplay: true, playsinline: true, 'webkit-playsinline': '' });
   video.playsInline = true;
   // Le son du LIVE remplace l'épisode de podcast en cours
@@ -207,7 +207,7 @@ async function viewerView(ctx, username) {
   const sentLikes = []; // envois d'un visiteur (sans compte) : ses cœurs sont déjà affichés
   const heartBtn = h('button', { type: 'button', class: 'live-act', 'aria-label': 'Envoyer des cœurs', onclick: () => { pendingLikes++; chat.floatHeart(); } }, icon('heart-fill'));
   const giftBtn = h('button', { type: 'button', class: 'live-act', 'aria-label': 'Cadeaux', onclick: () => !needLogin('Connecte-toi pour offrir des cadeaux.') && giftSheet(live.id, () => pollNow(), `/live/${live.host.username}`) }, icon('gift'));
-  const shareBtn = h('button', { type: 'button', class: 'live-act', 'aria-label': 'Partager', onclick: async () => { await shareLink(`${live.host.displayName} est en LIVE sur Vibz`, `/live/${enc(live.host.username)}`); if (store.user) api.post(`/api/live/${live.id}/event`, { type: 'share' }).catch(() => {}); } }, icon('shareFill'));
+  const shareBtn = h('button', { type: 'button', class: 'live-act', 'aria-label': 'Partager', onclick: async () => { await shareLink(`${live.host.displayName} est en LIVE sur AURUM`, `/live/${enc(live.host.username)}`); if (store.user) api.post(`/api/live/${live.id}/event`, { type: 'share' }).catch(() => {}); } }, icon('shareFill'));
   const root = h('div', { class: 'live-room' },
     video, status, unmute, chat.gifts, chat.hearts,
     topBar(live.host, viewersEl, [followBtn, h('span', { class: 'grow' }), h('span', { class: 'live-badge' }, 'LIVE'), more, close]),
@@ -345,7 +345,7 @@ async function viewerView(ctx, username) {
 // Studio du créateur
 // ---------------------------------------------------------------------------
 async function hostView(ctx) {
-  ctx.title = 'Passer en LIVE — Vibz';
+  ctx.title = 'Passer en LIVE — AURUM';
   const me = store.user;
   const video = h('video', { class: 'live-video mirror', autoplay: true, muted: true, playsinline: true });
   video.muted = true;
@@ -356,7 +356,9 @@ async function hostView(ctx) {
   async function openCamera() {
     stream?.getTracks().forEach((t) => t.stop());
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 720 }, height: { ideal: 1280 }, frameRate: { ideal: 30 } }, audio: { echoCancellation: true, noiseSuppression: true } });
+      // Format demandé « à l'horizontale » : téléphone tenu droit, l'image arrive en portrait et entière
+      // (demandée en portrait, Safari sur iPhone n'en gardait que le centre, beaucoup trop zoomé)
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: { echoCancellation: true, noiseSuppression: true } });
       // Micro coupé : il le reste avec la nouvelle caméra (sinon les spectateurs entendraient tout)
       stream.getAudioTracks().forEach((t) => (t.enabled = micOn));
       video.srcObject = stream;

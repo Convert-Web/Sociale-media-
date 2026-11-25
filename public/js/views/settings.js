@@ -53,12 +53,12 @@ const SECTIONS = new Set(['', 'compte', 'confidentialite', 'notifications', 'app
 export async function settingsView(ctx) {
   const section = ctx.params.section || '';
   if (!SECTIONS.has(section)) {
-    ctx.title = 'Page introuvable — Vibz';
+    ctx.title = 'Page introuvable — AURUM';
     return h('div', { class: 'page settings' }, h('header', { class: 'page-head' }, h('a', { href: '/reglages', class: 'icon-btn', 'aria-label': 'Retour' }, icon('back')), h('h1', null, 'Réglages'), h('span', { class: 'icon-btn' })), emptyState('alert', 'Cette page n’existe pas', 'Le lien est peut-être incomplet.', h('a', { href: '/reglages', class: 'btn btn-primary btn-sm' }, 'Retour aux réglages')));
   }
   const u = store.user;
   const s = u.settings;
-  ctx.title = 'Réglages — Vibz';
+  ctx.title = 'Réglages — AURUM';
 
   if (section === 'compte') {
     const lang = h('select', { class: 'input' }, h('option', { value: '' }, 'Langue de l’appareil'), LANG_CHOICES.map(([c, l]) => h('option', { value: c, selected: u.lang === c }, l)));
@@ -75,7 +75,7 @@ export async function settingsView(ctx) {
       group('Informations', h('div', { class: 'set-row static' }, h('span', { class: 'set-ic' }, icon('mail')), h('span', { class: 'set-text' }, 'E-mail', h('small', null, u.email))), h('div', { class: 'set-row static' }, h('span', { class: 'set-ic' }, icon('at')), h('span', { class: 'set-text' }, 'Nom d’utilisateur', h('small', null, `@${u.username}`)))),
       group('Sécurité', button('key', 'Changer de mot de passe', changePassword)),
       group('Traduction', h('label', { class: 'set-row static' }, h('span', { class: 'set-ic' }, icon('globe')), h('span', { class: 'set-text' }, 'Traduire les contenus en', lang))),
-      group('Tes données', h('a', { href: '/api/me/export', class: 'set-row', download: `vibz-${u.username}.json` }, h('span', { class: 'set-ic' }, icon('download')), h('span', { class: 'set-text' }, 'Télécharger mes données', h('small', null, 'Profil, vidéos, commentaires, messages… au format JSON')))),
+      group('Tes données', h('a', { href: '/api/me/export', class: 'set-row', download: `aurum-${u.username}.json` }, h('span', { class: 'set-ic' }, icon('download')), h('span', { class: 'set-text' }, 'Télécharger mes données', h('small', null, 'Profil, vidéos, commentaires, messages… au format JSON')))),
       group(null, button('logout', 'Se déconnecter', logout), button('trash', 'Supprimer mon compte', deleteAccount, true)),
     );
   }
@@ -116,7 +116,7 @@ export async function settingsView(ctx) {
       group('Visibilité', priv.el, liked.el),
       group('Messages', h('label', { class: 'set-row static' }, h('span', { class: 'set-ic' }, icon('send')), h('span', { class: 'set-text' }, 'Qui peut t’envoyer des messages', dm))),
       group('Ton fil « Pour toi »', perso.el, button('refresh', 'Actualiser ton fil « Pour toi »', async () => {
-        if (!(await confirmDialog('Actualiser ton fil ?', 'Les centres d’intérêt appris par Vibz sont effacés : ton fil repart de zéro, comme pour un nouveau compte.', 'Actualiser', false))) return;
+        if (!(await confirmDialog('Actualiser ton fil ?', 'Les centres d’intérêt appris par AURUM sont effacés : ton fil repart de zéro, comme pour un nouveau compte.', 'Actualiser', false))) return;
         await api.del('/api/me/interests');
         toast('Ton fil « Pour toi » repart de zéro');
       })),
@@ -131,7 +131,7 @@ export async function settingsView(ctx) {
       const st = await pushState();
       const texts = {
         unsupported: 'Ce navigateur ne gère pas les notifications.',
-        install: 'Sur iPhone : ajoute d’abord Vibz à l’écran d’accueil (Partager → Sur l’écran d’accueil), puis ouvre-le depuis l’icône.',
+        install: 'Sur iPhone : ajoute d’abord AURUM à l’écran d’accueil (Partager → Sur l’écran d’accueil), puis ouvre-le depuis l’icône.',
         denied: 'Les notifications sont bloquées pour ce site dans les réglages du navigateur.',
       };
       if (texts[st]) return pushRow.replaceChildren(h('p', { class: 'muted small pad' }, texts[st]));
@@ -173,7 +173,7 @@ export async function settingsView(ctx) {
     u.isAdmin ? group('Administration', link('/admin', 'shield', 'Administration')) : null,
     group('Aide', link('/aide', 'help', 'Aide'), link('/regles', 'shield', 'Règles de la communauté'), link('/cgu', 'book', 'Conditions d’utilisation'), link('/cgv', 'book', 'Conditions de vente (pièces)'), link('/confidentialite', 'lock', 'Politique de confidentialité'), link('/mentions-legales', 'info', 'Mentions légales'), button('info', 'Gérer les cookies', () => document.dispatchEvent(new CustomEvent('vibz:cookies')))),
     group(null, button('logout', 'Se déconnecter', logout)),
-    h('p', { class: 'muted small center' }, `Vibz · version ${String(store.config?.version || '').slice(0, 7)}`),
+    h('p', { class: 'muted small center' }, `AURUM · version ${String(store.config?.version || '').slice(0, 7)}`),
   );
 }
 

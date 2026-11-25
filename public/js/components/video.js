@@ -188,7 +188,7 @@ export async function readVideoInfo(file, { knownDuration = 0 } = {}) {
     } catch (err) {
       opened = false;
       if (!probe?.duration && !knownDuration) {
-        throw new Error(err.message === TIMEOUT ? 'Cette vidéo ne s’ouvre pas sur cet appareil. Essaie un autre fichier, ou filme-la directement dans Vibz.' : 'Format de vidéo illisible sur cet appareil. Essaie une vidéo MP4 ou MOV.');
+        throw new Error(err.message === TIMEOUT ? 'Cette vidéo ne s’ouvre pas sur cet appareil. Essaie un autre fichier, ou filme-la directement dans AURUM.' : 'Format de vidéo illisible sur cet appareil. Essaie une vidéo MP4 ou MOV.');
       }
     }
     // Vidéo enregistrée par un navigateur (WebM) : la durée n'est connue qu'après un saut à la fin

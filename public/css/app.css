@@ -1,4 +1,4 @@
-/* Vibz — feuille de styles. Téléphone d'abord ; ordinateur à partir de 900 px (barre latérale).
+/* AURUM — feuille de styles. Téléphone d'abord ; ordinateur à partir de 900 px (barre latérale).
    Thème clair ou sombre (réglage, sinon l'appareil) ; le fil des vidéos est toujours sombre. */
 
 /* Polices hébergées avec le site (licence SIL Open Font License, voir fonts/…/LICENSE.txt) :
@@ -9,7 +9,7 @@
 @font-face { font-family: 'Inter'; font-style: normal; font-display: swap; font-weight: 700 900; src: url(/fonts/inter/inter-latin-700-normal.woff2) format('woff2'); }
 @font-face { font-family: 'Bricolage Grotesque'; font-style: normal; font-display: swap; font-weight: 200 800; src: url(/fonts/bricolage/bricolage-grotesque-latin-opsz-normal.woff2) format('woff2-variations'), url(/fonts/bricolage/bricolage-grotesque-latin-opsz-normal.woff2) format('woff2'); }
 
-/* Identité Vibz : encre et papier, dégradé violet → rose, point « soleil » du logo,
+/* Identité AURUM : encre et papier, dégradé violet → rose, point « soleil » du logo,
    formes arrondies (squircle comme le logo, pilules), commandes en verre dépoli */
 :root {
   --bg: #f6f4f0;
@@ -584,9 +584,9 @@ input[type='range'] {
   padding: 4px 6px 14px;
 }
 .brand-name {
-  font-weight: 850;
-  font-size: 26px;
-  letter-spacing: -0.04em;
+  font-weight: 800;
+  font-size: 23px;
+  letter-spacing: 0.01em;
 }
 
 /* ---------------------------------------------------------------------------
@@ -713,7 +713,7 @@ input[type='range'] {
 .tab-create:active .create-btn {
   transform: scale(0.94);
 }
-/* Bouton Créer : le logo de Vibz (squircle dégradé, point soleil) avec un « + » */
+/* Bouton Créer : le logo d’AURUM (squircle dégradé, point soleil) avec un « + » */
 .create-btn {
   position: relative;
   display: grid;
@@ -948,9 +948,10 @@ input[type='range'] {
   place-items: center;
 }
 .boot-logo {
-  font-weight: 850;
-  font-size: 44px;
-  letter-spacing: -0.04em;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 40px;
+  letter-spacing: 0.01em;
   background: var(--grad);
   -webkit-background-clip: text;
   background-clip: text;
@@ -5822,17 +5823,34 @@ button.stat:hover {
   position: absolute;
   inset: 0;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--safe-t) 0 var(--safe-b);
+  touch-action: none;
+}
+/* L'image au format réel de la caméra, en carte comme dans le fil : ce qu'on voit est ce qui est filmé */
+.cam-frame {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  width: min(calc(100% - 12px), calc((var(--app-h) - var(--safe-t) - var(--safe-b) - 12px) * var(--cam-ar, 0.5625)));
+  aspect-ratio: var(--cam-ar, 0.5625);
+  border-radius: 26px;
+  background: #111;
 }
 .cam-video {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
   background: #111;
+  /* Zoom numérique : l'aperçu est agrandi au centre, comme la vidéo enregistrée */
+  transform: scale(var(--zoom, 1));
 }
 .cam-video.mirror {
-  transform: scaleX(-1);
+  transform: scale(calc(-1 * var(--zoom, 1)), var(--zoom, 1));
 }
-/* Sur ordinateur, la caméra et ses outils tiennent dans un cadre de téléphone au centre */
+/* Sur ordinateur, la caméra et ses outils tiennent dans un cadre au centre, au format de la caméra */
 @media (min-width: 900px) {
   .cam,
   .stitch-pick {
@@ -5843,8 +5861,27 @@ button.stat:hover {
     overflow: hidden;
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
   }
+  .cam {
+    width: min(calc((var(--app-h) - 32px) * clamp(0.5625, var(--cam-ar, 0.5625), 1.7778)), calc(100% - 32px));
+  }
+  .cam-box {
+    padding: 0;
+  }
+  .cam-frame {
+    width: min(100%, calc((var(--app-h) - 32px) * var(--cam-ar, 0.5625)));
+    border-radius: 0;
+  }
 }
-.cam-box.duet .cam-video,
+/* Duo : la caméra et la vidéo d'origine côte à côte */
+.cam-box.duet {
+  padding: 0;
+}
+.cam-box.duet .cam-frame {
+  width: 50%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
 .cam-box.duet .cam-orig {
   width: 50%;
   height: 100%;
@@ -6126,6 +6163,40 @@ button.stat:hover {
   background: rgba(15, 13, 22, 0.42);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
+}
+.cam-zoom {
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(15, 13, 22, 0.42);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.cam-zoom[hidden] {
+  display: none;
+}
+.cam-zoom-btn {
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: transform 0.15s;
+}
+.cam-zoom-btn.on {
+  min-width: 40px;
+  color: var(--sun);
+  background: rgba(0, 0, 0, 0.55);
+  font-size: 13px;
 }
 .cam-modes {
   display: flex;
@@ -6661,7 +6732,7 @@ button.stat:hover {
   flex: none;
 }
 
-/* Commentaires : l'appui long ouvre le menu de Vibz, pas la sélection de texte du téléphone
+/* Commentaires : l'appui long ouvre le menu d’AURUM, pas la sélection de texte du téléphone
    (« Copier » reste dans le menu) */
 .cm {
   -webkit-touch-callout: none;
@@ -7577,9 +7648,10 @@ body.has-player .main {
   gap: 12px;
 }
 .land-name {
-  font-size: 34px;
-  font-weight: 850;
-  letter-spacing: -0.045em;
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
 }
 .land h1 {
   font-size: clamp(32px, 9.4vw, 46px);

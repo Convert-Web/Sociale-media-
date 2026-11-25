@@ -102,7 +102,7 @@ export async function homeView(ctx) {
   const followingTab = ctx.route.path === '/abonnements';
   const top = feedTop(followingTab ? 'following' : 'foryou');
 
-  ctx.title = followingTab ? 'Abonnements — Vibz' : 'Vibz — Pour toi';
+  ctx.title = followingTab ? 'Abonnements — AURUM' : 'AURUM — Pour toi';
   ctx.description = 'Regarde des vidéos courtes qui te ressemblent, crée les tiennes et partage-les avec tes amis.';
   if (followingTab) {
     if (!store.user) {
@@ -163,7 +163,7 @@ export async function videoView(ctx) {
   try {
     ({ post } = await api.get(`/api/posts/${id}`));
   } catch (err) {
-    ctx.title = 'Vidéo indisponible — Vibz';
+    ctx.title = 'Vidéo indisponible — AURUM';
     return h('div', { class: 'feed-page' }, backBar(), h('div', { class: 'feed-gate' }, emptyState('eyeOff', 'Cette vidéo n’est pas disponible', err.status === 404 ? 'Elle a peut-être été supprimée, ou son créateur l’a rendue privée.' : err.message, h('a', { href: '/', class: 'btn btn-primary' }, 'Retour à l’accueil'))));
   }
   const viewer = ctx.query.get('suite') && window.__vibzViewer;
@@ -186,8 +186,8 @@ export async function videoView(ctx) {
   }
   const feed = verticalFeed({ initial, load, more });
   ctx.onCleanup(() => feed.destroy());
-  ctx.title = `${post.author.displayName} sur Vibz${post.body ? ` : « ${post.body.slice(0, 60)} »` : ''}`;
-  ctx.description = post.body?.slice(0, 160) || `Vidéo de ${post.author.displayName} sur Vibz.`;
+  ctx.title = `${post.author.displayName} sur AURUM${post.body ? ` : « ${post.body.slice(0, 60)} »` : ''}`;
+  ctx.description = post.body?.slice(0, 160) || `Vidéo de ${post.author.displayName} sur AURUM.`;
   // Lien vers un commentaire précis (notification) : la feuille des commentaires s'ouvre dessus
   const focus = Number(ctx.query.get('commentaire'));
   const focusParent = Number(ctx.query.get('fil')) || null;
@@ -203,7 +203,7 @@ function backBar() {
 export async function friendsView(ctx) {
   darkTop(ctx);
   const top = feedTop('friends');
-  ctx.title = 'Amis — Vibz';
+  ctx.title = 'Amis — AURUM';
   if (!store.user) {
     setTimeout(() => needLogin('Connecte-toi pour voir les vidéos de tes amis.'), 50);
     return withLive(h('div', { class: 'feed-page' }, top, h('div', { class: 'feed-gate' }, emptyState('friends', 'Les vidéos de tes amis', 'Connecte-toi pour voir ici les vidéos des comptes avec qui vous vous suivez mutuellement.', h('button', { class: 'btn btn-primary', onclick: () => needLogin('Connecte-toi pour continuer.') }, 'Se connecter')))));

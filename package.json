@@ -2,7 +2,7 @@
   "name": "vibz",
   "version": "2.0.0",
   "private": true,
-  "description": "Vibz — l'application de vidéos courtes : fil « Pour toi », sons, Duo, Stitch, LIVE, messages.",
+  "description": "AURUM — l'application de vidéos courtes : fil « Pour toi », sons, Duo, Stitch, LIVE, messages.",
   "main": "server.js",
   "type": "commonjs",
   "engines": {

@@ -1,4 +1,4 @@
-/* Vibz — service worker : notifications push, et ouverture instantanée.
+/* AURUM — service worker : notifications push, et ouverture instantanée.
    Les fichiers de l'application (pages, scripts, styles, polices, icônes) sont gardés sur
    le téléphone : l'application s'ouvre sans attendre le réseau. Les données (/api) et les
    photos/vidéos ne passent jamais par ce cache (les vidéos lues en ligne sont seulement
@@ -155,7 +155,7 @@ self.addEventListener('push', (event) => {
   } catch {
     data = { body: event.data ? event.data.text() : '' };
   }
-  const title = data.title || 'Vibz';
+  const title = data.title || 'AURUM';
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || '',

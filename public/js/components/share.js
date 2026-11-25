@@ -20,7 +20,7 @@ function counted(post, channel, onShared) {
 
 // Enregistrer la vidéo sur l'appareil : déjà téléchargée, ou assemblée morceau par morceau
 export async function downloadPost(post) {
-  const name = `vibz-${post.author.username}-${post.id}`;
+  const name = `aurum-${post.author.username}-${post.id}`;
   const save = (blob, ext) => {
     const url = URL.createObjectURL(blob);
     const a = h('a', { href: url, download: `${name}.${ext}` });
@@ -68,7 +68,7 @@ export async function downloadPost(post) {
 
 export function openShare(post, { onShared, onOptions, onNotInterested } = {}) {
   const url = `${location.origin}${postPath(post)}`;
-  const title = `${post.author.displayName} sur Vibz`;
+  const title = `${post.author.displayName} sur AURUM`;
   const text = post.body ? post.body.slice(0, 120) : title;
 
   // 1. Envoyer en message

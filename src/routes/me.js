@@ -176,7 +176,7 @@ module.exports = function meRoutes(ctx) {
       wallet: await db.all('SELECT kind, coins, diamonds, gift, created_at FROM wallet_tx WHERE user_id = ? ORDER BY id', id),
       payments: await db.all('SELECT provider, amount_cents, currency, status, coins, created_at FROM payments WHERE user_id = ?', id),
     };
-    res.setHeader('Content-Disposition', `attachment; filename="vibz-${req.user.username}.json"`);
+    res.setHeader('Content-Disposition', `attachment; filename="aurum-${req.user.username}.json"`);
     res.json(data);
   });
 

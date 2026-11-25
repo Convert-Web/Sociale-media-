@@ -6,7 +6,7 @@ import { navigate, safePath } from '../router.js';
 import { h, icon, money, num, timeAgo, toast, modal, emptyState } from '../dom.js';
 
 export async function walletView(ctx) {
-  ctx.title = 'Portefeuille — Vibz';
+  ctx.title = 'Portefeuille — AURUM';
   let w;
   try {
     w = await api.get('/api/wallet');

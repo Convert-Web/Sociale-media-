@@ -84,7 +84,7 @@ function barChart(series, key, label) {
 }
 
 export async function studioView(ctx) {
-  ctx.title = 'Studio créateur — Vibz';
+  ctx.title = 'Studio créateur — AURUM';
   const days = [7, 28, 60].includes(Number(ctx.query.get('jours'))) ? Number(ctx.query.get('jours')) : 7;
   let d;
   try {

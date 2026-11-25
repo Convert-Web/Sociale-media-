@@ -82,7 +82,7 @@ const P = {
   help: '<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
   alert: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
   euro: '<path d="M4 10h12M4 14h9"/><path d="M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2"/>',
-  // Vibz
+  // AURUM
   homeFill: '<path fill="currentColor" stroke="none" d="M10.7 2.5a2 2 0 0 1 2.6 0l7.3 6.2a2 2 0 0 1 .7 1.5V20a2 2 0 0 1-2 2h-4.3v-6.5a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1V22H4.7a2 2 0 0 1-2-2v-9.8a2 2 0 0 1 .7-1.5z"/>',
   friends: '<circle cx="9" cy="8" r="3.6"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17.2" cy="9" r="2.8"/><path d="M16 14.2a5 5 0 0 1 6 4.8"/>',
   friendsFill: '<circle cx="9" cy="8" r="4" fill="currentColor"/><path fill="currentColor" d="M2 20.5a7 7 0 0 1 14 0z"/><circle cx="17.4" cy="9" r="3" fill="currentColor"/><path fill="currentColor" stroke="none" d="M16.6 13.4a5.6 5.6 0 0 1 6 6.6h-5.1a8.4 8.4 0 0 0-2.6-6.3 5.5 5.5 0 0 1 1.7-.3z"/>',
