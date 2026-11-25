@@ -47,9 +47,10 @@ function countPlay(post, box) {
 // ---------------------------------------------------------------------------
 // Une diapositive
 // ---------------------------------------------------------------------------
-function railButton(ic, label, count, cls = '') {
+// Bouton de la barre d'actions (en bas de la carte) : icône et nombre côte à côte
+function actButton(ic, label, count, cls = '') {
   const small = h('small', null, count);
-  const b = h('button', { class: `rail-btn ${cls}`, type: 'button', 'aria-label': label }, h('span', { class: 'rail-ic' }, icon(ic)), small);
+  const b = h('button', { class: `act ${cls}`, type: 'button', 'aria-label': label }, h('span', { class: 'act-ic' }, icon(ic)), small);
   b.__count = small;
   return b;
 }
@@ -91,11 +92,11 @@ function slide(post) {
     media = h('div', { class: `slide-media text-card ${BG[post.bg] || 'bg-violet'}` }, h('p', null, post.body));
   }
 
-  // Colonne d'actions
-  const likeBtn = railButton(post.liked ? 'heart-fill' : 'heart', 'J’aime', short(post.likeCount), `like${post.liked ? ' on' : ''}`);
+  // Barre d'actions
+  const likeBtn = actButton(post.liked ? 'heart-fill' : 'heart', 'J’aime', short(post.likeCount), `like${post.liked ? ' on' : ''}`);
   const paintLike = (pop) => {
     likeBtn.classList.toggle('on', post.liked);
-    likeBtn.querySelector('.rail-ic').replaceChildren(icon(post.liked ? 'heart-fill' : 'heart'));
+    likeBtn.querySelector('.act-ic').replaceChildren(icon(post.liked ? 'heart-fill' : 'heart'));
     likeBtn.__count.textContent = short(post.likeCount);
     likeBtn.setAttribute('aria-pressed', String(post.liked));
     if (pop) {
@@ -114,15 +115,16 @@ function slide(post) {
     like(false);
   });
 
-  const commentBtn = railButton('commentFill', 'Commentaires', short(post.commentCount), 'comment');
+  const commentBtn = actButton('comment', 'Commentaires', short(post.commentCount), 'comment');
   commentBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openComments(post, { onCount: (n) => (commentBtn.__count.textContent = short(n)) });
   });
 
-  const saveBtn = railButton('bookmarkFill', 'Favoris', short(post.saveCount), `save${post.saved ? ' on' : ''}`);
+  const saveBtn = actButton(post.saved ? 'bookmarkFill' : 'bookmark', 'Favoris', short(post.saveCount), `save${post.saved ? ' on' : ''}`);
   const paintSave = () => {
     saveBtn.classList.toggle('on', post.saved);
+    saveBtn.querySelector('.act-ic').replaceChildren(icon(post.saved ? 'bookmarkFill' : 'bookmark'));
     saveBtn.__count.textContent = short(post.saveCount);
   };
   saveBtn.addEventListener('click', (e) => {
@@ -130,15 +132,15 @@ function slide(post) {
     toggleSave(post, paintSave);
   });
 
-  const shareBtn = railButton('shareFill', 'Partager', short(post.shareCount), 'share');
+  const shareBtn = actButton('share', 'Partager', short(post.shareCount), 'share');
   shareBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openShare(post, { onShared: () => (shareBtn.__count.textContent = short(post.shareCount)), onOptions: () => box.__options?.(), onNotInterested: () => box.__notInterested?.() });
   });
 
-  // Photo du créateur, avec « + » pour s'abonner sans quitter la vidéo
+  // « Suivre » à côté du nom : on s'abonne sans quitter la vidéo
   const followBtn = !post.mine && !post.followsAuthor
-    ? h('button', { class: 'rail-follow', type: 'button', 'aria-label': `Suivre ${post.author.displayName}` }, icon(post.requestedAuthor ? 'check' : 'plus'))
+    ? h('button', { class: `info-follow${post.requestedAuthor ? ' done' : ''}`, type: 'button', 'aria-label': `Suivre ${post.author.displayName}` }, post.requestedAuthor ? 'Demandé' : 'Suivre')
     : null;
   followBtn?.addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -150,23 +152,17 @@ function slide(post) {
     post.followsAuthor = u.isFollowing;
     post.requestedAuthor = u.requested;
     followBtn.classList.add('done');
-    followBtn.replaceChildren(icon('check'));
-    setTimeout(() => u.isFollowing && followBtn.remove(), 900);
+    followBtn.replaceChildren(icon('check', 'icon-xs'), u.isFollowing ? 'Abonné' : 'Demandé');
+    setTimeout(() => u.isFollowing && followBtn.remove(), 1200);
   });
-  const who = h('div', { class: 'rail-avatar' }, h('a', { href: `/@${enc(post.author.username)}`, 'aria-label': `Profil de ${post.author.displayName}` }, avatar(post.author, 'md', { live: true })), followBtn);
 
-  // Disque du son (tourne pendant la lecture)
-  const disc = post.sound
-    ? h('a', { class: 'rail-disc', href: `/son/${post.sound.id}`, 'aria-label': `Son : ${post.sound.title}` }, post.sound.cover ? h('img', { src: post.sound.cover, alt: '' }) : avatar(post.author, 'sm'))
-    : h('span', { class: 'rail-disc' }, avatar(post.author, 'sm'));
-
-  const rail = h('div', { class: 'rail' }, who, likeBtn, commentBtn, saveBtn, shareBtn, post.kind === 'video' ? disc : null);
+  const actions = h('div', { class: 'actions' }, likeBtn, commentBtn, saveBtn, shareBtn);
 
   // Informations en bas : auteur, date, description dépliable, Duo/Stitch, son
   // (reconstruites quand la publication est modifiée : description, confidentialité, épinglage)
   const views = h('span', { class: 'info-views' });
   box.__paintViews = () => {
-    views.textContent = post.kind === 'video' && (post.mine || post.viewCount > 0) ? `· ${count(post.viewCount, 'vue')}` : '';
+    views.textContent = post.kind === 'video' && (post.mine || post.viewCount > 0) ? ` · ${count(post.viewCount, 'vue')}` : '';
   };
   box.__paintViews();
   const buildInfo = () => {
@@ -210,13 +206,18 @@ function slide(post) {
     if (post.stitchOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.stitchOf.username)}/video/${post.stitchOf.id}` }, icon('scissors', 'icon-xs'), `Stitch avec @${post.stitchOf.username}`));
     if (post.privacy !== 'public') chips.push(h('span', { class: 'info-chip' }, icon(post.privacy === 'private' ? 'lock' : 'friends', 'icon-xs'), post.privacy === 'private' ? 'Moi uniquement' : 'Amis'));
     const soundLine = post.sound
-      ? h('a', { class: 'info-sound', href: `/son/${post.sound.id}` }, icon('music', 'icon-xs'), h('span', { class: 'marquee' }, h('span', null, `${post.sound.title}  ·  ${post.sound.title}`)))
+      ? h('a', { class: 'info-sound', href: `/son/${post.sound.id}` }, icon('music', 'icon-xs'), h('span', null, post.sound.title))
       : null;
     return h(
       'div',
       { class: 'info' },
       post.repostedBy ? h('a', { class: 'info-repost', href: `/@${enc(post.repostedBy.username)}` }, icon('repost', 'icon-xs'), `${post.repostedBy.displayName} a republié`) : null,
-      h('div', { class: 'info-who' }, h('a', { href: `/@${enc(post.author.username)}`, class: 'info-user' }, h('b', null, post.author.displayName), post.author.verified ? verifiedMark() : null), h('span', { class: 'info-date' }, `· ${timeAgo(post.createdAt)}`), views),
+      h('div', { class: 'info-who' },
+        h('a', { href: `/@${enc(post.author.username)}`, class: 'info-avatar', 'aria-label': `Profil de ${post.author.displayName}` }, avatar(post.author, 'sm', { live: true })),
+        h('span', { class: 'info-id' },
+          h('a', { href: `/@${enc(post.author.username)}`, class: 'info-user' }, h('b', null, post.author.displayName), post.author.verified ? verifiedMark() : null),
+          h('span', { class: 'info-meta' }, h('span', { class: 'info-date' }, timeAgo(post.createdAt)), views)),
+        followBtn),
       text,
       chips.length ? h('div', { class: 'info-chips' }, chips) : null,
       soundLine,
@@ -233,7 +234,7 @@ function slide(post) {
   };
 
   const progress = post.kind === 'video' ? null : h('div', { class: 'slide-progress' });
-  box.append(...[media, h('div', { class: 'slide-shade' }), h('span', { class: 'slide-play', hidden: true }, icon('play')), rail, info, progress].filter(Boolean));
+  box.append(...[media, h('div', { class: 'slide-shade' }), h('span', { class: 'slide-play', hidden: true }, icon('play')), info, actions, progress].filter(Boolean));
   box.__like = () => like(true);
   box.__paintLike = paintLike;
   box.__paintSave = paintSave;

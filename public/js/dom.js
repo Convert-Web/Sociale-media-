@@ -56,7 +56,7 @@ export function append(el, children) {
 export function syncThemeColor() {
   if (document.documentElement.classList.contains('feed-mode')) return;
   const t = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = t === 'dark' ? '#0e0e13' : '#ffffff';
+  for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = t === 'dark' ? '#0b0a10' : '#f6f4f0';
 }
 
 export function clear(el) {

@@ -160,7 +160,7 @@ export async function profileView(ctx) {
   // Onglets
   const TAB_DEFS = [
     { key: 'videos', ic: 'grid', label: 'Vidéos' },
-    { key: 'reposts', ic: 'repost', label: 'Republications' },
+    { key: 'reposts', ic: 'repost', label: 'Republications', short: 'Republiés' },
     me ? { key: 'favorites', ic: 'bookmark', label: 'Favoris', lock: true } : null,
     user.showLiked ? { key: 'liked', ic: 'heart', label: 'J’aime', lock: me && !store.user?.settings?.showLiked } : null,
   ].filter(Boolean);
@@ -168,7 +168,7 @@ export async function profileView(ctx) {
   const tabs = h('nav', { class: 'profile-tabs', role: 'tablist' });
   const content = h('div', { class: 'profile-content' });
   function paintTabs() {
-    tabs.replaceChildren(...TAB_DEFS.map((t) => h('button', { type: 'button', role: 'tab', class: `ptab${t.key === current ? ' on' : ''}`, 'aria-label': t.label, 'aria-selected': String(t.key === current), onclick: () => { current = t.key; history.replaceState(history.state, '', `/@${user.username}${t.key === 'videos' ? '' : `?onglet=${t.key}`}`); paintTabs(); mountGrid(); } }, icon(t.ic), t.lock ? icon('lock', 'icon-xs') : null)));
+    tabs.replaceChildren(...TAB_DEFS.map((t) => h('button', { type: 'button', role: 'tab', class: `ptab${t.key === current ? ' on' : ''}`, 'aria-label': t.label, 'aria-selected': String(t.key === current), onclick: () => { current = t.key; history.replaceState(history.state, '', `/@${user.username}${t.key === 'videos' ? '' : `?onglet=${t.key}`}`); paintTabs(); mountGrid(); } }, icon(t.ic, 'icon-sm'), h('span', { class: 'ptab-label' }, t.short || t.label), t.lock ? icon('lock', 'icon-xs') : null)));
   }
   function mountGrid() {
     grid?.destroy();
@@ -247,12 +247,12 @@ export async function profileView(ctx) {
       { class: 'profile-info' },
       buildPic(),
       h('h1', { class: 'profile-name' }, h('span', { class: 'profile-name-text' }, user.displayName), user.verified ? verifiedMark() : null),
-      user.demo ? h('span', { class: 'demo-chip' }, 'Compte de démonstration') : null,
+      h('span', { class: 'profile-sub' }, h('span', { class: 'profile-sub-handle' }, `@${user.username}`), user.demo ? h('span', { class: 'demo-chip' }, 'Compte de démonstration') : null),
+      user.bio ? h('p', { class: 'profile-bio' }, user.bio) : me ? h('button', { type: 'button', class: 'link-btn', onclick: () => editProfile(user, (u) => { Object.assign(user, u); render(); }) }, '+ Ajouter une bio') : null,
+      user.website ? h('a', { href: user.website, class: 'profile-link', target: '_blank', rel: 'noopener noreferrer nofollow', title: user.website }, icon('link', 'icon-xs'), h('span', null, user.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))) : null,
       buildCounts(),
       actions,
       similar,
-      user.bio ? h('p', { class: 'profile-bio' }, user.bio) : me ? h('button', { type: 'button', class: 'link-btn', onclick: () => editProfile(user, (u) => { Object.assign(user, u); render(); }) }, '+ Ajouter une bio') : null,
-      user.website ? h('a', { href: user.website, class: 'profile-link', target: '_blank', rel: 'noopener noreferrer nofollow', title: user.website }, icon('link', 'icon-xs'), h('span', null, user.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))) : null,
     );
     paintTabs();
     tabs.hidden = Boolean(user.blockedBy);
