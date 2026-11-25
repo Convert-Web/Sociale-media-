@@ -7,7 +7,7 @@ import { h, icon, avatar, spinner, emptyState, closeModal, closeModals, modalOpe
 import { openSheet, closeSheet, sheetOpen } from './components/sheet.js';
 import { installFormValidation } from './forms.js';
 import { trackPage, cookieBanner } from './components/cookies.js';
-import { prefetchReels, unlockPlayer } from './components/video.js';
+import { prefetchReels, unlockPlayer, clearUpcoming } from './components/video.js';
 import { startUpdateChecks } from './update.js';
 import { registerServiceWorker, syncPush } from './push.js';
 import { startInAppNotifications } from './notify.js';
@@ -504,10 +504,21 @@ store.on('user', (u) => {
   if (u) {
     connectRealtime();
     syncPush();
+    keepStorage();
   } else {
     disconnectRealtime();
+    clearUpcoming(); // les vidéos « À suivre » étaient celles de ce compte
   }
 });
+
+// Vidéos gardées sur le téléphone (sw.js) : le navigateur est prié de ne pas les effacer
+function keepStorage() {
+  try {
+    navigator.storage?.persisted?.().then((done) => !done && navigator.storage.persist?.()).catch(() => {});
+  } catch {
+    /* non pris en charge */
+  }
+}
 
 setRenderer(render);
 
@@ -521,6 +532,7 @@ setRenderer(render);
   if (store.user) {
     connectRealtime();
     syncPush();
+    keepStorage();
   }
   // Les premières vidéos de « Pour toi » se préparent pendant le rendu
   if (location.pathname === '/' && store.user) prefetchReels();

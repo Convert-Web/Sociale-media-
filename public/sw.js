@@ -38,6 +38,32 @@ async function fromCache(request, key) {
 // ancienne, morceau absent), la demande part telle quelle au serveur, qui sait aussi la servir.
 const VIDEO = /^\/media\/v\/([a-f0-9]{32})\.(mp4|webm)$/;
 const MB = 1024 * 1024;
+
+// Morceaux des vidéos (1 Mo, jamais modifiés) : gardés sur le téléphone d'une visite à l'autre.
+// Les vidéos préparées pendant qu'on regarde (« À suivre ») démarrent ainsi aussitôt à la
+// prochaine ouverture, même sans réseau. Environ 250 Mo au plus : les plus anciens partent
+// d'abord. Ce cache survit aux mises à jour de l'application (il n'a pas le même nom).
+const VIDEO_CACHE = 'videos-v1';
+const CHUNK = /^\/media\/v\/[a-f0-9]{32}\/\d{1,3}\.bin$/;
+const VIDEO_KEEP = 250;
+let videoPuts = 0;
+async function videoChunk(req) {
+  const cache = await caches.open(VIDEO_CACHE);
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res.ok && res.type === 'basic' && !res.redirected) {
+    cache
+      .put(req, res.clone())
+      .then(() => ++videoPuts % 20 === 0 && trimVideos(cache))
+      .catch(() => {}); // stockage plein : la vidéo se lit quand même
+  }
+  return res;
+}
+async function trimVideos(cache) {
+  const keys = await cache.keys(); // dans l'ordre d'arrivée
+  for (let i = 0; i < keys.length - VIDEO_KEEP; i++) await cache.delete(keys[i]);
+}
 const AHEAD = 3; // morceaux lus d'avance
 const videoParts = new Map(); // « id:i » → promesse { buf, total } ; les 16 plus récents gardés
 const videoReady = new Set(); // morceaux déjà arrivés
@@ -48,7 +74,7 @@ function videoPart(id, i) {
   if (p) {
     videoParts.delete(key);
   } else {
-    p = fetch(`/media/v/${id}/${i}.bin`).then(async (res) => {
+    p = videoChunk(new Request(`/media/v/${id}/${i}.bin`)).then(async (res) => {
       const total = Number(res.headers.get('x-video-size'));
       if (!res.ok || !(total > 0)) throw new Error('morceau indisponible');
       const part = { buf: await res.arrayBuffer(), total };
@@ -106,6 +132,10 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  if (CHUNK.test(url.pathname)) {
+    event.respondWith(videoChunk(req).catch(() => fetch(req)));
+    return;
+  }
   const video = VIDEO.exec(url.pathname);
   if (video) {
     // « ?direct=1 » : lecture par le serveur (choisie par l'application si ce téléphone coince ici)
