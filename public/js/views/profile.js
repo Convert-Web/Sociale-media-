@@ -40,8 +40,8 @@ export async function profileView(ctx) {
 
   // Photo, nom, compteurs (reconstruits à chaque changement : nouvelle photo, abonnement…)
   const buildPic = () => (user.live
-    ? h('a', { href: `/live/${enc(user.username)}`, class: 'profile-pic is-live', 'aria-label': 'Regarder le LIVE' }, avatar(user, 'xxl', { live: true }))
-    : h('span', { class: 'profile-pic' }, avatar(user, 'xxl')));
+    ? h('a', { href: `/live/${enc(user.username)}`, class: 'profile-pic is-live', 'aria-label': 'Regarder le LIVE' }, avatar(user, 'xl', { live: true }))
+    : h('span', { class: 'profile-pic' }, avatar(user, 'xl')));
   const stat = (n, label, onclick) => h(onclick ? 'button' : 'span', { type: onclick ? 'button' : null, class: 'stat', onclick }, h('b', null, short(n)), h('small', null, label));
   const buildCounts = () => h(
     'div',
@@ -242,15 +242,18 @@ export async function profileView(ctx) {
 
   function render() {
     paintActions();
+    // Compact : la photo à gauche, le nom et les compteurs à côté (le @ est déjà en haut de la page)
     const info = h(
       'div',
       { class: 'profile-info' },
-      buildPic(),
-      h('h1', { class: 'profile-name' }, h('span', { class: 'profile-name-text' }, user.displayName), user.verified ? verifiedMark() : null),
-      h('span', { class: 'profile-sub' }, h('span', { class: 'profile-sub-handle' }, `@${user.username}`), user.demo ? h('span', { class: 'demo-chip' }, 'Compte de démonstration') : null),
+      h('div', { class: 'profile-hero' },
+        buildPic(),
+        h('div', { class: 'profile-id' },
+          h('h1', { class: 'profile-name' }, h('span', { class: 'profile-name-text' }, user.displayName), user.verified ? verifiedMark() : null),
+          buildCounts())),
+      user.demo ? h('span', { class: 'demo-chip' }, 'Compte de démonstration') : null,
       user.bio ? h('p', { class: 'profile-bio' }, user.bio) : me ? h('button', { type: 'button', class: 'link-btn', onclick: () => editProfile(user, (u) => { Object.assign(user, u); render(); }) }, '+ Ajouter une bio') : null,
       user.website ? h('a', { href: user.website, class: 'profile-link', target: '_blank', rel: 'noopener noreferrer nofollow', title: user.website }, icon('link', 'icon-xs'), h('span', null, user.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))) : null,
-      buildCounts(),
       actions,
       similar,
     );

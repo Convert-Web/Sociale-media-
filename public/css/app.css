@@ -3126,16 +3126,20 @@ input[type='range'] {
   .page.profile {
     max-width: 1100px;
   }
-  /* Bandeau de couverture sur toute la largeur, comme la grille */
-  .page.profile .profile-info::before {
-    height: 150px;
-    border-radius: 30px;
+  /* En-tête un peu plus grand, aligné sur la grille */
+  .page.profile .profile-hero {
+    gap: 22px;
   }
-  .page.profile .profile-pic {
-    margin: 88px 0 2px 22px;
+  .page.profile .profile-pic .avatar {
+    width: 96px;
+    height: 96px;
+    font-size: 96px;
   }
-  .page.profile .profile-info > :not(.profile-pic) {
-    margin-left: 8px;
+  .page.profile .profile-name {
+    font-size: 24px;
+  }
+  .page.profile .stats {
+    gap: 24px;
   }
   .page.profile .grid.cols-3 {
     grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
@@ -3797,78 +3801,58 @@ body.no-side-search .side-search {
   gap: 4px;
   font-size: 16px;
 }
-/* En-tête du profil : bandeau aux couleurs de la marque, photo en squircle qui le chevauche,
-   texte aligné à gauche, compteurs en pilules */
+/* En-tête du profil, compact : la photo à gauche, le nom et les compteurs à côté, puis la bio,
+   les boutons et les onglets ; les vidéos arrivent vite à l'écran */
 .profile-info {
-  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   justify-items: start;
-  text-align: left;
   gap: 10px;
-  padding: 0 0 16px;
-}
-.profile-info::before {
-  content: '';
-  position: absolute;
-  z-index: 0;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 104px;
-  border-radius: 26px;
-  background:
-    radial-gradient(120% 150% at 0% 0%, rgba(123, 92, 255, 0.62), rgba(123, 92, 255, 0) 62%),
-    radial-gradient(110% 150% at 100% 10%, rgba(255, 61, 127, 0.5), rgba(255, 61, 127, 0) 60%),
-    radial-gradient(60% 80% at 70% 100%, rgba(255, 216, 77, 0.35), rgba(255, 216, 77, 0) 70%),
-    var(--bg-3);
+  padding: 4px 0 14px;
 }
 .profile-info > * {
-  position: relative;
-  z-index: 1;
   max-width: 100%;
   min-width: 0;
 }
-.profile-pic {
-  margin: 52px 0 2px 14px;
-  display: inline-flex;
+.profile-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
 }
-.profile-pic .avatar {
-  box-shadow: 0 0 0 4px var(--bg);
+.profile-pic {
+  flex: none;
+  display: inline-flex;
 }
 .profile-pic.is-live .avatar {
   animation: livePulse 1.6s ease-in-out infinite;
 }
 @keyframes livePulse {
   50% {
-    box-shadow: 0 0 0 4px var(--bg), 0 0 0 9px color-mix(in srgb, var(--live) 30%, transparent);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--live) 28%, transparent);
   }
 }
+.profile-id {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
 .profile-name {
-  font-size: 27px;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
   display: flex;
   align-items: center;
   gap: 5px;
-  max-width: 100%;
-  padding-left: 4px;
+  min-width: 0;
 }
 .profile-name-text {
   min-width: 0;
-  overflow-wrap: anywhere;
-}
-.profile-sub {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: -6px;
-  padding-left: 4px;
-  color: var(--muted);
-  font-size: 14.5px;
-  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .profile-handle {
   min-width: 0;
@@ -3884,52 +3868,67 @@ body.no-side-search .side-search {
   padding: 3px 10px;
   border-radius: 99px;
 }
+/* Compteurs : le nombre au-dessus, le libellé en dessous, sans cadre */
 .stats {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-start;
+  gap: 18px;
 }
 .stat {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: var(--card);
-  box-shadow: inset 0 0 0 1px var(--line);
+  display: grid;
+  justify-items: start;
+  gap: 1px;
+  padding: 0;
+  background: none;
+  text-align: left;
 }
-button.stat:hover {
-  background: var(--bg-2);
+button.stat:active {
+  opacity: 0.6;
 }
 .stat b {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
+  line-height: 1.15;
 }
 .stat small {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--muted);
   font-weight: 550;
 }
 .profile-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   width: min(100%, 460px);
-  justify-content: flex-start;
 }
 .profile-actions .btn {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.profile-actions .btn-icon {
+  flex: none;
+  width: 36px;
+  padding: 0;
+}
+.profile-actions .btn-icon .icon {
+  width: 19px;
+  height: 19px;
 }
 @media (max-width: 360px) {
   .profile-actions .btn {
     padding-left: 10px;
     padding-right: 10px;
-    font-size: 13.5px;
+    font-size: 13px;
+  }
+  .stats {
+    gap: 14px;
   }
 }
 .similar-toggle .icon {
@@ -3938,15 +3937,15 @@ button.stat:hover {
 .similar-toggle.on .icon {
   transform: rotate(180deg);
 }
-.profile-actions .btn-icon {
-  flex: none;
-}
 .profile-bio {
   max-width: 460px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-size: 15px;
-  padding-left: 4px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.profile-info > .link-btn {
+  font-size: 13.5px;
 }
 /* Un lien très long reste sur une ligne, coupé par « … » (l'adresse complète est au survol) */
 .profile-link {
@@ -3955,8 +3954,7 @@ button.stat:hover {
   gap: 5px;
   max-width: min(100%, 460px);
   font-weight: 650;
-  font-size: 14px;
-  padding-left: 4px;
+  font-size: 13.5px;
   color: var(--primary);
 }
 .profile-link span {
@@ -3965,32 +3963,29 @@ button.stat:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Onglets : commande segmentée, collée en haut au défilement */
+/* Onglets : texte et trait sous l'onglet ouvert, collés en haut au défilement */
 .profile-tabs {
   display: flex;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 17px;
-  background: var(--bg-2);
   position: sticky;
-  top: calc(var(--safe-t) + 6px);
+  top: var(--safe-t);
   z-index: 5;
-  margin: 2px 0 12px;
-  box-shadow: 0 0 0 6px var(--bg);
+  margin: 0 0 10px;
+  background: var(--bg);
+  box-shadow: inset 0 -1px 0 var(--line);
 }
 .ptab {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 40px;
-  border-radius: 13px;
+  gap: 5px;
+  height: 42px;
   font-size: 13.5px;
   font-weight: 650;
   color: var(--muted);
-  transition: background 0.15s, color 0.15s;
+  transition: color 0.15s;
 }
 .ptab-label {
   overflow: hidden;
@@ -3999,8 +3994,16 @@ button.stat:hover {
 }
 .ptab.on {
   color: var(--fg);
-  background: var(--card);
-  box-shadow: var(--shadow-sm);
+}
+.ptab.on::after {
+  content: '';
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--fg);
 }
 /* Téléphone : les libellés seuls (le cadenas reste) */
 @media (max-width: 899px) {
