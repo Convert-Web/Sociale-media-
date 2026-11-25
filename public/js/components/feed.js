@@ -245,7 +245,15 @@ function slide(post) {
 // Le fil
 // load(seenIds) → { posts, more } : page suivante
 // ---------------------------------------------------------------------------
-export function verticalFeed({ load, initial = [], more: initialMore = true, startId = null, emptyView = null, onActive = null, onRefresh = null }) {
+// Bonne connexion (ou inconnue, comme sur iPhone) : les vidéos suivantes se téléchargent en entier
+const fastNet = () => {
+  const c = navigator.connection;
+  if (!c) return true;
+  if (c.saveData) return false;
+  return !/(^|-)(2g|3g)$/.test(c.effectiveType || '') && !(c.downlink && c.downlink < 3);
+};
+
+export function verticalFeed({ load, initial = [], more: initialMore = true, startId = null, emptyView = null, onActive = null, onRefresh = null, onUpcoming = null }) {
   const player = reelsPlayer();
   const track = h('div', { class: 'feed-track' });
   const hint = h('button', { class: 'feed-unmute', type: 'button', hidden: true }, icon('mute', 'icon-sm'), 'Activer le son');
@@ -533,16 +541,22 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
         start();
       }
     }
-    // Les suivantes : la prochaine en entier (son début d'abord), le début de celle d'après
-    const n1 = box.nextElementSibling;
-    const n2 = n1?.nextElementSibling;
-    if (n1?.__post?.video) preloadVideo(n1.__post.video, { prio: PRIO.next });
-    if (n2?.__post?.video) {
-      if (canProgressive()) preloadStart(n2.__post.video, PRIO.later);
+    // Les suivantes se préparent pendant qu'on regarde : la prochaine en entier (son début
+    // d'abord), celle d'après aussi sur une bonne connexion (sinon son début), et le début des
+    // deux suivantes : on peut enchaîner vite sans jamais attendre
+    const ahead = [];
+    for (let el = box.nextElementSibling; el && ahead.length < 12; el = el.nextElementSibling) if (el.__post) ahead.push(el);
+    const [n1, n2, n3, n4] = ahead;
+    if (n1?.__post.video) preloadVideo(n1.__post.video, { prio: PRIO.next });
+    if (n2?.__post.video) {
+      if (canProgressive() && !fastNet()) preloadStart(n2.__post.video, PRIO.later);
       else preloadVideo(n2.__post.video, { prio: PRIO.later });
     }
-    for (const img of [n1, n2].flatMap((x) => (x ? [...x.querySelectorAll('img[loading="lazy"]')] : []))) img.loading = 'eager';
-    if (!n2?.nextElementSibling) loadMore();
+    if (fastNet()) for (const n of [n3, n4]) if (n?.__post.video) preloadStart(n.__post.video, PRIO.warm);
+    for (const img of [n1, n2, n3].flatMap((x) => (x ? [...x.querySelectorAll('img[loading="lazy"]')] : []))) img.loading = 'eager';
+    if (ahead.length < 4) loadMore();
+    // Les vidéos pas encore vues : notées pour la prochaine ouverture de l'application
+    onUpcoming?.(ahead.map((x) => x.__post));
     upBtn.disabled = !box.previousElementSibling?.__post;
   }
 

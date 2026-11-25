@@ -5,7 +5,7 @@ import { store } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon, avatar, emptyState, toast, syncThemeColor } from '../dom.js';
 import { verticalFeed } from '../components/feed.js';
-import { takeReels, pendingReels } from '../components/video.js';
+import { takeReels, pendingReels, prefetchReels, saveUpcoming } from '../components/video.js';
 import { needLogin, follow } from '../components/actions.js';
 import { openComments } from '../components/comments.js';
 
@@ -122,12 +122,13 @@ export async function homeView(ctx) {
       });
     }));
   }
-  // Liste préparée dès l'ouverture de l'application (démarrage instantané)
+  // Liste préparée dès l'ouverture de l'application (démarrage instantané) : les vidéos « À
+  // suivre » de la dernière visite, déjà sur le téléphone, sinon celles demandées au serveur
   let first = null;
   if (!kept.has('foryou')) {
     first = takeReels();
-    if (!first && pendingReels()) {
-      await pendingReels();
+    if (!first) {
+      await (pendingReels() || (store.user ? prefetchReels() : null));
       first = takeReels();
     }
   }
@@ -140,6 +141,7 @@ export async function homeView(ctx) {
         const d = await api.get(`/api/feed/foryou?exclude=${seen.slice(-200).join(',')}`);
         return { posts: d.posts, more: d.hasMore };
       },
+      onUpcoming: store.user ? saveUpcoming : null,
       emptyView: () => emptyState('video', 'Aucune vidéo pour l’instant', 'Sois la première personne à publier !', h('a', { href: '/creer', class: 'btn btn-primary' }, 'Créer une vidéo')),
     });
     first = null; // une liste préparée ne sert qu'une fois

@@ -605,16 +605,62 @@ export function videoPlayer(v, { onOpen, onDouble, postId = null } = {}) {
 let reelsCache = null;
 let reelsLoading = null;
 let reelsGen = 0; // un chargement lancé avant une publication ne remplace pas la liste plus récente
-// Premières vidéos de « Pour toi » demandées dès l'ouverture : le fil démarre sans attendre
+let opened = false; // la liste « À suivre » ne sert qu'à l'ouverture de l'application
+
+// « À suivre » : les prochaines vidéos de « Pour toi » (pas encore vues) sont notées sur le
+// téléphone pendant qu'on regarde, et leurs morceaux y restent gardés (sw.js). À la prochaine
+// ouverture, le fil démarre aussitôt sur elles, sans attendre le serveur ni le réseau.
+const UPCOMING = 'vibz:a-suivre';
+const UPCOMING_MAX = 12;
+const UPCOMING_TTL = 24 * 3600 * 1000;
+const fresh = (p) => p?.id && !(p.video?.expiresAt && p.video.expiresAt <= Date.now() + 3600e3);
+export function saveUpcoming(posts) {
+  if (!store.user) return;
+  try {
+    const list = (posts || []).filter(fresh).slice(0, UPCOMING_MAX);
+    if (!list.length) localStorage.removeItem(UPCOMING);
+    else localStorage.setItem(UPCOMING, JSON.stringify({ owner: store.user.id, at: Date.now(), posts: list }));
+  } catch {
+    /* stockage plein ou navigation privée : le fil démarrera par le serveur */
+  }
+}
+function loadUpcoming() {
+  try {
+    const d = JSON.parse(localStorage.getItem(UPCOMING) || 'null');
+    if (!d || d.owner !== store.user?.id || Date.now() - d.at > UPCOMING_TTL) return [];
+    return (d.posts || []).filter(fresh);
+  } catch {
+    return [];
+  }
+}
+export function clearUpcoming() {
+  try {
+    localStorage.removeItem(UPCOMING);
+  } catch {
+    /* rien à effacer */
+  }
+}
+
+// Premières vidéos de « Pour toi » : à l'ouverture, celles notées « À suivre » (déjà sur le
+// téléphone) ; sinon demandées au serveur dès l'ouverture : le fil démarre sans attendre
 export function prefetchReels() {
   if (reelsLoading) return reelsLoading;
+  if (!opened) {
+    opened = true;
+    const saved = loadUpcoming();
+    if (saved.filter((p) => p.video).length >= 2) {
+      reelsCache = { posts: saved, hasMore: true, at: Date.now() };
+      warmPosts(saved, { videos: 4 });
+      return Promise.resolve(reelsCache);
+    }
+  }
   const gen = reelsGen;
   reelsLoading = api
     .get('/api/feed/foryou')
     .then((d) => {
       if (gen !== reelsGen) return reelsCache;
       reelsCache = { posts: d.posts, hasMore: d.hasMore, at: Date.now() };
-      warmPosts(d.posts, { videos: 3 });
+      warmPosts(d.posts, { videos: 4 });
       return reelsCache;
     })
     .catch(() => null)
@@ -670,7 +716,7 @@ export function unlockPlayer() {
 // ---------------------------------------------------------------------------
 const CHUNK = 1024 * 1024;
 const PREFIX = 2; // morceaux du début téléchargés d'avance
-const MAX_KEPT = 6;
+const MAX_KEPT = 8;
 const FULL_MAX = 25 * CHUNK; // au-delà, pas de téléchargement complet d'avance (sauf « Garder »)
 const KEPT_BYTES = 160 * CHUNK; // place prise en mémoire par les vidéos téléchargées
 const small = (v) => v.size <= FULL_MAX;
