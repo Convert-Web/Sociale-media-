@@ -10,6 +10,7 @@ import { trackPage, cookieBanner } from './components/cookies.js';
 import { prefetchReels, unlockPlayer } from './components/video.js';
 import { startUpdateChecks } from './update.js';
 import { registerServiceWorker, syncPush } from './push.js';
+import { startInAppNotifications } from './notify.js';
 import { editPost } from './components/postedit.js';
 import { homeView, videoView, friendsView } from './views/home.js';
 import { exploreView } from './views/explore.js';
@@ -531,7 +532,10 @@ setRenderer(render);
       const url = new URL(e.data.url, location.origin);
       if (url.origin === location.origin) navigate(url.pathname + url.search);
     }
+    // Notification du téléphone arrivée pendant que l'application est ouverte : bannière et son
+    if (e.data?.type === 'push' && e.data.data) store.emit('notify:push', { data: e.data.data, shown: Boolean(e.data.shown) });
   });
+  startInAppNotifications();
   render();
   setTimeout(() => location.pathname !== '/rejoindre' && cookieBanner(), 2500);
 })();

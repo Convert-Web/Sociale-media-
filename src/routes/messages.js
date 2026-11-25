@@ -4,7 +4,7 @@ const express = require('express');
 const { requireAuth } = require('../auth');
 const { fail, text, intParam } = require('../http');
 const { throttle } = require('../antispam');
-const { authorOf, counters, pushCounters, isBlocked, areFriends, flaggedLabels, getPost, prefs, onlineSet, touchPresence, isTyping } = require('../social');
+const { authorOf, counters, pushCounters, isBlocked, areFriends, flaggedLabels, getPost, prefs, onlineSet, touchPresence, isTyping, freshSince, unreadTotal, absoluteUrl } = require('../social');
 const { moderate, autoReport } = require('../contentFilter');
 const { sendPush } = require('../push');
 
@@ -76,8 +76,14 @@ module.exports = function messageRoutes(ctx) {
       await sendPush(ctx, other.id, {
         title: req.user.display_name,
         body: flagged ? HIDDEN : postId && !body ? 'a partagé une publication avec toi' : body.length > 140 ? `${body.slice(0, 137)}…` : body,
+        icon: absoluteUrl(ctx, req.user.avatar),
         url: `/messages/${req.user.username}`,
+        // Les messages d'une même personne se regroupent (« 3 nouveaux messages », voir sw.js)
         tag: `dm-${req.user.id}`,
+        kind: 'dm',
+        actor: req.user.display_name,
+        mid: Number(lastInsertRowid),
+        count: await unreadTotal(ctx, other.id),
       });
     }
     return message;
@@ -245,9 +251,14 @@ module.exports = function messageRoutes(ctx) {
     res.json({ users: rows.map((row) => authorOf(row)) });
   });
 
+  // Compteurs ; avec les repères n et m (dernière notification et dernier message déjà vus par
+  // l'application), ce qui vient d'arriver, pour la bannière et le son dans l'application
   r.get('/counters', async (req, res) => {
     await touchPresence(ctx, req.user.id);
-    res.json(await counters(ctx, req.user.id));
+    const c = await counters(ctx, req.user.id);
+    if (req.query.n === undefined && req.query.m === undefined) return res.json(c);
+    const since = (v) => (v === undefined || v === '' ? null : Math.max(0, Number.parseInt(v, 10) || 0));
+    res.json({ ...c, fresh: await freshSince(ctx, req.user.id, { n: since(req.query.n), m: since(req.query.m) }) });
   });
 
   // Flux temps réel (Server-Sent Events)

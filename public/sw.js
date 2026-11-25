@@ -148,6 +148,16 @@ self.addEventListener('message', (event) => {
   );
 });
 
+// Notification reçue :
+// - les messages d'une même personne se regroupent (« 3 nouveaux messages »), comme les J'aime
+//   d'une même publication (« Léa et 2 autres ont aimé ta vidéo », mis à jour sans resonner) ;
+// - la pastille de l'icône de l'application affiche le nombre de nouveautés ;
+// - l'application ouverte est prévenue : bannière et son dans l'application, sans doublon.
+//   Sur ordinateur et Android (Chrome), application au premier plan : pas de notification du
+//   système en plus. Safari (iPhone) exige d'en afficher une à chaque fois.
+const isSafari = /Safari/.test(self.navigator.userAgent) && !/Chrome|Chromium|Android/.test(self.navigator.userAgent);
+const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
+
 self.addEventListener('push', (event) => {
   let data = {};
   try {
@@ -155,16 +165,44 @@ self.addEventListener('push', (event) => {
   } catch {
     data = { body: event.data ? event.data.text() : '' };
   }
-  const title = data.title || 'AURUM';
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body: data.body || '',
-      icon: '/img/icon-192.png',
-      badge: '/img/badge-96.png',
-      tag: data.tag || undefined,
-      renotify: Boolean(data.tag),
-      data: { url: data.url || '/activite' },
-    }),
+    (async () => {
+      if (typeof data.count === 'number' && self.navigator.setAppBadge) {
+        await (data.count > 0 ? self.navigator.setAppBadge(data.count) : self.navigator.clearAppBadge()).catch(() => {});
+      }
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const focused = windows.some((c) => c.visibilityState === 'visible' && c.focused);
+      const show = !focused || isSafari;
+      for (const c of windows) c.postMessage({ type: 'push', data, shown: show });
+      if (!show) return;
+      const tag = data.tag || undefined;
+      let title = data.title || 'AURUM';
+      let body = data.body || '';
+      let count = 1;
+      let actors = data.actor ? [data.actor] : [];
+      if (tag) {
+        const [prev] = await self.registration.getNotifications({ tag });
+        if (prev && prev.data && prev.data.kind === data.kind) {
+          count = (prev.data.count || 1) + 1;
+          actors = [...new Set([...(prev.data.actors || []), ...actors])];
+          if (data.kind === 'dm') body = `${plural(count, 'nouveau message', 'nouveaux messages')} · ${data.body}`;
+          if (data.kind === 'like' && actors.length > 1) {
+            title = `${actors[actors.length - 1]} et ${plural(actors.length - 1, 'autre personne', 'autres personnes')}`;
+            body = `ont aimé ${data.what || 'ta vidéo'}.`;
+          }
+        }
+      }
+      await self.registration.showNotification(title, {
+        body,
+        icon: data.icon || '/img/icon-192.png',
+        badge: '/img/badge-96.png',
+        tag,
+        renotify: Boolean(tag) && data.renotify !== false,
+        timestamp: Date.now(),
+        vibrate: [60, 40, 110],
+        data: { url: data.url || '/activite', kind: data.kind || null, count, actors },
+      });
+    })(),
   );
 });
 
