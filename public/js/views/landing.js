@@ -1,7 +1,9 @@
 // Page d'entrée : un visiteur sans compte arrive ici avant tout le reste (vidéos, Actu, profils,
 // liens partagés). Il crée un compte ou se connecte, puis il est emmené là où il voulait aller.
 import { safePath } from '../router.js';
-import { h, icon, logoMark, syncThemeColor } from '../dom.js';
+import { api, enc } from '../api.js';
+import { h, icon, avatar, logoMark, syncThemeColor, verifiedMark } from '../dom.js';
+import { rememberInvite, pendingInvite } from '../components/invite.js';
 
 // Ce que la personne voulait ouvrir (lien partagé, notification) : dit en clair sur la page
 function intent(suite) {
@@ -37,12 +39,24 @@ export function landingView(ctx) {
   const suite = safePath(ctx.query.get('suite'), '');
   const q = suite ? `?suite=${encodeURIComponent(suite)}` : '';
   const why = intent(suite);
+  // Invitation (« Rejoins-moi sur AURUM ») : la page est au nom de la personne qui invite
+  if (ctx.query.get('par')) rememberInvite(ctx.query.get('par'));
+  const by = pendingInvite();
+  const invite = h('div', { class: 'land-invite', hidden: true });
+  if (by) {
+    api.get(`/api/users/${enc(by)}`).then(({ user }) => {
+      if (!user || user.locked) return;
+      invite.hidden = false;
+      invite.replaceChildren(avatar(user, 'md'), h('span', null, h('b', null, user.displayName, user.verified ? verifiedMark() : null, ' t’invite sur AURUM 🎉'), h('small', null, 'Crée ton compte : vous serez connectés tout de suite.')));
+    }).catch(() => {});
+  }
   const feature = (ic, title, text) => h('li', null, h('span', { class: 'land-ic' }, icon(ic)), h('span', null, h('b', null, title), h('small', null, text)));
 
   return h('div', { class: 'land' },
     h('div', { class: 'land-bg', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
     h('div', { class: 'land-main' },
       h('div', { class: 'land-brand' }, logoMark(56), h('span', { class: 'land-name' }, 'AURUM')),
+      invite,
       h('h1', null, 'Des vidéos courtes,', h('br'), 'l’actu du jour,', h('br'), h('span', { class: 'land-accent' }, 'et toi.')),
       why
         ? h('p', { class: 'land-why' }, icon('lock', 'icon-sm'), h('span', null, why))

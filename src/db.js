@@ -486,6 +486,8 @@ const COLUMNS = [
   ['users', 'coins', 'INTEGER NOT NULL DEFAULT 0'],
   ['users', 'diamonds', 'INTEGER NOT NULL DEFAULT 0'],
   ['users', 'is_demo', 'INTEGER NOT NULL DEFAULT 0'],
+  // Invitation : le compte qui a fait venir celui-ci (lien « Rejoins-moi sur AURUM »)
+  ['users', 'referrer_id', 'INTEGER'],
   ['users', 'notify_prefs', "TEXT NOT NULL DEFAULT '{}'"],
   ['users', 'onboarded_at', 'INTEGER'],
   // Fil « Pour toi » personnalisé (0 : classement sans centres d'intérêt, règlement DSA)

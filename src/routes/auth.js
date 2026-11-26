@@ -4,7 +4,8 @@ const { hashPassword, verifyPassword, burnPasswordCheck, newToken, sha256 } = re
 const { createSession, destroySession, requireAuth } = require('../auth');
 const { fail, text, USERNAME_RE, EMAIL_RE, RESERVED } = require('../http');
 const { assertHuman, isDisposable, assertNotLocked, loginFailed, loginSucceeded } = require('../antispam');
-const { selfUser, counters } = require('../social');
+const { selfUser, counters, notify } = require('../social');
+const { learn, SIGNALS } = require('../feed');
 const { assertClean } = require('../contentFilter');
 const { CATEGORIES } = require('../catalog');
 
@@ -101,6 +102,16 @@ module.exports = function authRoutes(ctx) {
       'INSERT INTO users (username, email, password_hash, display_name, is_admin, created_at) VALUES (?, ?, ?, ?, ?, ?)',
       username, email, hash, displayName, isAdmin, Date.now(),
     );
+    // Invitation (« X t'invite sur AURUM ») : le nouveau compte suit celui qui l'a invité, qui est
+    // prévenu (« a rejoint AURUM grâce à toi ») et peut le suivre en retour d'un toucher
+    const ref = typeof req.body.ref === 'string' ? req.body.ref.trim().replace(/^@/, '') : '';
+    const inviter = ref && USERNAME_RE.test(ref) ? await db.get('SELECT id FROM users WHERE username = ? AND banned_at IS NULL AND is_bot = 0', ref) : null;
+    if (inviter && inviter.id !== Number(lastInsertRowid)) {
+      await db.run('UPDATE users SET referrer_id = ? WHERE id = ?', inviter.id, lastInsertRowid);
+      await db.run('INSERT OR IGNORE INTO follows (follower_id, followee_id, created_at) VALUES (?, ?, ?)', lastInsertRowid, inviter.id, Date.now());
+      await learn(ctx, Number(lastInsertRowid), { author: inviter.id, tags: [] }, SIGNALS.follow).catch(() => {});
+      await notify(ctx, { userId: inviter.id, actorId: Number(lastInsertRowid), type: 'invite_joined' });
+    }
     await createSession(ctx, res, lastInsertRowid);
     const user = await db.get('SELECT * FROM users WHERE id = ?', lastInsertRowid);
     const { welcomeEmail } = require('../emails');

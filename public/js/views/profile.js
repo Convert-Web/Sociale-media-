@@ -11,6 +11,7 @@ import { followLabel, userRow } from '../components/userlist.js';
 import { reportDialog } from '../components/report.js';
 import { cropImage } from '../components/cropper.js';
 import { logout } from './auth.js';
+import { inviteFriends } from '../components/invite.js';
 import { uploadList, tapUpload } from '../components/uploads.js';
 
 const backBtn = () => h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => (history.length > 1 ? history.back() : navigate('/')) }, icon('back'));
@@ -147,6 +148,7 @@ export async function profileView(ctx) {
       body: h(
         'div',
         { class: 'opt-list' },
+        h('button', { type: 'button', class: 'opt-item', onclick: () => inviteFriends() }, h('span', { class: 'opt-ic' }, icon('userPlus')), 'Inviter des amis'),
         item('creator', 'Studio créateur', '/studio'),
         item('wallet', 'Portefeuille', '/portefeuille'),
         item('settings', 'Réglages et confidentialité', '/reglages'),
@@ -240,6 +242,52 @@ export async function profileView(ctx) {
     document.removeEventListener('vibz:published', onPublished);
   });
 
+  // Bien démarrer (son propre profil) : 5 étapes, la prochaine proposée d'un toucher ; la carte
+  // disparaît une fois tout fait, ou si on la ferme
+  const START = `vibz:demarrer:${user.id}`;
+  let invited = null;
+  function startCard() {
+    if (!me) return null;
+    try {
+      if (localStorage.getItem(START) === 'ferme') return null;
+    } catch {
+      /* stockage indisponible */
+    }
+    const edit = () => editProfile(user, (u) => { Object.assign(user, u); render(); });
+    const steps = [
+      { done: Boolean(user.avatar), ic: 'camera', text: 'Ajoute ta photo de profil', cta: 'Ajouter', go: edit },
+      { done: Boolean(user.bio), ic: 'pen', text: 'Écris ta bio en une phrase', cta: 'Écrire', go: edit },
+      { done: user.counts.following >= 3, ic: 'userPlus', text: 'Suis 3 comptes que tu aimes', cta: 'Découvrir', go: () => navigate('/explorer') },
+      { done: user.counts.posts > 0, ic: 'plus', text: 'Publie ta première vidéo', cta: 'Créer', go: () => navigate('/creer') },
+      { done: invited === null ? true : invited > 0, ic: 'send', text: 'Invite un ami à te rejoindre', cta: 'Inviter', go: () => inviteFriends() },
+    ];
+    const done = steps.filter((x) => x.done).length;
+    const next = steps.find((x) => !x.done);
+    if (!next) return null;
+    const card = h('div', { class: 'start-card' },
+      h('div', { class: 'start-top' },
+        h('b', null, 'Bien démarrer sur AURUM'),
+        h('small', null, `${done}/${steps.length}`),
+        h('button', { type: 'button', class: 'start-x', 'aria-label': 'Fermer', onclick: () => {
+          try {
+            localStorage.setItem(START, 'ferme');
+          } catch {
+            /* pour cette visite */
+          }
+          card.remove();
+        } }, icon('x', 'icon-xs'))),
+      h('div', { class: 'start-bar' }, h('i', { style: { width: `${(done / steps.length) * 100}%` } })),
+      h('button', { type: 'button', class: 'start-next', onclick: next.go }, h('span', { class: 'start-ic' }, icon(next.ic, 'icon-sm')), h('span', { class: 'start-text' }, next.text), h('span', { class: 'start-cta' }, next.cta)));
+    return card;
+  }
+  if (me) {
+    api.get('/api/me/invites').then((d) => {
+      invited = d.count;
+      root.querySelector('.start-card')?.replaceWith(startCard() || '');
+      if (!invited && !root.querySelector('.start-card')) root.querySelector('.profile-actions')?.after(startCard() || '');
+    }).catch(() => {});
+  }
+
   function render() {
     paintActions();
     // Compact : la photo à gauche, le nom et les compteurs à côté (le @ est déjà en haut de la page)
@@ -255,6 +303,7 @@ export async function profileView(ctx) {
       user.bio ? h('p', { class: 'profile-bio' }, user.bio) : me ? h('button', { type: 'button', class: 'link-btn', onclick: () => editProfile(user, (u) => { Object.assign(user, u); render(); }) }, '+ Ajouter une bio') : null,
       user.website ? h('a', { href: user.website, class: 'profile-link', target: '_blank', rel: 'noopener noreferrer nofollow', title: user.website }, icon('link', 'icon-xs'), h('span', null, user.website.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))) : null,
       actions,
+      startCard(),
       similar,
     );
     paintTabs();

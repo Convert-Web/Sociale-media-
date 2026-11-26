@@ -9,7 +9,7 @@ const FILTERS = {
   likes: ['like', 'favorite', 'comment_like'],
   comments: ['comment', 'reply'],
   mentions: ['mention'],
-  followers: ['follow', 'follow_accept', 'follow_request'],
+  followers: ['follow', 'follow_accept', 'follow_request', 'invite_joined'],
   other: ['repost', 'duet', 'stitch', 'live', 'gift'],
 };
 

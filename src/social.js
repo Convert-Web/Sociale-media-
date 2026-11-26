@@ -342,6 +342,53 @@ async function counters(ctx, userId) {
   return { notifications: row.n, messages: row.m, requests: row.r };
 }
 
+// ---------------------------------------------------------------------------
+// Séries (🔥) : deux personnes qui se sont écrit (chacune au moins un message) chaque jour,
+// plusieurs jours d'affilée (heure de Paris). « En danger » : la série tient encore, mais
+// aujourd'hui l'un des deux n'a pas encore écrit (elle s'arrête à minuit).
+// ---------------------------------------------------------------------------
+const PARIS_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' });
+const dayOf = (ms) => PARIS_DAY.format(new Date(ms)); // « 2026-11-26 »
+const dayBefore = (d) => {
+  const [y, m, dd] = d.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, dd - 1)).toISOString().slice(0, 10);
+};
+const STREAK_DAYS = 120; // au-delà, la série affichée reste « 120 jours et plus »
+async function streaksFor(ctx, userId, otherIds, now = Date.now()) {
+  const out = new Map();
+  const ids = [...new Set(otherIds.filter(Boolean))];
+  if (!ids.length) return out;
+  const marks = ids.map(() => '?').join(',');
+  const rows = await ctx.db.all(
+    `SELECT sender_id, recipient_id, created_at FROM messages
+     WHERE created_at > ? AND ((sender_id = ? AND recipient_id IN (${marks})) OR (recipient_id = ? AND sender_id IN (${marks})))`,
+    now - (STREAK_DAYS + 2) * 86400e3, userId, ...ids, userId, ...ids,
+  );
+  const days = new Map(); // autre compte → jour → { me, them }
+  for (const r of rows) {
+    const other = r.sender_id === userId ? r.recipient_id : r.sender_id;
+    let m = days.get(other);
+    if (!m) days.set(other, (m = new Map()));
+    const d = dayOf(r.created_at);
+    const e = m.get(d) || { me: false, them: false };
+    if (r.sender_id === userId) e.me = true;
+    else e.them = true;
+    m.set(d, e);
+  }
+  const today = dayOf(now);
+  for (const [other, m] of days) {
+    const done = (d) => Boolean(m.get(d)?.me && m.get(d)?.them);
+    let d = done(today) ? today : dayBefore(today);
+    let n = 0;
+    while (done(d) && n < STREAK_DAYS) {
+      n += 1;
+      d = dayBefore(d);
+    }
+    if (n >= 2) out.set(other, { days: n, atRisk: !done(today), mine: Boolean(m.get(today)?.me) });
+  }
+  return out;
+}
+
 // Présence : connexion permanente (hub) ou, sans elle, dernier passage enregistré en base
 const POLL_ONLINE = 90e3;
 const polling = (ctx) => ctx.config?.realtime === 'poll';
@@ -387,6 +434,7 @@ function pushText(type, body, user, what = 'ta vidéo') {
   switch (type) {
     case 'like': return p.likes && `a aimé ${what}.`;
     case 'follow': return p.follows && 'a commencé à te suivre.';
+    case 'invite_joined': return p.follows && 'a rejoint AURUM grâce à ton invitation 🎉';
     case 'follow_request': return p.follows && 'souhaite s’abonner à ton compte.';
     case 'follow_accept': return p.follows && 'a accepté ta demande d’abonnement.';
     case 'comment': return p.comments && `a commenté : ${clip(body)}`;
@@ -456,7 +504,7 @@ async function freshSince(ctx, userId, { n = null, m = null } = {}) {
 }
 
 function notificationUrl(type, n, actorUsername, ownerUsername) {
-  if (type === 'follow' || type === 'follow_accept') return `/@${actorUsername}`;
+  if (type === 'follow' || type === 'follow_accept' || type === 'invite_joined') return `/@${actorUsername}`;
   if (type === 'follow_request') return '/activite?type=demandes';
   if (type === 'live') return `/live/${actorUsername}`;
   if (n.postId) return `/@${ownerUsername}/video/${n.postId}${n.commentId ? `?commentaire=${n.commentId}` : ''}`;
@@ -573,6 +621,7 @@ module.exports = {
   counters,
   pushCounters,
   notify,
+  streaksFor,
   freshSince,
   unreadTotal,
   absoluteUrl,
