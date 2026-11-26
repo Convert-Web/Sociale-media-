@@ -9,7 +9,7 @@ import { h, icon, avatar, toast, spinner, emptyState, short, duration, shrinkIma
 import { openSheet, closeSheet } from '../components/sheet.js';
 import { readVideoInfo, isVideoFile, maxSeconds, reportImportIssue } from '../components/video.js';
 import { sendInBackground } from '../components/uploads.js';
-import { FILTERS, filterCss, fxLayer, paintOverlays, overlayEl, fitFor, TEXT_COLORS, STICKERS } from '../components/fx.js';
+import { FILTERS, filterCss, fxLayer, paintOverlays, overlayEl, TEXT_COLORS, STICKERS } from '../components/fx.js';
 import { recorderMime, extFor, loadVideoBlob, mixSound, duet as composeDuet, stitch as composeStitch, frameAt, mediaFor, onScreen } from '../components/compose.js';
 import { attachMentions } from '../components/mentions.js';
 import { toggle, PRIVACY } from '../components/postedit.js';
@@ -818,13 +818,12 @@ export async function createView(ctx) {
     // Déplacer un texte ou un autocollant au doigt ; le glisser sur la corbeille le retire ;
     // un toucher sans déplacement le modifie
     const trash = h('div', { class: 'edit-trash', hidden: true }, icon('trash'));
-    // Zone visible dans le fil de ce téléphone : les bandes apparaissent pendant un déplacement
+    // Zone visible dans le fil : la vidéo y remplit tout l'écran de ce téléphone (ou le cadre 9:16
+    // sur ordinateur), les bords qui dépassent sont coupés. Les bandes apparaissent pendant un
+    // déplacement, pour ne pas poser un texte là où il ne se verra pas.
     const safe = (() => {
-      if (S.kind === 'duet' || matchMedia('(min-width: 900px)').matches) return null;
-      const tabH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tab-h')) || 56;
-      const box = { w: innerWidth, h: innerHeight - tabH };
-      if (fitFor(ar, box) !== 'cover') return null;
-      const screen = box.w / box.h;
+      if (S.kind === 'duet') return null;
+      const screen = matchMedia('(min-width: 900px)').matches ? 9 / 16 : innerWidth / innerHeight;
       const band = ar > screen ? ((1 - screen / ar) / 2) * 100 : ((1 - ar / screen) / 2) * 100;
       if (band < 0.5) return null;
       return h('div', { class: `edit-safe ${ar > screen ? 'x' : 'y'}`, style: { '--band': `${band.toFixed(2)}%` } }, h('i'), h('i'));

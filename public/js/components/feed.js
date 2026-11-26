@@ -11,7 +11,7 @@ import {
   sound, reelsPlayer, preloadVideo, preloadStart, localVideo, sameVideo, setSource, PRIO, preloadEta, cancelPreload, holdPreloads, releasePreloads,
   clockLabel, canProgressive, progressiveReady, progressiveCheck, playProgressive, disableProgressive, downloadedBytes, relaxPreload, reportVideoIssue, videoBlob,
 } from './video.js';
-import { fxLayer, filterCss, fitFor } from './fx.js';
+import { fxLayer, filterCss } from './fx.js';
 import { toggleLike, toggleSave, needLogin, follow, postPath } from './actions.js';
 import { openComments } from './comments.js';
 import { openShare, downloadPost } from './share.js';
@@ -62,32 +62,26 @@ function slide(post) {
   const ar = v?.width && v?.height ? v.width / v.height : 9 / 16;
   if (post.kind === 'video') box.style.setProperty('--ar', String(ar));
 
-  // Média : vidéo (lecteur partagé), photos (carrousel) ou texte sur fond coloré
+  // Média : vidéo (lecteur partagé), photos (carrousel) ou texte sur fond coloré. Vidéos et
+  // photos remplissent toujours tout l'écran, cadrées de la même façon (le surplus est coupé).
   let media;
   if (post.kind === 'video') {
     const filter = filterCss(post.fx?.filter);
     media = h(
       'div',
       { class: 'slide-media', style: { '--ar': String(ar) } },
-      h('img', { class: 'slide-poster', src: v.poster || '', alt: '', decoding: 'async', style: filter ? { filter } : null }),
+      h('img', { class: 'slide-poster', src: v.poster || '', alt: '', decoding: 'async', draggable: 'false', style: filter ? { filter } : null }),
       h('div', { class: 'slide-holder' }),
-      fxLayer(post.fx, { ar }),
+      fxLayer(post.fx, { ar, fit: 'cover' }),
     );
-    box.__fit = () => {
-      const fit = fitFor(ar, { w: box.clientWidth || innerWidth, h: box.clientHeight || innerHeight });
-      media.classList.toggle('fit-cover', fit === 'cover');
-      media.querySelector('.fx-layer')?.classList.replace(fit === 'cover' ? 'fit-contain' : 'fit-cover', `fit-${fit}`);
-    };
   } else if (post.kind === 'photo') {
     const dots = h('div', { class: 'carousel-dots' }, post.images.map((_, i) => h('i', { class: i ? '' : 'on' })));
-    const count = h('span', { class: 'carousel-count' }, `1/${post.images.length}`);
-    const strip = h('div', { class: 'carousel' }, post.images.map((src) => h('div', { class: 'carousel-item' }, h('img', { src, alt: '', decoding: 'async', loading: 'lazy' }))));
+    const strip = h('div', { class: 'carousel' }, post.images.map((src) => h('div', { class: 'carousel-item' }, h('img', { src, alt: '', decoding: 'async', loading: 'lazy', draggable: 'false' }))));
     strip.addEventListener('scroll', () => {
       const i = Math.round(strip.scrollLeft / Math.max(1, strip.clientWidth));
       [...dots.children].forEach((d, k) => d.classList.toggle('on', k === i));
-      count.textContent = `${i + 1}/${post.images.length}`;
     }, { passive: true });
-    media = h('div', { class: 'slide-media photos' }, strip, post.images.length > 1 ? dots : null, post.images.length > 1 ? count : null);
+    media = h('div', { class: 'slide-media photos' }, strip, post.images.length > 1 ? dots : null);
   } else {
     media = h('div', { class: `slide-media text-card ${BG[post.bg] || 'bg-violet'}` }, h('p', null, post.body));
   }
@@ -234,7 +228,7 @@ function slide(post) {
   };
 
   const progress = post.kind === 'video' ? null : h('div', { class: 'slide-progress' });
-  box.append(...[media, h('div', { class: 'slide-shade' }), h('span', { class: 'slide-play', hidden: true }, icon('play')), info, actions, progress].filter(Boolean));
+  box.append(...[media, h('span', { class: 'slide-play', hidden: true }, icon('play')), info, actions, progress].filter(Boolean));
   box.__like = () => like(true);
   box.__paintLike = paintLike;
   box.__paintSave = paintSave;
@@ -491,7 +485,6 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     setBuffering(box.__post.kind === 'video');
     const post = box.__post;
     onActive?.(post);
-    box.__fit?.();
     // Panneau des commentaires ouvert (grand écran) : il suit la vidéo à l'écran
     if (sidePanelOpen()) openComments(post);
     // Photos et textes : pas de lecteur
@@ -1043,14 +1036,17 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     }
   };
   document.addEventListener('vibz:post', onPostChange);
-  const onResize = () => active?.__fit?.();
+  // L'image reste en place : pas de zoom à deux doigts sur iPhone, tant que le fil est à l'écran
+  // (Safari ignore l'interdiction de zoomer de la page ; ses gestes « pincer » s'annulent ici)
+  const noPinch = (e) => e.preventDefault();
   const bindGlobal = (on) => {
     const m = on ? 'addEventListener' : 'removeEventListener';
+    document[m]('gesturestart', noPinch, { passive: false });
+    document[m]('gesturechange', noPinch, { passive: false });
     document[m]('click', swallow, true);
     document[m]('keydown', onKey);
     document[m]('visibilitychange', onVisibility);
     window[m]('pagehide', onPageHide);
-    window[m]('resize', onResize);
   };
   bindGlobal(true);
 

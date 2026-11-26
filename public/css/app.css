@@ -613,7 +613,7 @@ input[type='range'] {
   -webkit-overflow-scrolling: touch;
   padding-bottom: calc(var(--tab-h) + var(--safe-b));
 }
-/* Le fil occupe tout l'écran : le dock flotte en bas, la vidéo est une carte au-dessus */
+/* Le fil occupe tout l'écran : la vidéo va jusqu'aux bords, le dock flotte par-dessus */
 .shell.is-feed .main {
   height: var(--app-h);
   min-height: 0;
@@ -642,11 +642,14 @@ input[type='range'] {
   border: 1px solid var(--glass-line);
   box-shadow: var(--shadow);
 }
+/* Sur la vidéo : un dock sombre et net (pas de flou) */
 .shell.is-feed .tabbar {
-  background: rgba(20, 18, 28, 0.82);
+  background: #0e0d13;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   border-color: rgba(255, 255, 255, 0.08);
   color: #fff;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
 .tab {
   height: 50px;
@@ -1013,13 +1016,18 @@ input[type='range'] {
   background: #000;
   color: #fff;
 }
-/* La vidéo est une carte arrondie posée sur le noir, entre le haut de l'écran et le dock */
+/* Téléphone : chaque vidéo ou photo remplit tout l'écran, bord à bord, toujours cadrée de la même
+   façon. Les boutons et les textes sont posés dessus ; ces repères ne servent qu'à les placer
+   (en haut sous l'heure, en bas au-dessus du dock). */
 .feed-page,
 .feed {
-  --card-x: 6px;
+  --card-x: 0px;
   --card-t: calc(var(--safe-t) + 6px);
   --card-b: calc(var(--safe-b) + var(--nav-h) + 20px);
-  --card-r: 28px;
+  --card-r: 0px;
+  /* Textes et icônes sur la vidéo : une ombre serrée et un halo léger autour de chaque lettre */
+  --on-video-text: 0 0 2px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 14px rgba(0, 0, 0, 0.38);
+  --on-video-icon: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)) drop-shadow(0 0 7px rgba(0, 0, 0, 0.32));
 }
 .feed-top {
   position: absolute;
@@ -1036,26 +1044,19 @@ input[type='range'] {
 .feed-top > * {
   pointer-events: auto;
 }
-.glass,
-.top-icon,
-.top-tabs {
-  background: rgba(22, 20, 30, 0.42);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5);
-  backdrop-filter: blur(16px) saturate(1.5);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-}
+/* Icônes et onglets posés directement sur la vidéo : pas de fond, juste une ombre pour la lisibilité */
 .top-icon {
   display: grid;
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 14px;
   color: #fff;
   position: relative;
+  filter: var(--on-video-icon);
 }
 .top-icon .icon {
-  width: 21px;
-  height: 21px;
+  width: 24px;
+  height: 24px;
 }
 /* Quelqu'un est en direct : point rouge sur le bouton LIVE */
 .live-link.has-live::after {
@@ -1067,38 +1068,48 @@ input[type='range'] {
   height: 8px;
   border-radius: 50%;
   background: var(--live);
-  box-shadow: 0 0 0 2px rgba(22, 20, 30, 0.7);
 }
-/* Onglets du fil : commande segmentée */
+/* Onglets du fil : du texte, l'onglet ouvert en blanc et souligné (même graisse partout : rien ne
+   bouge quand on change d'onglet) */
 .top-tabs {
   justify-self: center;
   display: inline-flex;
   gap: 2px;
-  padding: 3px;
-  border-radius: 15px;
   min-width: 0;
   max-width: 100%;
 }
 .top-tab {
-  padding: 7px 12px;
-  border-radius: 12px;
-  font-weight: 650;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.76);
+  position: relative;
+  padding: 8px 9px;
+  font-weight: 700;
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.78);
   white-space: nowrap;
-  transition: background 0.2s, color 0.2s;
+  text-shadow: var(--on-video-text);
+  transition: color 0.2s;
 }
 .top-tab.on {
+  color: #fff;
+}
+.top-tab.on::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 1px;
+  width: 18px;
+  height: 2.5px;
+  margin-left: -9px;
+  border-radius: 2px;
   background: #fff;
-  color: #14121b;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 .feed-top.single {
   grid-template-columns: 40px 1fr 40px;
 }
 @media (max-width: 380px) {
   .top-tab {
-    padding: 7px 9px;
-    font-size: 13px;
+    padding: 8px 7px;
+    font-size: 14px;
   }
 }
 @media (max-width: 345px) {
@@ -1109,22 +1120,25 @@ input[type='range'] {
   .top-icon {
     width: 36px;
     height: 36px;
-    border-radius: 12px;
   }
   .top-tab {
-    padding: 6px 7px;
-    font-size: 12px;
+    padding: 7px 5px;
+    font-size: 13px;
   }
 }
 .feed {
   position: relative;
   height: 100%;
 }
+/* Le fil ne glisse que de haut en bas : pas de zoom à deux doigts, pas de rebond, l'image ne
+   part ni sur les côtés ni en biais */
 .feed-track {
   height: 100%;
+  overflow-x: hidden;
   overflow-y: auto;
   scroll-snap-type: y mandatory;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
+  touch-action: pan-y;
   scrollbar-width: none;
 }
 .feed-track::-webkit-scrollbar {
@@ -1159,14 +1173,18 @@ input[type='range'] {
   background: #000;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
+.slide img {
+  -webkit-user-drag: none;
+}
+/* Vidéo, affiche et photos remplissent tout l'écran (le surplus est coupé sur les bords) */
 .slide-media {
   position: absolute;
-  inset: var(--card-t) var(--card-x) var(--card-b);
-  border-radius: var(--card-r);
+  inset: 0;
   container-type: size;
   overflow: hidden;
-  background: #0d0c12;
+  background: #000;
 }
 .slide-poster,
 .slide-holder,
@@ -1175,10 +1193,6 @@ input[type='range'] {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
-}
-.slide-media.fit-cover .slide-poster,
-.slide-media.fit-cover .slide-holder video {
   object-fit: cover;
 }
 .slide-poster {
@@ -1239,13 +1253,6 @@ input[type='range'] {
   width: 30px;
   height: 30px;
 }
-.slide-shade {
-  position: absolute;
-  inset: var(--card-t) var(--card-x) var(--card-b);
-  border-radius: var(--card-r);
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0) 16%, rgba(0, 0, 0, 0) 46%, rgba(0, 0, 0, 0.5) 70%, rgba(0, 0, 0, 0.82));
-  pointer-events: none;
-}
 .slide-play {
   position: absolute;
   left: 50%;
@@ -1261,7 +1268,8 @@ input[type='range'] {
   width: 100%;
   height: 100%;
 }
-/* Photos */
+/* Photos : plein écran comme les vidéos ; plusieurs photos défilent de côté, une à la fois, sans
+   rebond ni zoom (le glissement vers le haut ou le bas passe au fil) */
 .slide-media.photos {
   display: grid;
 }
@@ -1269,7 +1277,10 @@ input[type='range'] {
   display: flex;
   height: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
   scroll-snap-type: x mandatory;
+  overscroll-behavior-x: none;
+  touch-action: pan-x pan-y;
   scrollbar-width: none;
 }
 .carousel::-webkit-scrollbar {
@@ -1280,47 +1291,39 @@ input[type='range'] {
   width: 100%;
   height: 100%;
   scroll-snap-align: center;
-  display: grid;
-  place-items: center;
+  scroll-snap-stop: always;
 }
 .carousel-item img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
+  pointer-events: none;
 }
 .carousel-dots {
   position: absolute;
   left: 50%;
-  bottom: 96px;
+  top: calc(var(--card-t) + 60px);
   transform: translateX(-50%);
   display: flex;
   gap: 5px;
   pointer-events: none;
+  filter: var(--on-video-icon);
 }
 .carousel-dots i {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.5);
 }
 .carousel-dots i.on {
   background: #fff;
 }
-.carousel-count {
-  position: absolute;
-  top: calc(64px + var(--safe-t));
-  right: 14px;
-  background: rgba(0, 0, 0, 0.45);
-  border-radius: 99px;
-  padding: 2px 9px;
-  font-size: 12px;
-  font-weight: 650;
-}
-/* Texte */
+/* Texte : à l'abri du haut de l'écran et des boutons du bas */
 .text-card {
   display: grid;
   place-items: center;
-  padding: 80px 28px 140px;
+  padding: calc(var(--card-t) + 74px) 28px calc(var(--card-b) + 140px);
 }
 .text-card p {
   font-size: clamp(22px, 6.5cqw, 40px);
@@ -1358,7 +1361,7 @@ input[type='range'] {
   background: linear-gradient(160deg, #a5c8ff, #6f7bff);
 }
 
-/* Barre d'actions : en bas de la carte, quatre boutons en verre (icône et nombre côte à côte) */
+/* Barre d'actions : en bas, quatre boutons posés sur la vidéo (icône et nombre côte à côte) */
 .actions {
   position: absolute;
   z-index: 5;
@@ -1373,26 +1376,22 @@ input[type='range'] {
 .act {
   height: 46px;
   min-width: 0;
-  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
   padding: 0 6px;
-  background: rgba(22, 20, 30, 0.42);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5);
-  backdrop-filter: blur(16px) saturate(1.5);
-  border: 1px solid rgba(255, 255, 255, 0.13);
   color: #fff;
   font-weight: 700;
-  font-size: 13.5px;
-  transition: background 0.2s, border-color 0.2s, transform 0.12s;
+  font-size: 14px;
+  text-shadow: var(--on-video-text);
+  transition: transform 0.12s;
 }
 .act:active {
-  transform: scale(0.95);
+  transform: scale(0.92);
 }
 .act small {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -1402,21 +1401,14 @@ input[type='range'] {
   display: grid;
   place-items: center;
   flex: none;
+  filter: var(--on-video-icon);
 }
 .act-ic .icon {
-  width: 22px;
-  height: 22px;
-}
-.act.like.on {
-  background: rgba(255, 45, 107, 0.26);
-  border-color: rgba(255, 45, 107, 0.55);
+  width: 26px;
+  height: 26px;
 }
 .act.like.on .act-ic {
   color: var(--heart);
-}
-.act.save.on {
-  background: rgba(255, 216, 77, 0.2);
-  border-color: rgba(255, 216, 77, 0.5);
 }
 .act.save.on .act-ic {
   color: var(--sun);
@@ -1443,24 +1435,20 @@ input[type='range'] {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 7px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  text-shadow: var(--on-video-text);
   font-size: 14.5px;
   transition: opacity 0.15s;
 }
-.info-repost,
-.info-pinned {
+.info .icon {
+  filter: var(--on-video-icon);
+}
+.info-repost {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   justify-self: start;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 650;
-  background: rgba(22, 20, 30, 0.45);
-  border-radius: 999px;
-  padding: 3px 10px;
-}
-.info-pinned {
-  background: var(--heart);
 }
 .info-who {
   display: flex;
@@ -1501,7 +1489,7 @@ input[type='range'] {
 }
 .info-meta {
   font-size: 12.5px;
-  color: rgba(255, 255, 255, 0.74);
+  color: rgba(255, 255, 255, 0.86);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1578,15 +1566,8 @@ input[type='range'] {
   align-items: center;
   gap: 5px;
   max-width: 100%;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 650;
-  background: rgba(22, 20, 30, 0.45);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  padding: 4px 10px;
-  text-shadow: none;
 }
 .info-chip > span {
   overflow: hidden;
@@ -1601,7 +1582,7 @@ input[type='range'] {
   max-width: 100%;
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.86);
+  color: rgba(255, 255, 255, 0.92);
 }
 .info-sound span {
   overflow: hidden;
@@ -1801,14 +1782,10 @@ input[type='range'] {
   right: calc(var(--card-x) + 10px);
   width: 40px;
   height: 40px;
-  border-radius: 14px;
   display: grid;
   place-items: center;
   color: #fff;
-  background: rgba(22, 20, 30, 0.42);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  filter: var(--on-video-icon);
 }
 .feed-nav {
   display: none;
@@ -1898,18 +1875,25 @@ input[type='range'] {
   outline-offset: 4px;
 }
 
-/* Ordinateur : la carte au centre, à la forme de la vidéo (9:16 au plus étroit, plus large pour
-   une vidéo horizontale) ; les mêmes actions en bas de la carte, les flèches à droite */
+/* Ordinateur : un cadre vertical fixe (9:16) au centre, que chaque vidéo ou photo remplit ; les
+   mêmes actions en bas du cadre, les flèches à droite */
 @media (min-width: 900px) {
   .feed-page,
   .feed,
   .slide {
     --card-h: calc(var(--app-h) - 40px);
-    --card-w: min(calc(var(--card-h) * max(0.5625, var(--ar, 0.5625))), calc(100% - 160px));
+    --card-w: min(calc(var(--card-h) * 0.5625), calc(100% - 160px));
     --card-x: calc((100% - var(--card-w)) / 2);
     --card-t: 20px;
     --card-b: 20px;
-    --card-r: 26px;
+    --card-r: 22px;
+  }
+  .slide-media {
+    inset: var(--card-t) var(--card-x) var(--card-b);
+    border-radius: var(--card-r);
+  }
+  .text-card {
+    padding: 80px 28px 140px;
   }
   /* La barre latérale porte déjà Pour toi, Abonnements, Explorer, LIVE et la recherche */
   .feed-top:not(.single) {
@@ -1958,10 +1942,7 @@ input[type='range'] {
     top: calc(var(--card-t) + 14px);
   }
   .carousel-dots {
-    bottom: calc(var(--card-b) + 170px);
-  }
-  .carousel-count {
-    top: calc(var(--card-t) + 16px);
+    top: 16px;
   }
 }
 
