@@ -8,7 +8,7 @@ import { openSheet, closeSheet, sheetOpen } from './components/sheet.js';
 import { installFormValidation } from './forms.js';
 import { trackPage, cookieBanner } from './components/cookies.js';
 import { prefetchReels, unlockPlayer, clearUpcoming } from './components/video.js';
-import { startUpdateChecks } from './update.js';
+import { startUpdateChecks, updateOnNavigation } from './update.js';
 import { registerServiceWorker, syncPush } from './push.js';
 import { startInAppNotifications } from './notify.js';
 import { editPost } from './components/postedit.js';
@@ -346,6 +346,8 @@ function restoreScroll(target) {
 }
 
 async function render(opts = {}) {
+  // Nouvelle version prête : l'écran demandé s'ouvre directement dans la nouvelle version
+  if (window.__vibzStarted && updateOnNavigation()) return;
   const token = ++renderToken;
   closeModals();
   closeMenu();

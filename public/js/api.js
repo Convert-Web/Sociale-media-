@@ -36,7 +36,7 @@ export async function fromResponse(promise) {
 }
 
 // Version annoncée par le serveur à chaque réponse : quand elle change, l'application le signale
-// (js/update.js affiche alors le bouton « Mettre à jour »)
+// (js/update.js télécharge alors la nouvelle version et la met en place d'elle-même)
 let serverVersion = null;
 function watchVersion(res) {
   const v = res.headers.get('x-vibz-version');
