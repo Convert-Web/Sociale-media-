@@ -3,24 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>AURUM — Pour toi</title>
-  <meta name="description" content="Regarde des vidéos courtes qui te ressemblent, crée les tiennes, partage-les et passe en LIVE avec AURUM.">
+  <title>AURUM — Vidéos courtes et actu du jour</title>
+  <meta name="description" content="Des vidéos courtes de tes amis, et l’actu du jour en vidéo. Crée ton compte AURUM gratuitement.">
   <meta name="theme-color" content="#000000">
   <meta name="color-scheme" content="light dark">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="AURUM">
+  <!-- Aperçu des liens partagés (réseaux sociaux, messageries) : adresses complètes, exigées par Facebook, LinkedIn… -->
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="AURUM">
   <meta property="og:locale" content="fr_FR">
-  <meta property="og:title" content="AURUM — des vidéos courtes, créées par toi">
-  <meta property="og:description" content="Fil « Pour toi », sons, Duo, Stitch, LIVE et messages.">
-  <meta property="og:image" content="/img/og.jpg">
+  <meta property="og:url" content="https://aurumcercle.vercel.app/">
+  <meta property="og:title" content="AURUM — Vidéos courtes et actu du jour">
+  <meta property="og:description" content="Des vidéos courtes de tes amis, et l’actu du jour en vidéo.">
+  <meta property="og:image" content="https://aurumcercle.vercel.app/img/og.jpg">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Le logo d’AURUM, un A blanc et un point doré sur un carré violet et rose">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="AURUM — Vidéos courtes et actu du jour">
+  <meta name="twitter:description" content="Des vidéos courtes de tes amis, et l’actu du jour en vidéo.">
+  <meta name="twitter:image" content="https://aurumcercle.vercel.app/img/og.jpg">
   <link rel="icon" href="/favicon.ico" sizes="48x48">
   <link rel="icon" href="/img/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/img/favicon-32.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/css/app.css">
@@ -29,13 +36,13 @@
   <link rel="preload" href="/fonts/inter/inter-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/bricolage/bricolage-grotesque-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
   <script src="/js/boot.js"></script>
-  <!-- Tous les modules téléchargés en parallèle (au lieu d'une cascade d'imports) -->
+  <!-- Modules téléchargés en parallèle (au lieu d'une cascade d'imports) ; les écrans plus rares
+       (caméra, LIVE, portefeuille, studio, administration) se chargent quand on les ouvre -->
   <link rel="modulepreload" href="/js/api.js">
   <link rel="modulepreload" href="/js/app.js">
   <link rel="modulepreload" href="/js/notify.js">
   <link rel="modulepreload" href="/js/components/actions.js">
   <link rel="modulepreload" href="/js/components/comments.js">
-  <link rel="modulepreload" href="/js/components/compose.js">
   <link rel="modulepreload" href="/js/components/cookies.js">
   <link rel="modulepreload" href="/js/components/cropper.js">
   <link rel="modulepreload" href="/js/components/feed.js">
@@ -53,30 +60,24 @@
   <link rel="modulepreload" href="/js/components/userlist.js">
   <link rel="modulepreload" href="/js/components/video.js">
   <link rel="modulepreload" href="/js/dom.js">
-  <link rel="modulepreload" href="/js/drafts.js">
   <link rel="modulepreload" href="/js/forms.js">
   <link rel="modulepreload" href="/js/icons.js">
   <link rel="modulepreload" href="/js/push.js">
   <link rel="modulepreload" href="/js/router.js">
   <link rel="modulepreload" href="/js/store.js">
   <link rel="modulepreload" href="/js/update.js">
-  <link rel="modulepreload" href="/js/views/admin.js">
   <link rel="modulepreload" href="/js/views/auth.js">
   <link rel="modulepreload" href="/js/views/collections.js">
-  <link rel="modulepreload" href="/js/views/create.js">
   <link rel="modulepreload" href="/js/views/explore.js">
   <link rel="modulepreload" href="/js/views/help.js">
   <link rel="modulepreload" href="/js/views/home.js">
   <link rel="modulepreload" href="/js/views/inbox.js">
   <link rel="modulepreload" href="/js/views/legal.js">
-  <link rel="modulepreload" href="/js/views/live.js">
   <link rel="modulepreload" href="/js/views/messages.js">
   <link rel="modulepreload" href="/js/views/onboarding.js">
   <link rel="modulepreload" href="/js/views/profile.js">
   <link rel="modulepreload" href="/js/views/search.js">
   <link rel="modulepreload" href="/js/views/settings.js">
-  <link rel="modulepreload" href="/js/views/studio.js">
-  <link rel="modulepreload" href="/js/views/wallet.js">
   <link rel="modulepreload" href="/js/warm.js">
   <script type="module" src="/js/app.js"></script>
 </head>

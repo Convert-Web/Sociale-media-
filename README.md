@@ -13,10 +13,11 @@ autre service n'est repris. Les vidéos et musiques de démonstration sont gén�
 
 **Le design d’AURUM** : fond « encre » le soir, « papier » chaud le jour, dégradé de marque violet →
 rose et le point d'or du logo (le « A » d'AURUM), qui marque aussi l'onglet ouvert. Formes douces reprises du logo
-(photos de profil et icônes en « squircle », boutons en pilule), commandes en verre dépoli posées
-sur les vidéos. Dans le fil, chaque vidéo est une carte aux coins arrondis, avec le dock de
-navigation flottant en dessous, la barre d'actions (J'aime, commentaires, favoris, partage) en bas
-de la carte et le bouton « Suivre » à côté du nom. Titres en Bricolage Grotesque, textes en Inter
+(photos de profil et icônes en « squircle », boutons en pilule). Dans le fil, chaque vidéo ou photo
+remplit tout l'écran, bord à bord et toujours cadrée de la même façon, sans flou ni voile sombre :
+les onglets, la barre d'actions (J'aime, commentaires, favoris, partage), le nom avec son bouton
+« Suivre » et le dock de navigation sont posés directement dessus, lisibles grâce à une ombre
+discrète autour des lettres et des icônes. Titres en Bricolage Grotesque, textes en Inter
 (polices libres, licence SIL OFL, servies par l'application : `public/fonts`).
 
 ---
@@ -25,7 +26,7 @@ de la carte et le bouton « Suivre » à côté du nom. Titres en Bricolage Grot
 
 | | |
 |---|---|
-| **Fil vertical** | Une vidéo par écran, glisser pour la suivante, lecture immédiate et préchargement des suivantes (téléchargement par morceaux, lecture progressive). Toucher : pause ; double toucher : J'aime avec cœur animé ; appui long : vitesse (×0,5 à ×2), « Pas intéressé », masquer un créateur, enregistrer, copier le lien, signaler. Barre de lecture déplaçable, son activable, flèches et raccourcis clavier sur ordinateur, indicateur d'attente du réseau. En revenant au fil (après un profil, une vidéo, les messages), on retrouve la même vidéo au même instant ; toucher à nouveau Accueil charge de nouvelles vidéos. **Démarrage instantané** : pendant qu'on regarde, les vidéos suivantes se téléchargent (la prochaine en entier, celle d'après aussi sur une bonne connexion, le début des deux suivantes) et restent gardées sur le téléphone (environ 250 Mo, cache du service worker, conservé d'une visite à l'autre) ; les vidéos pas encore vues sont notées « À suivre », et à la prochaine ouverture le fil démarre aussitôt sur elles, sans attendre le serveur ni le réseau. Photos en carrousel et publications texte sur fond coloré dans le même fil. |
+| **Fil vertical** | Une vidéo par écran, glisser pour la suivante, lecture immédiate et préchargement des suivantes (téléchargement par morceaux, lecture progressive). Toucher : pause ; double toucher : J'aime avec cœur animé ; appui long : vitesse (×0,5 à ×2), « Pas intéressé », masquer un créateur, enregistrer, copier le lien, signaler. Barre de lecture déplaçable, son activable, flèches et raccourcis clavier sur ordinateur, indicateur d'attente du réseau. En revenant au fil (après un profil, une vidéo, les messages), on retrouve la même vidéo au même instant ; toucher à nouveau Accueil charge de nouvelles vidéos. **Démarrage instantané** : pendant qu'on regarde, les vidéos suivantes se téléchargent (la prochaine en entier, celle d'après aussi sur une bonne connexion, le début des deux suivantes) et restent gardées sur le téléphone (environ 250 Mo, cache du service worker, conservé d'une visite à l'autre) ; les vidéos pas encore vues sont notées « À suivre », et à la prochaine ouverture le fil démarre aussitôt sur elles, sans attendre le serveur ni le réseau. Photos en carrousel et publications texte sur fond coloré dans le même fil. **Image fixe** : vidéos et photos en plein écran (une vidéo horizontale est recadrée au centre ; dans le montage, des bandes montrent ce qui sera coupé), le fil ne glisse que de haut en bas, les photos d'un carrousel seulement de côté, sans rebond, sans zoom à deux doigts et sans image qu'on traîne. |
 | **L'Actu** | Onglet dédié : la une (choisie par l'administration ou la plus récente), « Le brief » des titres du moment, « Ça fait réagir » (l'actualité la plus commentée en vidéo), podcasts « À écouter » avec un lecteur qui continue de jouer pendant la navigation (commandes de l'écran verrouillé, reprise là où on s'était arrêté), vidéos des médias « À regarder » (lecteurs intégrés sans cookie), rubriques Monde, Économie, Tech, Sciences, Culture, Sport, Planète. Fiche de chaque actualité : résumé du média, « Lire sur … », partage, et **« Réagir en vidéo »** : la vidéo publiée porte « Réagit à : … » dans les fils et apparaît sur la fiche. Lu dans les flux publics des médias (RSS, chaînes YouTube, podcasts) relus toutes les 20 minutes ; seuls le titre, le court résumé, l'image et le lien sont gardés, jamais l'article. Sources gérées dans l'administration (ajout par adresse, recherche de podcasts, rubrique, retrait). |
 | **« Pour toi »** | Algorithme maison : qualité (J'aime, commentaires, partages, favoris, republications rapportés aux spectateurs), temps regardé, fraîcheur, coup de pouce aux nouvelles vidéos, variété (créateurs et sons), part de découverte, et centres d'intérêt appris de chaque compte (créateurs, hashtags, sons, catégories) qui s'estompent avec le temps. Choix des thèmes à l'inscription, remise à zéro et fil non personnalisé dans les réglages. Ouvert sans compte. |
 | **Abonnements, Amis** | Onglets du haut du fil : « Pour toi », « Abonnements » (vidéos et republications des comptes suivis), « Amis » (abonnements réciproques, comptes suggérés). |
@@ -45,6 +46,27 @@ de la carte et le bouton « Suivre » à côté du nom. Titres en Bricolage Grot
 | **Administration** | Vue d'ensemble (comptes, vidéos, vues, LIVE, ventes, espace vidéo), signalements (supprimer, arrêter un LIVE, suspendre), comptes (badge vérifié, suspension, administrateurs), publications, audience sans cookie, informations légales, contenu de démonstration, erreurs des navigateurs. |
 | **Page d'entrée** | Sans compte, on arrive d'abord sur une page d'entrée (« Créer un compte », « J'ai déjà un compte ») : le fil, l'Actu, les profils et les liens partagés sont réservés aux membres. Un lien partagé est gardé en mémoire (« Connecte-toi pour voir la vidéo de @… ») et s'ouvre juste après la connexion ou l'inscription. L'aide et les pages légales restent ouvertes. |
 | **Application** | Thème clair / sombre (fil toujours sombre), installable (icônes, plein écran), mise à jour en un toucher, pages légales (mentions, CGU, CGV des pièces, confidentialité), aide et règles de la communauté. |
+
+## Qualité, sécurité, conformité
+
+- **Sécurité** : HTTPS imposé (redirection et HSTS « preload »), politique de sécurité du contenu
+  (CSP), cookie de session `HttpOnly`/`Secure`/`SameSite`, en-tête anti-CSRF sur toute l'API,
+  mots de passe chiffrés (scrypt) ; aucune clé d'API côté navigateur (Stripe, Brevo, traduction,
+  base de données : uniquement sur le serveur).
+- **Anti-spam** : limites par adresse IP (connexion, créations de compte, API), champ piège et
+  délai minimal à l'inscription, rafales limitées par compte (publications, commentaires,
+  messages), compte bloqué après des essais de mot de passe ratés, e-mails jetables refusés,
+  filtre des propos.
+- **Accessibilité** : contrastes AA (4,5:1) en thème clair et sombre, textes de remplacement des
+  images, libellés des champs et des boutons ; audit axe-core sans aucune erreur sur 21 pages.
+- **Référencement** : titre et description par page, aperçu des liens (Open Graph, X/Twitter)
+  avec adresses complètes, `robots.txt`, `sitemap.xml`, vraie page 404 (statut 404).
+- **Vitesse** : écrans rares (caméra, LIVE, portefeuille, studio, administration) chargés à la
+  demande, icônes compressées (pngquant), cache long des polices et images, application gardée
+  sur le téléphone (service worker), ouverture instantanée.
+- **Données personnelles** : politique de confidentialité (RGPD) complète, CGU, CGV, mentions
+  légales (informations de l'éditeur à saisir dans Administration → Légal), bannière cookies
+  (refuser aussi simple qu'accepter), mesure d'audience anonyme sans cookie.
 
 ## Démarrer sur son ordinateur
 

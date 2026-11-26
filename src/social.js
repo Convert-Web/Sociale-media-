@@ -434,7 +434,7 @@ function pushText(type, body, user, what = 'ta vidéo') {
   switch (type) {
     case 'like': return p.likes && `a aimé ${what}.`;
     case 'follow': return p.follows && 'a commencé à te suivre.';
-    case 'invite_joined': return p.follows && 'a rejoint AURUM grâce à ton invitation 🎉';
+    case 'invite_joined': return p.follows && 'a rejoint AURUM avec ton invitation.';
     case 'follow_request': return p.follows && 'souhaite s’abonner à ton compte.';
     case 'follow_accept': return p.follows && 'a accepté ta demande d’abonnement.';
     case 'comment': return p.comments && `a commenté : ${clip(body)}`;

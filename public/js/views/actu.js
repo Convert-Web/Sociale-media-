@@ -46,7 +46,7 @@ function leadCard(it, reload, small = false) {
 // Carte d'épisode (à écouter) et carte vidéo (à regarder), en rangées défilantes
 function podCard(it, reload) {
   return h('div', { class: 'actu-pod' },
-    h('a', { href: `/actu/${it.id}`, class: 'actu-pod-art', onclick: open(it, reload) }, mediaImg(it.image)),
+    h('a', { href: `/actu/${it.id}`, class: 'actu-pod-art', 'aria-label': it.title, onclick: open(it, reload) }, mediaImg(it.image)),
     h('div', { class: 'actu-pod-text' }, h('a', { href: `/actu/${it.id}`, onclick: open(it, reload) }, h('b', null, it.title)), h('small', null, `${it.siteName}${it.duration ? ` · ${fmtTime(it.duration)}` : ''}`)),
     podcastButton(it));
 }

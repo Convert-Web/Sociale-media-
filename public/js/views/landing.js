@@ -2,7 +2,7 @@
 // liens partagés). Il crée un compte ou se connecte, puis il est emmené là où il voulait aller.
 import { safePath } from '../router.js';
 import { api, enc } from '../api.js';
-import { h, icon, avatar, logoMark, syncThemeColor, verifiedMark } from '../dom.js';
+import { h, avatar, logoMark, syncThemeColor, verifiedMark } from '../dom.js';
 import { rememberInvite, pendingInvite } from '../components/invite.js';
 
 // Ce que la personne voulait ouvrir (lien partagé, notification) : dit en clair sur la page
@@ -27,7 +27,7 @@ function intent(suite) {
 
 export function landingView(ctx) {
   ctx.title = 'AURUM — Crée ton compte ou connecte-toi';
-  ctx.description = 'Des vidéos courtes, l’actu du jour et ta communauté. Crée ton compte AURUM gratuitement.';
+  ctx.description = 'Des vidéos courtes de tes amis, et l’actu du jour en vidéo. Crée ton compte AURUM gratuitement.';
   // Page toujours sombre (comme le fil) : barre d'état et bandeau du haut en noir
   document.documentElement.classList.add('feed-mode');
   for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = '#000000';
@@ -47,29 +47,19 @@ export function landingView(ctx) {
     api.get(`/api/users/${enc(by)}`).then(({ user }) => {
       if (!user || user.locked) return;
       invite.hidden = false;
-      invite.replaceChildren(avatar(user, 'md'), h('span', null, h('b', null, user.displayName, user.verified ? verifiedMark() : null, ' t’invite sur AURUM 🎉'), h('small', null, 'Crée ton compte : vous serez connectés tout de suite.')));
+      invite.replaceChildren(avatar(user, 'sm'), h('span', null, h('b', null, user.displayName, user.verified ? verifiedMark() : null), h('small', null, 't’invite sur AURUM')));
     }).catch(() => {});
   }
-  const feature = (ic, title, text) => h('li', null, h('span', { class: 'land-ic' }, icon(ic)), h('span', null, h('b', null, title), h('small', null, text)));
-
   return h('div', { class: 'land' },
-    h('div', { class: 'land-bg', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')),
-    h('div', { class: 'land-main' },
-      h('div', { class: 'land-brand' }, logoMark(56), h('span', { class: 'land-name' }, 'AURUM')),
+    h('header', { class: 'land-top' }, logoMark(30), h('span', { class: 'land-name' }, 'AURUM')),
+    h('main', { class: 'land-main' },
       invite,
-      h('h1', null, 'Des vidéos courtes,', h('br'), 'l’actu du jour,', h('br'), h('span', { class: 'land-accent' }, 'et toi.')),
-      why
-        ? h('p', { class: 'land-why' }, icon('lock', 'icon-sm'), h('span', null, why))
-        : h('p', { class: 'land-lead' }, 'Filme, découvre et réagis à ce qui se passe, avec ta communauté.'),
-      h('ul', { class: 'land-features' },
-        feature('play', 'Pour toi', 'Un fil de vidéos qui apprend ce que tu aimes'),
-        feature('newspaper', 'L’Actu', 'Les infos du jour, et tes réactions en vidéo'),
-        feature('live', 'LIVE et messages', 'En direct et en privé avec tes amis'))),
-    h('div', { class: 'land-cta' },
+      h('h1', null, 'Filme ta journée.', h('br'), 'Regarde celle des autres.'),
+      h('p', { class: 'land-sub' }, why || 'Des vidéos courtes de tes amis, et l’actu du jour en vidéo.')),
+    h('footer', { class: 'land-cta' },
       h('a', { href: `/inscription${q}`, class: 'btn btn-lg btn-block land-primary' }, 'Créer un compte'),
-      h('a', { href: `/connexion${q}`, class: 'btn btn-lg btn-block land-secondary' }, 'J’ai déjà un compte'),
+      h('p', { class: 'land-login' }, 'Déjà inscrit ? ', h('a', { href: `/connexion${q}` }, 'Se connecter')),
       h('p', { class: 'land-legal' },
-        'En continuant, tu acceptes les ', h('a', { href: '/cgu' }, 'Conditions d’utilisation'),
-        ' et la ', h('a', { href: '/confidentialite' }, 'Politique de confidentialité'), '.',
-        h('br'), h('a', { href: '/aide' }, 'Besoin d’aide ?'))));
+        'En continuant, tu acceptes les ', h('a', { href: '/cgu' }, 'conditions d’utilisation'),
+        ' et la ', h('a', { href: '/confidentialite' }, 'politique de confidentialité'), '.')));
 }

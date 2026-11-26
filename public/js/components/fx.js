@@ -60,10 +60,3 @@ export function overlayEl(o, { editable = false } = {}) {
 export function paintOverlays(layer, fx, { editable = false } = {}) {
   layer.replaceChildren(...(fx?.overlays || []).map((o) => overlayEl(o, { editable })));
 }
-
-// Ajustement : remplir l'écran si l'image a presque la même forme que lui, sinon l'afficher entière
-export function fitFor(ar, box = { w: innerWidth, h: innerHeight }) {
-  if (!ar) return 'contain';
-  const screen = box.w / box.h;
-  return Math.abs(ar - screen) / screen < 0.14 ? 'cover' : 'contain';
-}

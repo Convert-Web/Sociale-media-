@@ -31,7 +31,7 @@ export function clearInvite() {
 }
 
 export const inviteLink = () => `${location.origin}/rejoindre?par=${encodeURIComponent(store.user?.username || '')}`;
-const inviteText = () => 'Rejoins-moi sur AURUM 🎬 Des vidéos courtes, l’actu du jour et nous.';
+const inviteText = () => 'Rejoins-moi sur AURUM :';
 
 async function copy(url) {
   try {
@@ -57,8 +57,8 @@ export function inviteFriends() {
   const body = h('div', { class: 'invite' },
     h('div', { class: 'invite-hero' },
       h('span', { class: 'invite-me' }, avatar(store.user, 'lg')),
-      h('b', null, 'Plus on est, plus c’est fun'),
-      h('p', null, 'Envoie ton lien : tes amis arrivent sur une page à ton nom, et vous vous retrouvez direct sur AURUM.')),
+      h('b', null, 'Invite tes amis'),
+      h('p', null, 'Ils arrivent sur une page à ton nom et te suivent dès leur inscription.')),
     already,
     h('button', { type: 'button', class: 'btn btn-primary btn-lg btn-block', onclick: async () => {
       if (navigator.share) {
@@ -70,7 +70,7 @@ export function inviteFriends() {
         }
       }
       copy(url);
-    } }, icon('share', 'icon-sm'), 'Envoyer mon invitation'),
+    } }, icon('share', 'icon-sm'), 'Envoyer le lien'),
     h('div', { class: 'share-apps invite-apps' },
       app('c-wa', 'whatsapp', 'WhatsApp', `https://wa.me/?text=${encodeURIComponent(full)}`),
       app('c-sms', 'sms', 'SMS', `sms:?&body=${encodeURIComponent(full)}`),

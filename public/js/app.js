@@ -20,12 +20,17 @@ import { profileView } from './views/profile.js';
 import { tagView, soundView } from './views/collections.js';
 import { inboxView, activityView } from './views/inbox.js';
 import { messagesView } from './views/messages.js';
-import { createView } from './views/create.js';
-import { liveListView, liveRoomView } from './views/live.js';
-import { walletView } from './views/wallet.js';
-import { studioView } from './views/studio.js';
+// Écrans plus rarement ouverts (caméra, LIVE, portefeuille, studio, administration) : chargés au
+// moment où on les ouvre. La première visite (page d'entrée, fil) télécharge moins de code ;
+// le téléphone les garde ensuite (sw.js).
+const lazy = (load, name) => async (ctx) => (await load())[name](ctx);
+const createView = lazy(() => import('./views/create.js'), 'createView');
+const liveListView = lazy(() => import('./views/live.js'), 'liveListView');
+const liveRoomView = lazy(() => import('./views/live.js'), 'liveRoomView');
+const walletView = lazy(() => import('./views/wallet.js'), 'walletView');
+const studioView = lazy(() => import('./views/studio.js'), 'studioView');
 import { settingsView, getTheme, setTheme } from './views/settings.js';
-import { adminView } from './views/admin.js';
+const adminView = lazy(() => import('./views/admin.js'), 'adminView');
 import { loginView, signupView, forgotView, resetView, logout } from './views/auth.js';
 import { welcomeView } from './views/onboarding.js';
 import { landingView } from './views/landing.js';
@@ -294,7 +299,12 @@ function errorView(err) {
 
 function notFoundView(ctx) {
   ctx.title = 'Page introuvable — AURUM';
-  return h('section', { class: 'nf' }, h('div', { class: 'nf-code', 'aria-hidden': 'true' }, '404'), h('h1', null, 'Cette page n’existe pas.'), h('p', null, 'Le lien est peut-être incomplet, ou la page a été retirée.'), h('a', { href: '/', class: 'btn btn-primary btn-lg' }, 'Retour à l’accueil'));
+  return h('section', { class: 'nf' },
+    logoMark(44),
+    h('p', { class: 'nf-code' }, 'Erreur 404'),
+    h('h1', null, 'Cette page n’existe pas.'),
+    h('p', null, 'Le lien est peut-être incomplet, ou la page a été retirée.'),
+    h('a', { href: '/', class: 'btn btn-lg nf-home' }, store.user ? 'Retour à l’accueil' : 'Découvrir AURUM'));
 }
 
 function match(pathname) {
@@ -358,7 +368,8 @@ async function render(opts = {}) {
 
   // Sans compte : d'abord la page d'entrée (créer un compte ou se connecter), puis la page voulue.
   // Exception : une vidéo partagée par un lien se regarde tout de suite (avec « Rejoindre AURUM »)
-  if (!u && !OPEN_PATHS.has(url.pathname) && !SHARED_VIDEO.test(url.pathname)) return navigate(here === '/' ? '/rejoindre' : `/rejoindre?suite=${enc(here)}`, { replace: true });
+  // Adresse inconnue : la page 404, avec ou sans compte (pas la page d'entrée)
+  if (route && !u && !OPEN_PATHS.has(url.pathname) && !SHARED_VIDEO.test(url.pathname)) return navigate(here === '/' ? '/rejoindre' : `/rejoindre?suite=${enc(here)}`, { replace: true });
 
   if (route) {
     if (route.access === 'guest' && u) return navigate(url.searchParams.get('suite') || '/', { replace: true });
@@ -370,7 +381,7 @@ async function render(opts = {}) {
   }
 
   // Aide et pages légales : dans l'application avec un compte, en page simple sans
-  const layout = !route ? 'app' : route.layout === 'auto' ? (u ? 'app' : 'bare') : route.layout;
+  const layout = !route || route.layout === 'auto' ? (u ? 'app' : 'bare') : route.layout;
   const mine = [];
   const ctx = { params, query: url.searchParams, route, pop: Boolean(opts.pop), title: null, description: null, onCleanup: (fn) => typeof fn === 'function' && mine.push(fn) };
 

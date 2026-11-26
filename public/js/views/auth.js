@@ -64,7 +64,9 @@ async function afterAuth(ctx, user, { fresh = false } = {}) {
 export function loginView(ctx) {
   ctx.title = 'Connexion — AURUM';
   const login = h('input', { class: 'input', type: 'text', autocomplete: 'username', required: true, placeholder: 'E-mail ou nom d’utilisateur', autocapitalize: 'none' });
-  const pw = passwordInput({ placeholder: 'Mot de passe' });
+  // Connexion : seulement « rempli » (un mot de passe faux reçoit le message du serveur, sans
+  // dévoiler les règles des nouveaux mots de passe)
+  const pw = passwordInput({ placeholder: 'Mot de passe', minlength: null });
   const submit = h('button', { type: 'submit', class: 'btn btn-primary btn-lg btn-block' }, 'Se connecter');
   const error = formError();
   const form = h(

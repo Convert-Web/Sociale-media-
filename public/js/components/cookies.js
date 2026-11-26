@@ -65,21 +65,21 @@ export function cookieBanner(force = false) {
       banner = null;
     }, 220);
   };
+  // Court, et deux boutons de même poids : refuser est aussi simple qu'accepter
   banner = h(
     'section',
     { class: 'cookie-banner', role: 'region', 'aria-label': 'Cookies' },
     h(
       'p',
       null,
-      h('b', null, 'Ni publicité, ni pistage. '),
-      'AURUM utilise un seul cookie, indispensable pour rester connecté, et compte ses visites de façon anonyme, sans cookie. ',
+      'Pas de publicité ni de pistage : seulement un cookie de connexion et un comptage anonyme des visites. ',
       h('a', { href: '/confidentialite#cookies' }, 'En savoir plus'),
     ),
     h(
       'div',
       { class: 'cookie-actions' },
-      h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: () => close('no') }, 'Refuser la mesure'),
-      h('button', { type: 'button', class: 'btn btn-primary btn-sm', onclick: () => close('ok') }, 'D’accord'),
+      h('button', { type: 'button', class: 'btn btn-sm', onclick: () => close('no') }, 'Refuser'),
+      h('button', { type: 'button', class: 'btn btn-sm', onclick: () => close('ok') }, 'Accepter'),
     ),
   );
   document.body.append(banner);
