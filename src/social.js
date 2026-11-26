@@ -88,9 +88,9 @@ function serializeUser(ctx, u, viewer) {
 
 function prefs(u) {
   try {
-    return { likes: true, comments: true, follows: true, mentions: true, messages: true, live: true, ...JSON.parse(u.notify_prefs || '{}') };
+    return { likes: true, comments: true, follows: true, mentions: true, messages: true, live: true, subject: true, ...JSON.parse(u.notify_prefs || '{}') };
   } catch {
-    return { likes: true, comments: true, follows: true, mentions: true, messages: true, live: true };
+    return { likes: true, comments: true, follows: true, mentions: true, messages: true, live: true, subject: true };
   }
 }
 
@@ -126,6 +126,7 @@ const POST_SELECT = `
          su.username AS s_username, su.display_name AS s_display_name, su.avatar AS s_avatar, sv.mime AS s_mime,
          dp.id AS d_id, du.username AS d_username, du.display_name AS d_display_name,
          p.journal_id, ji.title AS actu_title, ji.site_name AS actu_site, ji.kind AS actu_kind,
+         p.subject_id, sj.title AS subject_title, sj.winner_post_id AS subject_winner,
          (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS like_count,
          (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) AS comment_count,
          (SELECT COUNT(*) FROM bookmarks b WHERE b.post_id = p.id) AS save_count,
@@ -147,7 +148,8 @@ const POST_SELECT = `
   LEFT JOIN videos sv ON sv.id = s.video_id AND sv.complete = 1
   LEFT JOIN posts dp ON dp.id = COALESCE(p.duet_of, p.stitch_of)
   LEFT JOIN users du ON du.id = dp.user_id
-  LEFT JOIN journal_items ji ON ji.id = p.journal_id`;
+  LEFT JOIN journal_items ji ON ji.id = p.journal_id
+  LEFT JOIN subjects sj ON sj.id = p.subject_id`;
 
 function parseFx(value) {
   if (!value) return null;
@@ -232,6 +234,8 @@ function serializePost(ctx, row, viewer) {
     fx: parseFx(row.fx),
     // Vidéo qui réagit à une actualité de l'Actu
     actu: row.journal_id && row.actu_title ? { id: row.journal_id, title: row.actu_title, siteName: row.actu_site || '', kind: row.actu_kind || 'article' } : null,
+    // Réponse au Sujet du jour (gold : elle a gagné l'Or du jour)
+    subject: row.subject_id && row.subject_title ? { id: row.subject_id, title: row.subject_title, gold: row.subject_winner === row.id } : null,
     duetOf: row.duet_of && source ? source : null,
     stitchOf: row.stitch_of && source ? source : null,
     pinned: Boolean(row.pinned_at),

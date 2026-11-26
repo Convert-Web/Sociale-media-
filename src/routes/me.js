@@ -11,7 +11,7 @@ const { learn } = require('../feed');
 const { CATEGORY_IDS } = require('../catalog');
 
 const DM_POLICIES = ['everyone', 'friends', 'none'];
-const NOTIFY_KEYS = ['likes', 'comments', 'follows', 'mentions', 'messages', 'live'];
+const NOTIFY_KEYS = ['likes', 'comments', 'follows', 'mentions', 'messages', 'live', 'subject'];
 
 module.exports = function meRoutes(ctx) {
   const r = express.Router();

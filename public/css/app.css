@@ -8049,3 +8049,329 @@ body.has-player .main {
     padding: 56px 0 36px;
   }
 }
+
+/* ===========================================================================
+   Le Sujet du jour : carte en tête du fil, page du sujet, puces, caméra
+   =========================================================================== */
+.subject-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sun);
+}
+.btn-gold {
+  background: var(--sun);
+  color: #1d1600;
+  font-weight: 800;
+}
+.btn-gold:hover {
+  background: #ffe27a;
+}
+/* Carte en tête de « Pour toi » : un écran du fil, noir et or */
+.feed-head {
+  position: relative;
+  height: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--card-t) + 60px) 24px calc(var(--card-b) + 36px);
+  background: #0b0a10;
+  color: #fff;
+  text-align: center;
+  overflow: hidden;
+}
+.subject-card-in {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 440px;
+}
+.subject-card-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+}
+.subject-card-top span {
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(255, 255, 255, 0.62);
+}
+.subject-card-title {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 8.6vw, 46px);
+  font-weight: 800;
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.subject-sponsor {
+  color: var(--sun);
+  font-weight: 700;
+  font-size: 14px;
+}
+.subject-card-time {
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 14px;
+  font-weight: 600;
+}
+.subject-card-friends {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+}
+.subject-faces {
+  display: inline-flex;
+}
+.subject-faces .avatar {
+  margin-left: -6px;
+  box-shadow: 0 0 0 2px #0b0a10;
+}
+.subject-faces .avatar:first-child {
+  margin-left: 0;
+}
+.subject-card-actions {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 8px;
+}
+.subject-card-actions .btn {
+  width: min(100%, 320px);
+  justify-content: center;
+}
+.subject-card-more {
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.subject-card-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--card-b) + 6px);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* Page du sujet : une carte noire (les deux thèmes), puis les réponses */
+.subject-hero {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 22px 18px 18px;
+  border-radius: 24px;
+  background: #0b0a10;
+  color: #fff;
+}
+.subject-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.64);
+}
+.subject-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+}
+.subject-title {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 7.6vw, 40px);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.subject-actu {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.subject-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 14px;
+  font-weight: 600;
+}
+.subject-done {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+}
+.subject-check {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--sun);
+  color: #1d1600;
+}
+.subject-done-link {
+  margin-left: auto;
+  color: var(--sun);
+  font-weight: 700;
+}
+.subject-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 13.5px;
+}
+.subject-stats b {
+  color: #fff;
+}
+.subject-golds {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.subject-lock {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 26px 18px;
+  border-radius: 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  text-align: center;
+}
+.subject-lock-ic {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--sun) 26%, transparent);
+  color: var(--fg);
+}
+.subject-lock p {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.subject-lock .subject-faces .avatar {
+  box-shadow: 0 0 0 2px var(--card);
+}
+.subject-tabs {
+  margin-bottom: 10px;
+}
+.subject-gold-card {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 10px;
+  border-radius: 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.subject-gold-media {
+  position: relative;
+  display: block;
+  aspect-ratio: 9 / 16;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+}
+.subject-gold-media img,
+.subject-gold-media .tile-text {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.subject-gold-info {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.subject-gold-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.subject-gold-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.subject-gold-info small {
+  color: var(--muted);
+}
+.subject-how {
+  margin: 26px 4px 8px;
+  color: var(--muted);
+  font-size: 13.5px;
+  text-align: center;
+}
+.subject-loading {
+  display: grid;
+  place-items: center;
+  padding: 60px 0;
+}
+/* Fil : une réponse porte le sujet ; celle qui a gagné, l'Or du jour */
+.info-chip.subject-chip .subject-dot {
+  width: 7px;
+  height: 7px;
+}
+.info-chip.subject-chip.gold {
+  color: var(--sun);
+}
+/* Caméra et publication : le sujet auquel on répond */
+.cam-kind.cam-subject {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.post-subject {
+  grid-template-columns: 36px minmax(0, 1fr);
+  background: color-mix(in srgb, var(--sun) 16%, var(--bg-2));
+}
+.post-subject .post-actu-ic {
+  background: #0b0a10;
+}

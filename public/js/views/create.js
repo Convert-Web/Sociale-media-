@@ -9,6 +9,7 @@ import { h, icon, avatar, toast, spinner, emptyState, short, duration, shrinkIma
 import { openSheet, closeSheet } from '../components/sheet.js';
 import { readVideoInfo, isVideoFile, maxSeconds, reportImportIssue } from '../components/video.js';
 import { sendInBackground } from '../components/uploads.js';
+import { markSending, subjectAnswered } from './subject.js';
 import { FILTERS, filterCss, fxLayer, paintOverlays, overlayEl, TEXT_COLORS, STICKERS } from '../components/fx.js';
 import { recorderMime, extFor, loadVideoBlob, mixSound, duet as composeDuet, stitch as composeStitch, frameAt, mediaFor, onScreen } from '../components/compose.js';
 import { attachMentions } from '../components/mentions.js';
@@ -111,6 +112,7 @@ export async function createView(ctx) {
     coverAt: 0.5,
     draftId: null,
     actu: null, // actualité à laquelle la vidéo réagit (« Réagir en vidéo » depuis l'Actu)
+    subject: null, // Sujet du jour auquel on répond (15 secondes par défaut)
   };
   const root = h('div', { class: 'create' });
   document.documentElement.classList.add('feed-mode');
@@ -136,6 +138,20 @@ export async function createView(ctx) {
       const { item } = await api.get(`/api/actu/${Number(q.get('actu'))}`);
       S.actu = { id: item.id, title: item.title, siteName: item.siteName, kind: item.kind };
       if (!S.body) S.body = '#actu ';
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  }
+  // Réponse au Sujet du jour : le sujet accompagne la publication, 15 secondes par défaut
+  if (q.get('sujet')) {
+    try {
+      const d = await api.get(`/api/subjects/${Number(q.get('sujet'))}`);
+      if (!d.subject.open) throw new Error('Ce sujet est terminé : réponds au sujet du jour !');
+      if (d.me.answered) toast('Tu as déjà répondu à ce sujet : cette vidéo sera publiée normalement.');
+      else {
+        S.subject = { id: d.subject.id, title: d.subject.title };
+        S.maxDur = Math.min(15, S.maxDur);
+      }
     } catch (err) {
       toast(err.message, 'error');
     }
@@ -769,7 +785,9 @@ export async function createView(ctx) {
     paintModes();
 
     const top = h('header', { class: 'cam-top' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Fermer', onclick: leave }, icon('x')), soundChip, h('span', { class: 'icon-btn' }));
-    const kindNote = S.kind
+    const kindNote = !S.kind && S.subject
+      ? h('div', { class: 'cam-kind cam-subject' }, h('i', { class: 'subject-dot', 'aria-hidden': 'true' }), h('span', null, `Sujet du jour : ${S.subject.title}`))
+      : S.kind
       ? h('div', { class: 'cam-kind' }, icon(S.kind === 'duet' ? 'duet' : 'scissors', 'icon-sm'), S.kind === 'duet' ? `Duo avec @${S.source.author.username}` : `Stitch avec @${S.source.author.username}`, S.kind === 'duet' ? h('small', null, 'Avec des écouteurs, le son de l’original ne se mêle pas au tien.') : null)
       : S.actu
         ? h('div', { class: 'cam-kind cam-actu' }, icon('newspaper', 'icon-sm'), h('span', null, `Ta réaction à : ${S.actu.title}`))
@@ -1207,10 +1225,19 @@ export async function createView(ctx) {
         h('label', { class: 'set-row static' }, h('span', { class: 'set-ic' }, icon('compass')), h('span', { class: 'set-text' }, 'Catégorie (Explorer)', category)),
         tComments.el, isVideo ? tDuet.el : null, isVideo ? tStitch.el : null, S.mode !== 'text' ? tDl.el : null),
       S.sound && isVideo ? h('p', { class: 'muted small' }, icon('music', 'icon-xs'), ` Son : ${S.sound.title}`) : null,
+      subjectBanner(),
       actuBanner(),
       h('div', { class: 'post-actions' }, draft, publish));
     setStep(el, () => coverUrl && URL.revokeObjectURL(coverUrl));
     attachMentions(body, { placement: 'inline' });
+  }
+
+  // Le Sujet du jour auquel on répond
+  function subjectBanner() {
+    if (!S.subject) return null;
+    return h('div', { class: 'post-actu post-subject' },
+      h('span', { class: 'post-actu-ic' }, h('i', { class: 'subject-dot', 'aria-hidden': 'true' })),
+      h('span', { class: 'post-actu-text' }, h('small', null, 'Tu réponds au sujet du jour'), h('b', null, S.subject.title), h('small', null, 'Tes amis verront ta réponse, et toi la leur.')));
   }
 
   // L'actualité à laquelle on réagit (retirable)
@@ -1287,11 +1314,21 @@ export async function createView(ctx) {
       allowStitch: S.allowStitch,
       allowDownload: S.allowDownload,
       actuId: S.actu?.id || null,
+      subjectId: S.subject?.id || null,
+    };
+    // Réponse au Sujet du jour : on retourne sur le sujet, les réponses des autres s'y débloquent
+    const answered = (post) => {
+      if (!post?.subject) return false;
+      subjectAnswered();
+      toast('Réponse envoyée : découvre celles des autres !');
+      navigate(`/sujet/${post.subject.id}`, { replace: true });
+      return true;
     };
     try {
       if (S.mode === 'text') {
         const { post } = await api.post('/api/posts', { ...common, bg: S.bg });
         await done();
+        if (answered(post)) return;
         toast('Publié !');
         return navigate(`/@${me.username}/video/${post.id}`, { replace: true });
       }
@@ -1307,6 +1344,7 @@ export async function createView(ctx) {
         const { post } = await api.post('/api/posts', { ...common, images: urls });
         overlay.remove();
         await done();
+        if (answered(post)) return;
         toast('Publié !');
         return navigate(`/@${me.username}/video/${post.id}`, { replace: true });
       }
@@ -1336,16 +1374,25 @@ export async function createView(ctx) {
         duetOf: S.kind === 'duet' ? S.source.id : null,
         stitchOf: S.kind === 'stitch' ? S.source.id : null,
       };
+      const subjectId = S.subject?.id || null;
+      if (subjectId) markSending(subjectId);
       sendInBackground({
         file,
         info,
-        title: S.body.trim().slice(0, 40) || 'Ta vidéo',
+        title: S.body.trim().slice(0, 40) || (subjectId ? 'Ta réponse' : 'Ta vidéo'),
         finish: async (video) => {
           const { post } = await api.post('/api/posts', { ...payload, videoId: video.id });
-          return { href: `/@${me.username}/video/${post.id}`, message: 'Ta vidéo est en ligne !', post };
+          if (post.subject) subjectAnswered();
+          return post.subject
+            ? { href: `/sujet/${post.subject.id}`, message: 'Ta réponse est en ligne : découvre celles des autres !', post }
+            : { href: `/@${me.username}/video/${post.id}`, message: 'Ta vidéo est en ligne !', post };
         },
       });
       await done();
+      if (subjectId) {
+        toast('Ta réponse s’envoie : les réponses des autres se débloquent dès qu’elle est en ligne');
+        return navigate(`/sujet/${subjectId}`, { replace: true });
+      }
       toast('Envoi en cours : tu peux continuer à regarder des vidéos');
       navigate(`/@${me.username}`, { replace: true });
     } catch (err) {

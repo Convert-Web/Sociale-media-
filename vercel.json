@@ -5,7 +5,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?:abonnements|amis|explorer|actu(?:/[0-9]+)?|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?)?",
+      "source": "/((?:abonnements|amis|explorer|actu(?:/[0-9]+)?|sujet(?:/[0-9]+)?|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?)?",
       "destination": "/index.html"
     }
   ],
@@ -40,7 +40,7 @@
       ]
     },
     {
-      "source": "/((?:abonnements|amis|explorer|actu(?:/[0-9]+)?|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?)?",
+      "source": "/((?:abonnements|amis|explorer|actu(?:/[0-9]+)?|sujet(?:/[0-9]+)?|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?)?",
       "headers": [
         {
           "key": "Cache-Control",
@@ -105,6 +105,16 @@
           "value": "public, max-age=604800"
         }
       ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/subject",
+      "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/subject",
+      "schedule": "0 18 * * *"
     }
   ]
 }

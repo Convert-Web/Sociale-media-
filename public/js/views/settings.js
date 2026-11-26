@@ -177,7 +177,7 @@ export async function settingsView(ctx) {
     return h('div', { class: 'page settings' }, head('Notifications'),
       h('section', { class: 'set-group' }, h('h2', null, 'Sur cet appareil'), pushRow),
       group('Dans l’application', local('sound', 'Son des notifications', 'Un petit son quand quelque chose arrive'), local('banner', 'Bannières', 'Un aperçu en haut de l’écran, à toucher pour l’ouvrir'), listen),
-      group('Me prévenir pour', pref('messages', 'Messages'), pref('comments', 'Commentaires et réponses'), pref('mentions', 'Mentions'), pref('follows', 'Nouveaux abonnés'), pref('live', 'LIVE des comptes suivis'), pref('likes', 'J’aime et cadeaux')),
+      group('Me prévenir pour', pref('subject', 'Le sujet du jour (19 h)'), pref('messages', 'Messages'), pref('comments', 'Commentaires et réponses'), pref('mentions', 'Mentions'), pref('follows', 'Nouveaux abonnés'), pref('live', 'LIVE des comptes suivis'), pref('likes', 'J’aime et cadeaux')),
     );
   }
 

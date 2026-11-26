@@ -8,6 +8,7 @@ import { verticalFeed } from '../components/feed.js';
 import { takeReels, pendingReels, prefetchReels, saveUpcoming } from '../components/video.js';
 import { needLogin, follow } from '../components/actions.js';
 import { openComments } from '../components/comments.js';
+import { todaySubject, lastSubject, subjectCard, wantsCard } from './subject.js';
 
 function darkTop(ctx) {
   const metas = [...document.querySelectorAll('meta[name="theme-color"]')];
@@ -132,9 +133,14 @@ export async function homeView(ctx) {
       first = takeReels();
     }
   }
+  // Le Sujet du jour, en tête du fil tant qu'on n'y a pas répondu (sans retarder l'ouverture)
+  let subject = kept.has('foryou') ? null : await Promise.race([todaySubject(), new Promise((r) => setTimeout(() => r(null), 600))]);
   return withLive(keptScreen(ctx, 'foryou', top, (refresh) => {
+    const d = subject || lastSubject();
+    subject = null;
     const feed = verticalFeed({
       onRefresh: refresh,
+      head: wantsCard(d) ? subjectCard(d) : null,
       initial: first?.posts || [],
       more: first ? first.hasMore : true,
       load: async (seen) => {

@@ -12,6 +12,7 @@ const { learn, SIGNALS } = require('../feed');
 const { attachVideo } = require('./videos');
 const { CATEGORY_IDS } = require('../catalog');
 const { dayOf } = require('../analytics');
+const { canAnswer } = require('../subjects');
 
 // Filtres (appliqués à la lecture, la vidéo d'origine n'est jamais recompressée)
 const FILTERS = ['vif', 'chaud', 'froid', 'noir', 'vintage', 'reve', 'neon', 'sepia', 'contraste', 'pastel', 'nuit', 'doux'];
@@ -132,6 +133,16 @@ module.exports = function postRoutes(ctx) {
       if (!item) fail(400, 'Cette actualité n’est plus disponible.');
       journalId = item.id;
     }
+    // Réponse au Sujet du jour : le sujet doit être ouvert ; une seule réponse par personne (une
+    // deuxième publication reste publiée, simplement sans lien avec le sujet)
+    let subjectId = null;
+    if (b.subjectId) {
+      const s = await db.get('SELECT * FROM subjects WHERE id = ?', intParam(b.subjectId));
+      if (!s) fail(400, 'Ce sujet n’existe plus.');
+      if (!canAnswer(s)) fail(400, Date.now() < s.opens_at ? 'Ce sujet n’est pas encore ouvert.' : 'Ce sujet est terminé : réponds au sujet du jour !');
+      const already = await db.get('SELECT 1 AS x FROM posts WHERE subject_id = ? AND user_id = ?', s.id, req.user.id);
+      if (!already) subjectId = s.id;
+    }
     // Couverture choisie (image envoyée avant)
     let cover = video?.poster || null;
     if (video && b.cover) {
@@ -143,11 +154,11 @@ module.exports = function postRoutes(ctx) {
     const postId = await db.transaction(async (t) => {
       const { lastInsertRowid: id } = await t.run(
         `INSERT INTO posts (user_id, body, image, video_id, created_at, flagged, privacy, allow_comments, allow_duet, allow_stitch, allow_download,
-                            category, fx, bg, duet_of, stitch_of, sound_id, journal_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            category, fx, bg, duet_of, stitch_of, sound_id, journal_id, subject_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         req.user.id, body, video ? cover : images[0] || null, video?.id || null, now, flagged, privacy,
         flag(b.allowComments) ? 1 : 0, flag(b.allowDuet) ? 1 : 0, flag(b.allowStitch) ? 1 : 0, flag(b.allowDownload) ? 1 : 0,
-        category, fx ? JSON.stringify(fx) : null, bg, duetOf, stitchOf, soundId, journalId,
+        category, fx ? JSON.stringify(fx) : null, bg, duetOf, stitchOf, soundId, journalId, subjectId,
       );
       for (let i = 1; i < images.length; i++) await t.run('INSERT INTO post_media (post_id, url, position) VALUES (?, ?, ?)', id, images[i], i);
       for (const tag of extractTags(body)) await t.run('INSERT OR IGNORE INTO post_tags (post_id, tag) VALUES (?, ?)', id, tag);

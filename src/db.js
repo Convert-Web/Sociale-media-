@@ -446,6 +446,27 @@ CREATE TABLE IF NOT EXISTS translations (
   created_at  INTEGER NOT NULL
 );
 
+-- Le Sujet du jour : un sujet par jour, ouvert de 19 h à 19 h (heure de Paris), choisi tout seul ou
+-- programmé par l'administration (sujet partenaire, avec un lot) ; l'Or du jour va à la réponse la plus aimée
+CREATE TABLE IF NOT EXISTS subjects (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  day             TEXT NOT NULL UNIQUE,
+  title           TEXT NOT NULL,
+  kind            TEXT NOT NULL DEFAULT 'fun',
+  pool_key        TEXT,
+  journal_id      INTEGER,
+  sponsor         TEXT,
+  prize           TEXT,
+  planned_by      INTEGER,
+  opens_at        INTEGER NOT NULL,
+  closes_at       INTEGER NOT NULL,
+  notified_at     INTEGER,
+  winner_post_id  INTEGER,
+  settled_at      INTEGER,
+  created_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_subjects_settle ON subjects(settled_at, closes_at);
+
 -- Photos envoyées (stockées dans la base : les hébergeurs gratuits effacent leurs fichiers)
 CREATE TABLE IF NOT EXISTS media (
   id          TEXT PRIMARY KEY,
@@ -512,6 +533,8 @@ const COLUMNS = [
   ['posts', 'share_count', 'INTEGER NOT NULL DEFAULT 0'],
   // Vidéo qui réagit à une actualité (« Réagir en vidéo »)
   ['posts', 'journal_id', 'INTEGER'],
+  // Réponse au Sujet du jour
+  ['posts', 'subject_id', 'INTEGER'],
   // Rubrique d'une source et de ses éléments (À la une, Monde, Tech…)
   ['journal_sources', 'topic', 'TEXT'],
   ['journal_items', 'topic', 'TEXT'],
@@ -625,6 +648,7 @@ async function openDatabase({ url, authToken }) {
     CREATE INDEX IF NOT EXISTS idx_messages_post ON messages(post_id) WHERE post_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_notifications_comment ON notifications(comment_id) WHERE comment_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_posts_journal ON posts(journal_id) WHERE journal_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_posts_subject ON posts(subject_id, user_id) WHERE subject_id IS NOT NULL;
   `);
   await upgradeFromAurum(client, have);
   await tidyLabels(client);
