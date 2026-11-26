@@ -6,7 +6,7 @@ import { store } from '../store.js';
 import { navigate } from '../router.js';
 import { h, icon } from '../dom.js';
 
-const UPDATED = '22 novembre 2026';
+const UPDATED = '26 novembre 2026';
 
 let cache = null;
 async function legalData() {
@@ -74,6 +74,18 @@ function pages(d) {
         p('Les contenus sont publiés sous la responsabilité de leurs auteurs. L’éditeur agit promptement pour retirer un contenu manifestement illicite qui lui est signalé.'),
         h2('9. Droit applicable'),
         p('Ces conditions sont soumises au droit français. En cas de litige, une solution amiable est recherchée en priorité ; pour un consommateur, le médiateur est : ', v('mediatorName'), L.mediatorUrl ? [' (', h('a', { href: L.mediatorUrl, target: '_blank', rel: 'noopener' }, L.mediatorUrl), ')'] : '', '.'),
+        h2('10. Accès au service'),
+        p('Le service est accessible gratuitement à toute personne disposant d’un accès à internet. L’éditeur s’efforce de le maintenir disponible, sans pouvoir le garantir : il peut être interrompu pour maintenance, mise à jour ou en cas de panne d’un prestataire.'),
+        h2('11. Propriété intellectuelle d’AURUM'),
+        p('Le nom AURUM, son logo, son interface, ses textes et son code sont protégés. Toute reproduction ou réutilisation sans autorisation écrite de l’éditeur est interdite.'),
+        h2('12. Fin du compte'),
+        p('Tu peux supprimer ton compte à tout moment (Réglages → Compte → Supprimer mon compte) : tes contenus et tes données sont alors effacés. L’éditeur peut suspendre ou supprimer un compte en cas de manquement grave ou répété à ces conditions, après avoir, sauf urgence, informé la personne concernée.'),
+        h2('13. Données personnelles'),
+        p('Le traitement de tes données est décrit dans la ', h('a', { href: '/confidentialite' }, 'politique de confidentialité'), '.'),
+        h2('14. Modification des conditions'),
+        p('Ces conditions peuvent évoluer. En cas de changement important, tu en es informé dans l’application avant son entrée en vigueur ; si tu n’es pas d’accord, tu peux supprimer ton compte.'),
+        h2('15. Contact'),
+        p('Pour toute question sur ces conditions : ', mail(), '.'),
       ],
     },
 
@@ -121,8 +133,20 @@ function pages(d) {
         h2('Cookies', 'cookies'),
         p('Un seul cookie est déposé : celui de la session, indispensable pour rester connecté. La mesure d’audience ne dépose aucun cookie ; tu peux l’accepter ou la refuser quand tu veux.'),
         h('p', null, h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: () => document.dispatchEvent(new CustomEvent('vibz:cookies')) }, 'Gérer mon choix')),
+        h2('Transferts hors de l’Union européenne'),
+        p('Les serveurs de l’application et la base de données sont situés dans l’Union européenne. Certains prestataires sont des sociétés américaines (Vercel, Stripe) : si des données sont transférées hors de l’Union, ces transferts sont encadrés par le cadre de protection des données UE–États-Unis ou par les clauses contractuelles types de la Commission européenne.'),
+        h2('Sécurité'),
+        ul('Connexion chiffrée (HTTPS) imposée sur tout le service.', 'Mots de passe jamais conservés en clair (chiffrement scrypt), compte bloqué temporairement après plusieurs essais ratés.', 'Cookie de session inaccessible aux scripts (HttpOnly) et limité au site.', 'Accès à l’administration réservé, actions de modération tracées.'),
+        h2('Mineurs'),
+        p('AURUM est réservé aux personnes de 13 ans et plus. Avant 15 ans, l’inscription se fait avec l’accord d’un parent, qui peut exercer les droits ci-dessous pour son enfant. Un compte créé par une personne trop jeune est supprimé dès que nous en avons connaissance.'),
+        h2('Recommandations et décisions automatisées'),
+        p('Le fil « Pour toi » est classé automatiquement selon ton activité. Ce classement n’a aucun effet juridique sur toi ; tu peux le désactiver à tout moment (Réglages → Confidentialité → fil non personnalisé). Le filtre automatique des propos peut masquer un contenu ; une personne de l’équipe examine les signalements.'),
         h2('Tes droits'),
-        ul('Accès et portabilité : Réglages → Compte → Télécharger mes données.', 'Rectification : Modifier le profil.', 'Effacement : Réglages → Compte → Supprimer mon compte.', 'Opposition à la personnalisation : Réglages → Confidentialité.', 'Pour toute autre demande : écrire à l’adresse ci-dessus. Tu peux aussi saisir la CNIL (cnil.fr).'),
+        ul('Accès et portabilité : Réglages → Compte → Télécharger mes données.', 'Rectification : Modifier le profil.', 'Effacement : Réglages → Compte → Supprimer mon compte.', 'Opposition à la personnalisation : Réglages → Confidentialité.', ['Limitation, opposition, retrait d’un consentement, directives après décès et toute autre demande : écrire à ', mail(), '. Une réponse est apportée dans un délai d’un mois.']),
+        h2('Réclamation'),
+        p('Si tu estimes que tes droits ne sont pas respectés, tu peux adresser une réclamation à la CNIL : ', h('a', { href: 'https://www.cnil.fr/fr/plaintes', target: '_blank', rel: 'noopener' }, 'cnil.fr/fr/plaintes'), ', 3 place de Fontenoy, 75007 Paris.'),
+        h2('Contact'),
+        p('Pour toute question sur tes données : ', mail(), '.'),
       ],
     },
   };

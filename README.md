@@ -46,6 +46,27 @@ de la carte et le bouton « Suivre » à côté du nom. Titres en Bricolage Grot
 | **Page d'entrée** | Sans compte, on arrive d'abord sur une page d'entrée (« Créer un compte », « J'ai déjà un compte ») : le fil, l'Actu, les profils et les liens partagés sont réservés aux membres. Un lien partagé est gardé en mémoire (« Connecte-toi pour voir la vidéo de @… ») et s'ouvre juste après la connexion ou l'inscription. L'aide et les pages légales restent ouvertes. |
 | **Application** | Thème clair / sombre (fil toujours sombre), installable (icônes, plein écran), mise à jour en un toucher, pages légales (mentions, CGU, CGV des pièces, confidentialité), aide et règles de la communauté. |
 
+## Qualité, sécurité, conformité
+
+- **Sécurité** : HTTPS imposé (redirection et HSTS « preload »), politique de sécurité du contenu
+  (CSP), cookie de session `HttpOnly`/`Secure`/`SameSite`, en-tête anti-CSRF sur toute l'API,
+  mots de passe chiffrés (scrypt) ; aucune clé d'API côté navigateur (Stripe, Brevo, traduction,
+  base de données : uniquement sur le serveur).
+- **Anti-spam** : limites par adresse IP (connexion, créations de compte, API), champ piège et
+  délai minimal à l'inscription, rafales limitées par compte (publications, commentaires,
+  messages), compte bloqué après des essais de mot de passe ratés, e-mails jetables refusés,
+  filtre des propos.
+- **Accessibilité** : contrastes AA (4,5:1) en thème clair et sombre, textes de remplacement des
+  images, libellés des champs et des boutons ; audit axe-core sans aucune erreur sur 21 pages.
+- **Référencement** : titre et description par page, aperçu des liens (Open Graph, X/Twitter)
+  avec adresses complètes, `robots.txt`, `sitemap.xml`, vraie page 404 (statut 404).
+- **Vitesse** : écrans rares (caméra, LIVE, portefeuille, studio, administration) chargés à la
+  demande, icônes compressées (pngquant), cache long des polices et images, application gardée
+  sur le téléphone (service worker), ouverture instantanée.
+- **Données personnelles** : politique de confidentialité (RGPD) complète, CGU, CGV, mentions
+  légales (informations de l'éditeur à saisir dans Administration → Légal), bannière cookies
+  (refuser aussi simple qu'accepter), mesure d'audience anonyme sans cookie.
+
 ## Démarrer sur son ordinateur
 
 Prérequis : **Node.js 20.12 ou plus récent**.

@@ -256,7 +256,7 @@ export async function messagesView(ctx) {
   };
   // Série en danger (personne n'a encore écrit de son côté aujourd'hui) : un mot pour la garder
   const st = data.streak;
-  const streakHint = st?.atRisk && !st.mine && !blocked ? h('div', { class: 'dm-streak-hint' }, `⏳ Votre série de ${st.days} jours s’arrête ce soir : écris-lui pour la garder 🔥`) : null;
+  const streakHint = st?.atRisk && !st.mine && !blocked ? h('div', { class: 'dm-streak-hint' }, `⏳ Votre série de ${st.days} jours s’arrête ce soir si personne n’écrit.`) : null;
   threadHost.append(
     h('header', { class: 'dm-head' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => navigate('/messages') }, icon('back')), who, optBtn),
     streakHint,
