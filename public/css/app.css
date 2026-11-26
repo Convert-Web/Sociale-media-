@@ -6224,6 +6224,18 @@ button.stat:active {
 .cam-video.mirror {
   transform: scale(calc(-1 * var(--zoom, 1)), var(--zoom, 1));
 }
+/* Aperçu dessiné image par image (voir create.js), par-dessus la vidéo de la caméra */
+.cam-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.cam-frame.no-canvas .cam-canvas {
+  display: none;
+}
 /* Sur ordinateur, la caméra et ses outils tiennent dans un cadre au centre, au format de la caméra */
 @media (min-width: 900px) {
   .cam,

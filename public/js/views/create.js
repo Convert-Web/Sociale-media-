@@ -217,7 +217,85 @@ export async function createView(ctx) {
     const paintAspect = () => preview.videoWidth && preview.videoHeight && el.style.setProperty('--cam-ar', (preview.videoWidth / preview.videoHeight).toFixed(4));
     preview.addEventListener('loadedmetadata', paintAspect);
     preview.addEventListener('resize', paintAspect);
-    const camFrame = h('div', { class: 'cam-frame' }, preview);
+    // Aperçu dessiné image par image dans un canevas, avec le cadrage et le zoom de la vidéo
+    // enregistrée : ce qu'on voit est exactement ce qui est filmé. Safari sur iPhone affiche parfois
+    // l'image de la caméra elle-même en petit au centre du cadre (objectif ultra grand-angle, 0,5×,
+    // surtout après un changement d'objectif) ; le canevas ne dépend pas de cet affichage. S'il ne
+    // reçoit aucune image, la vidéo de la caméra reprend la main.
+    const shown = h('canvas', { class: 'cam-canvas', 'aria-hidden': 'true' });
+    const camFrame = h('div', { class: 'cam-frame' }, preview, shown);
+    let shownLoop = 0;
+    let shownAt = 0;
+    let shownOff = false;
+    function paintShown() {
+      const vw = preview.videoWidth;
+      const vh = preview.videoHeight;
+      const fw = camFrame.clientWidth;
+      const fh = camFrame.clientHeight;
+      if (!vw || !vh || !fw || !fh) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      const cw = Math.round(fw * dpr);
+      const ch = Math.round(fh * dpr);
+      if (shown.width !== cw || shown.height !== ch) {
+        shown.width = cw;
+        shown.height = ch;
+      }
+      const g = shown.getContext('2d');
+      const k = Math.max(cw / vw, ch / vh) * digital;
+      const sw = cw / k;
+      const sh = ch / k;
+      const flip = facing === 'user'; // caméra avant : en miroir, comme un miroir (la vidéo ne l'est pas)
+      g.setTransform(flip ? -1 : 1, 0, 0, 1, flip ? cw : 0, 0);
+      g.drawImage(preview, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, cw, ch);
+      shownAt = performance.now();
+    }
+    const showVideoInstead = () => {
+      shownOff = true;
+      camFrame.classList.add('no-canvas');
+    };
+    // Image toute noire (aucun point allumé) : le canevas ne reçoit pas l'image de la caméra
+    function shownIsBlack() {
+      const g = shown.getContext('2d');
+      const pts = [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]];
+      return pts.every(([x, y]) => {
+        const d = g.getImageData(Math.floor(shown.width * x), Math.floor(shown.height * y), 1, 1).data;
+        return d[0] + d[1] + d[2] === 0;
+      });
+    }
+    function startShown() {
+      if (shownOff || closed) return;
+      const loop = ++shownLoop;
+      const since = performance.now();
+      const step = () => {
+        if (closed || shownOff || loop !== shownLoop) return;
+        try {
+          paintShown();
+        } catch {
+          showVideoInstead();
+          return;
+        }
+        if (preview.requestVideoFrameCallback) preview.requestVideoFrameCallback(step);
+        else requestAnimationFrame(step);
+      };
+      step();
+      setTimeout(() => {
+        if (closed || shownOff || loop !== shownLoop || preview.paused) return;
+        try {
+          if (shownAt < since || shownIsBlack()) showVideoInstead();
+        } catch {
+          showVideoInstead();
+        }
+      }, 1500);
+    }
+    preview.addEventListener('playing', startShown);
+    // La vidéo de la caméra (si elle s'affiche elle-même) : Safari peut perdre le remplissage du
+    // cadre après un changement d'image ; il est réappliqué
+    const refit = () => {
+      preview.style.objectFit = 'fill';
+      requestAnimationFrame(() => requestAnimationFrame(() => (preview.style.objectFit = '')));
+    };
+    preview.addEventListener('loadedmetadata', refit);
+    preview.addEventListener('resize', refit);
     const camBox = h('div', { class: `cam-box${S.kind === 'duet' ? ' duet' : ''}` }, camFrame);
     if (S.kind === 'duet') {
       origEl = onScreen(mediaFor(S.sourceBlob));
@@ -247,7 +325,7 @@ export async function createView(ctx) {
       modeTabs.hidden = Boolean(elapsed) || Boolean(S.kind);
       side.classList.toggle('busy', recording);
     };
-    const applyFilter = () => (preview.style.filter = filterCss(S.fx.filter));
+    const applyFilter = () => (preview.style.filter = shown.style.filter = filterCss(S.fx.filter));
 
     async function openCamera({ zoomTo } = {}) {
       const my = ++opening;
