@@ -71,7 +71,7 @@ async function createApp(config, overrides = {}) {
   app.use(express.json({ limit: '200kb' }));
   app.use(cookieParser());
   // Chaque réponse annonce la version en ligne : l'application ouverte voit aussitôt qu'une
-  // nouvelle version existe (bouton « Mettre à jour »), sans requête supplémentaire
+  // nouvelle version existe et se met à jour d'elle-même, sans requête supplémentaire
   app.use('/api', (_req, res, next) => {
     res.setHeader('X-Vibz-Version', config.version);
     next();

@@ -3,14 +3,18 @@
    le téléphone : l'application s'ouvre sans attendre le réseau. Les données (/api) et les
    photos/vidéos ne passent jamais par ce cache (les vidéos lues en ligne sont seulement
    assemblées ici à partir de leurs morceaux, voir plus bas).
-   Mise à jour : la version des fichiers gardés est notée dans le cache (/__version). Quand le
-   serveur (/api/version) en annonce une autre, l'application affiche le bouton « Mettre à jour »
-   (js/update.js) : un toucher vide ce cache d'un bloc et relance l'application, qui charge la
-   nouvelle version complète, jamais un mélange. Le message « check-version » ci-dessous fait la
-   même chose d'office : il sert aux anciennes versions de l'application, et de filet de sécurité
-   si l'application gardée ne démarre pas (js/boot.js). */
+   Mises à jour automatiques : la version des fichiers gardés est notée dans le cache (/__version).
+   Quand le serveur (/api/version) en annonce une autre, la nouvelle version est téléchargée ici en
+   arrière-plan, dans un cache à part (l'écran ouvert continue avec l'ancienne). Au chargement
+   suivant d'une page (ouverture de l'application, ou rechargement décidé par js/update.js au bon
+   moment), elle prend la place de l'ancienne d'un bloc, avant que la page ne démarre : jamais un
+   mélange des deux. Chaque ouverture vérifie aussi la version, pour que la suivante soit à jour
+   même sans l'application. Le message « check-version » ci-dessous vide le cache d'office : il sert
+   de filet de sécurité si l'application gardée ne démarre pas (js/boot.js). */
 const CACHE = 'vibz-app';
 const STATIC = /^\/(js|css|fonts|img)\//;
+const LOOK_EVERY = 2 * 60 * 1000;
+let lastLook = 0;
 
 // Ancien cache de l'application précédente (AURUM) : effacé
 self.addEventListener('activate', (event) => event.waitUntil(caches.delete('aurum-app')));
@@ -132,6 +136,11 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // En passant, au plus toutes les 2 minutes : une version plus récente se télécharge d'avance
+  if (Date.now() - lastLook > LOOK_EVERY) {
+    lastLook = Date.now();
+    event.waitUntil(lookForUpdate().catch(() => {}));
+  }
   if (CHUNK.test(url.pathname)) {
     event.respondWith(videoChunk(req).catch(() => fetch(req)));
     return;
@@ -143,13 +152,100 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (req.mode === 'navigate') {
-    // Application monopage : la même page sert toutes les adresses
-    if (isAppPage(url)) event.respondWith(fromCache(req, '/index.html').catch(() => fetch(req)));
+    // Application monopage : la même page sert toutes les adresses (la nouvelle version, si elle
+    // attend, prend la place juste avant)
+    if (isAppPage(url)) event.respondWith(serveApp(req).catch(() => fetch(req)));
     return;
   }
   if (STATIC.test(url.pathname) || url.pathname === '/manifest.webmanifest') {
     event.respondWith(fromCache(req).catch(() => fetch(req)));
   }
+});
+
+// ── Nouvelle version de l'application ──────────────────────────────────────
+const NEXT = 'vibz-app-next';
+const APP_FILES = /(?:href|src)="(\/(?:js|css|fonts|img)\/[^"?#]+)"/g;
+let queue = Promise.resolve();
+const serial = (fn) => {
+  const run = queue.then(fn, fn);
+  queue = run.catch(() => {});
+  return run;
+};
+
+async function cachedVersion(name) {
+  if (!(await caches.has(name))) return null;
+  const hit = await (await caches.open(name)).match('/__version');
+  return hit ? hit.text() : null;
+}
+
+// Téléchargée à part, en arrière-plan : la page de l'application (index.html), puis tout ce qu'elle
+// charge au démarrage (scripts, styles, polices, icônes). La version n'est notée qu'en dernier :
+// elle n'est « prête » qu'une fois complète. Les écrans plus rares se chargeront à leur ouverture.
+const preparing = new Map();
+function prepareUpdate(version) {
+  if (preparing.has(version)) return preparing.get(version);
+  const job = serial(async () => {
+    if (!version || (await cachedVersion(NEXT)) === version || (await cachedVersion(CACHE)) === version) return true;
+    await caches.delete(NEXT);
+    const page = await fetch('/index.html', { cache: 'no-store' });
+    if (!page.ok || page.type !== 'basic' || page.redirected) throw new Error('page indisponible');
+    const files = new Set(['/manifest.webmanifest']);
+    for (const m of (await page.clone().text()).matchAll(APP_FILES)) files.add(m[1]);
+    const next = await caches.open(NEXT);
+    await Promise.all([...files].map(async (f) => {
+      const res = await fetch(f, { cache: 'no-cache' });
+      if (!res.ok || res.type !== 'basic' || res.redirected) throw new Error(`${f} indisponible`);
+      await next.put(f, res);
+    }));
+    await next.put('/index.html', page);
+    await next.put('/__version', new Response(version));
+    return true;
+  });
+  preparing.set(version, job);
+  job.catch(() => {}).finally(() => preparing.delete(version));
+  return job;
+}
+
+// Au chargement d'une page : une version prête remplace l'ancienne d'un bloc, avant que la page ne
+// démarre (sans attendre un téléchargement en cours : l'ouverture reste instantanée)
+async function serveApp(req) {
+  if (await cachedVersion(NEXT).catch(() => null)) {
+    await serial(async () => {
+      const ready = await cachedVersion(NEXT);
+      if (!ready) return;
+      if ((await cachedVersion(CACHE)) !== ready) {
+        await caches.delete(CACHE);
+        const [next, app] = await Promise.all([caches.open(NEXT), caches.open(CACHE)]);
+        for (const r of await next.keys()) await app.put(r, await next.match(r));
+      }
+      await caches.delete(NEXT);
+    }).catch(() => {});
+  }
+  return fromCache(req, '/index.html');
+}
+
+// S'il existe une version plus récente que celle gardée, elle se télécharge pour la prochaine
+// ouverture (vérifié à l'ouverture, puis en passant tant que l'application sert : même une ancienne
+// version de l'application, qui ne sait pas se mettre à jour seule, est ainsi remplacée)
+async function lookForUpdate() {
+  const res = await fetch('/api/version', { cache: 'no-store' });
+  if (!res.ok) return;
+  const { version } = await res.json();
+  const kept = await cachedVersion(CACHE);
+  if (kept && version && kept !== version) await prepareUpdate(version);
+}
+
+// Demande de l'application ouverte (js/update.js) : « started » tout de suite, puis le résultat
+self.addEventListener('message', (event) => {
+  const port = event.ports?.[0];
+  if (event.data?.type !== 'prepare-update' || !port) return;
+  port.postMessage({ state: 'started' });
+  event.waitUntil(
+    prepareUpdate(String(event.data.version || '')).then(
+      () => port.postMessage({ ok: true }),
+      () => port.postMessage({ ok: false }),
+    ),
+  );
 });
 
 async function checkVersion() {
