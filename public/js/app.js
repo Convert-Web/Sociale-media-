@@ -274,6 +274,7 @@ function buildShell() {
 // Rendu des routes
 // ---------------------------------------------------------------------------
 // Pages ouvertes sans compte : l'entrée, la connexion et l'inscription, l'aide et les pages légales
+const SHARED_VIDEO = /^\/@[^/]+\/video\/\d+\/?$/;
 const OPEN_PATHS = new Set(['/rejoindre', '/connexion', '/inscription', '/mot-de-passe-oublie', '/reinitialiser', '/aide', '/regles', '/cgu', '/cgv', '/rgpd', '/confidentialite', '/mentions-legales']);
 
 let shell = null;
@@ -355,8 +356,9 @@ async function render(opts = {}) {
   const u = store.user;
   const here = url.pathname + url.search;
 
-  // Sans compte : d'abord la page d'entrée (créer un compte ou se connecter), puis la page voulue
-  if (!u && !OPEN_PATHS.has(url.pathname)) return navigate(here === '/' ? '/rejoindre' : `/rejoindre?suite=${enc(here)}`, { replace: true });
+  // Sans compte : d'abord la page d'entrée (créer un compte ou se connecter), puis la page voulue.
+  // Exception : une vidéo partagée par un lien se regarde tout de suite (avec « Rejoindre AURUM »)
+  if (!u && !OPEN_PATHS.has(url.pathname) && !SHARED_VIDEO.test(url.pathname)) return navigate(here === '/' ? '/rejoindre' : `/rejoindre?suite=${enc(here)}`, { replace: true });
 
   if (route) {
     if (route.access === 'guest' && u) return navigate(url.searchParams.get('suite') || '/', { replace: true });
@@ -523,16 +525,18 @@ function keepStorage() {
 setRenderer(render);
 
 (async function boot() {
-  try {
-    await store.refresh();
-  } catch (err) {
-    appEl.replaceChildren(errorView(err));
-    return;
-  }
-  if (store.user) {
-    connectRealtime();
-    syncPush();
-    keepStorage();
+  // Déjà connecté sur ce téléphone : l'application s'affiche tout de suite avec la dernière
+  // session connue (le fil démarre sur les vidéos « À suivre », déjà sur le téléphone) ; le
+  // serveur confirme pendant ce temps. Sinon : on attend sa réponse.
+  const instant = store.restore();
+  const confirmed = store.refresh();
+  if (!instant) {
+    try {
+      await confirmed;
+    } catch (err) {
+      appEl.replaceChildren(errorView(err));
+      return;
+    }
   }
   // Les premières vidéos de « Pour toi » se préparent pendant le rendu
   if (location.pathname === '/' && store.user) prefetchReels();
@@ -548,6 +552,16 @@ setRenderer(render);
     if (e.data?.type === 'push' && e.data.data) store.emit('notify:push', { data: e.data.data, shown: Boolean(e.data.shown) });
   });
   startInAppNotifications();
+  const shownFor = store.user?.id || null;
   render();
+  if (instant) {
+    // Réponse du serveur : session expirée ou autre compte, l'écran est refait ; sinon rien ne bouge
+    confirmed.then(() => (store.user?.id || null) !== shownFor && render({ same: true })).catch(() => {});
+  }
+  if (store.user) {
+    connectRealtime();
+    syncPush();
+    keepStorage();
+  }
   setTimeout(() => location.pathname !== '/rejoindre' && cookieBanner(), 2500);
 })();

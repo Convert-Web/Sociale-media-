@@ -2,6 +2,15 @@
 import { api, fromResponse } from './api.js';
 
 const listeners = new Map();
+const SESSION = 'vibz:session';
+function remember(s) {
+  try {
+    if (s.user && s.config) localStorage.setItem(SESSION, JSON.stringify({ user: s.user, config: s.config, counters: s.counters, at: Date.now() }));
+    else localStorage.removeItem(SESSION);
+  } catch {
+    /* stockage plein ou navigation privée : ouverture normale */
+  }
+}
 
 export const store = {
   user: null,
@@ -34,12 +43,29 @@ export const store = {
     this.user = data.user;
     this.config = data.config;
     if (data.counters) this.setCounters(data.counters);
+    remember(this);
     this.emit('user', this.user);
     return data;
   },
 
+  // Ouverture instantanée : la dernière session connue sur ce téléphone, affichée tout de suite
+  // (le serveur la confirme juste après ; session expirée : retour à la page d'entrée)
+  restore() {
+    try {
+      const d = JSON.parse(localStorage.getItem(SESSION) || 'null');
+      if (!d?.user || !d.config || Date.now() - d.at > 30 * 86400e3) return false;
+      this.user = d.user;
+      this.config = d.config;
+      if (d.counters) this.counters = { ...this.counters, ...d.counters };
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   setUser(user) {
     this.user = user;
+    remember(this);
     this.emit('user', user);
   },
 

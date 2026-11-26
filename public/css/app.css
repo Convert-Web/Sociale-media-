@@ -3963,6 +3963,85 @@ button.stat:active {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Bien démarrer (son propre profil) : progression et prochaine étape */
+.start-card {
+  width: min(100%, 460px);
+  display: grid;
+  gap: 8px;
+  padding: 12px 12px 10px;
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.start-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.start-top b {
+  flex: 1;
+  font-size: 14px;
+}
+.start-top small {
+  color: var(--muted);
+  font-weight: 650;
+  font-size: 12.5px;
+}
+.start-x {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.start-bar {
+  height: 5px;
+  border-radius: 5px;
+  background: var(--bg-2);
+  overflow: hidden;
+}
+.start-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--grad);
+}
+.start-next {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  padding: 2px 0;
+}
+.start-ic {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  background: var(--grad-soft);
+  color: var(--primary);
+  flex: none;
+}
+.start-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.start-cta {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--grad);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
 /* Onglets : texte et trait sous l'onglet ouvert, collés en haut au défilement */
 .profile-tabs {
   display: flex;
@@ -4129,6 +4208,162 @@ button.stat:active {
 .inbox-ic.violet {
   background: var(--grad);
 }
+.inbox-ic.grad {
+  background: linear-gradient(135deg, #7b5cff, #ff3d7f 70%, #ffd84d);
+}
+.invite-row {
+  width: 100%;
+  text-align: left;
+  color: inherit;
+}
+.invite-row > .icon {
+  color: var(--muted);
+}
+/* Inviter des amis (feuille) */
+.invite {
+  display: grid;
+  gap: 14px;
+}
+.invite-hero {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 6px 4px 2px;
+}
+.invite-me {
+  padding: 3px;
+  border-radius: var(--squircle);
+  background: var(--grad);
+  margin-bottom: 4px;
+}
+.invite-me .avatar {
+  box-shadow: 0 0 0 3px var(--card);
+}
+.invite-hero b {
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+.invite-hero p {
+  color: var(--muted);
+  font-size: 14px;
+  max-width: 320px;
+}
+.invite-done {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--fg-2);
+}
+.invite-done[hidden] {
+  display: none;
+}
+.invite-faces {
+  display: flex;
+}
+.invite-faces .avatar {
+  margin-left: -6px;
+  box-shadow: 0 0 0 2px var(--card);
+}
+.invite-faces .avatar:first-child {
+  margin-left: 0;
+}
+.invite-apps {
+  justify-content: center;
+}
+.invite-url {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+/* Vidéo partagée ouverte sans compte : « Rejoindre AURUM » à la place de la barre du bas */
+.guest-video .tabbar {
+  display: none;
+}
+.guest-join {
+  position: fixed;
+  z-index: 40;
+  left: 10px;
+  right: 10px;
+  bottom: calc(var(--safe-b) + 10px);
+  min-height: var(--nav-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 10px;
+  border-radius: 24px;
+  color: #fff;
+  background: rgba(18, 16, 26, 0.78);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.guest-join-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.guest-join-text b {
+  font-size: 14px;
+}
+.guest-join-text small {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guest-join-login {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.85);
+}
+@media (min-width: 900px) {
+  .guest-join {
+    left: auto;
+    right: 24px;
+    bottom: 24px;
+    width: 420px;
+  }
+}
+@media (max-width: 360px) {
+  .guest-join-login {
+    display: none;
+  }
+}
+/* Page d'entrée ouverte par une invitation : « Camille t'invite sur AURUM » */
+.land-invite {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0 2px;
+  padding: 10px 14px 10px 10px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.land-invite[hidden] {
+  display: none;
+}
+.land-invite span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.land-invite b {
+  font-size: 15px;
+}
+.land-invite small {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12.5px;
+}
 .inbox-text {
   display: grid;
   flex: 1;
@@ -4159,6 +4394,42 @@ button.stat:active {
   display: grid;
   flex: 1;
   min-width: 0;
+}
+.conv-text b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.conv-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Séries : 🔥 jours d'affilée à s'écrire, ⏳ si elle s'arrête ce soir */
+.streak {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #ff7a1a;
+  font-variant-numeric: tabular-nums;
+}
+.streak.risk {
+  color: var(--heart);
+}
+.dm-head .streak {
+  display: inline;
+  margin-left: 6px;
+}
+.dm-streak-hint {
+  margin: 8px 12px 0;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, #ff7a1a 14%, transparent);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
 }
 .conv-text small {
   color: var(--muted);

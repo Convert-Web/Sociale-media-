@@ -3,7 +3,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, emptyState, toast, syncThemeColor } from '../dom.js';
+import { h, icon, avatar, emptyState, toast, syncThemeColor, logoMark } from '../dom.js';
 import { verticalFeed } from '../components/feed.js';
 import { takeReels, pendingReels, prefetchReels, saveUpcoming } from '../components/video.js';
 import { needLogin, follow } from '../components/actions.js';
@@ -172,7 +172,14 @@ export async function videoView(ctx) {
   let initial = [post];
   let load = null;
   let more = true;
-  if (viewer && viewer.posts.some((p) => p.id === id)) {
+  // Lien partagé ouvert sans compte : la vidéo se regarde, et « Rejoindre AURUM » remplace la
+  // barre du bas (la suite de l'application est réservée aux comptes)
+  if (!store.user) {
+    more = false;
+    load = async () => ({ posts: [], more: false });
+    document.documentElement.classList.add('guest-video');
+    ctx.onCleanup(() => document.documentElement.classList.remove('guest-video'));
+  } else if (viewer && viewer.posts.some((p) => p.id === id)) {
     const i = viewer.posts.findIndex((p) => p.id === id);
     initial = viewer.posts.slice(i);
     initial[0] = post;
@@ -194,7 +201,15 @@ export async function videoView(ctx) {
   const focus = Number(ctx.query.get('commentaire'));
   const focusParent = Number(ctx.query.get('fil')) || null;
   if (focus) setTimeout(() => openComments(post, { focusId: focus, focusParent }), 400);
-  return h('div', { class: 'feed-page' }, backBar(), feed.el);
+  const here = `/@${enc(post.author.username)}/video/${post.id}`;
+  const join = store.user
+    ? null
+    : h('div', { class: 'guest-join' },
+      logoMark(36),
+      h('span', { class: 'guest-join-text' }, h('b', null, 'Envie de voir la suite ?'), h('small', null, `Rejoins ${post.author.displayName} et la communauté AURUM`)),
+      h('a', { href: `/inscription?suite=${enc(here)}`, class: 'btn btn-primary btn-sm' }, 'Rejoindre'),
+      h('a', { href: `/connexion?suite=${enc(here)}`, class: 'guest-join-login' }, 'Se connecter'));
+  return h('div', { class: 'feed-page' }, backBar(), feed.el, join);
 }
 
 function backBar() {

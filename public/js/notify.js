@@ -152,6 +152,7 @@ const KIND_ICONS = {
   follow: 'userPlus',
   follow_request: 'userPlus',
   follow_accept: 'userPlus',
+  invite_joined: 'userPlus',
   repost: 'repost',
   duet: 'duet',
   stitch: 'scissors',
@@ -159,7 +160,7 @@ const KIND_ICONS = {
   gift: 'gift',
   dm: 'send',
 };
-const KIND_CLASS = (k) => (['like', 'comment_like', 'favorite'].includes(k) ? 'k-like' : k === 'dm' ? 'k-dm' : k === 'live' ? 'k-live' : k === 'gift' ? 'k-gift' : k?.startsWith('follow') ? 'k-follow' : 'k-comment');
+const KIND_CLASS = (k) => (['like', 'comment_like', 'favorite'].includes(k) ? 'k-like' : k === 'dm' ? 'k-dm' : k === 'live' ? 'k-live' : k === 'gift' ? 'k-gift' : k?.startsWith('follow') || k === 'invite_joined' ? 'k-follow' : 'k-comment');
 
 let box = null;
 let hideTimer = 0;
@@ -238,7 +239,7 @@ const PREF = (kind) =>
     : ['like', 'favorite', 'comment_like', 'repost', 'gift'].includes(kind) ? 'likes'
       : ['comment', 'reply', 'duet', 'stitch'].includes(kind) ? 'comments'
         : kind === 'mention' ? 'mentions'
-          : kind?.startsWith('follow') ? 'follows'
+          : kind?.startsWith('follow') || kind === 'invite_joined' ? 'follows'
             : kind === 'live' ? 'live' : null;
 const wanted = (kind) => {
   const key = PREF(kind);

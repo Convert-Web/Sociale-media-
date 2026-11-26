@@ -102,6 +102,16 @@ module.exports = function meRoutes(ctx) {
   });
 
   // Demandes d'abonnement (compte privé)
+  // Amis venus grâce à mes invitations (lien « Rejoins-moi sur AURUM »)
+  r.get('/me/invites', async (req, res) => {
+    const rows = await db.all(
+      'SELECT id AS user_id, username, display_name, avatar, verified_at FROM users WHERE referrer_id = ? AND banned_at IS NULL ORDER BY id DESC LIMIT 6',
+      req.user.id,
+    );
+    const { n } = await db.get('SELECT COUNT(*) AS n FROM users WHERE referrer_id = ? AND banned_at IS NULL', req.user.id);
+    res.json({ count: n, users: rows.map((r) => ({ id: r.user_id, username: r.username, displayName: r.display_name, avatar: r.avatar || null, verified: Boolean(r.verified_at) })) });
+  });
+
   r.get('/me/requests', async (req, res) => {
     const rows = await db.all(
       `${USER_SELECT} JOIN follow_requests fr ON fr.requester_id = u.id AND fr.target_id = v.id ORDER BY fr.created_at DESC LIMIT 200`,

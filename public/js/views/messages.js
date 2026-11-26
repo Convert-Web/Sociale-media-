@@ -8,7 +8,7 @@ import { translateLink, myLang } from '../components/translate.js';
 import { sensitive } from '../components/sensitive.js';
 import { reportDialog } from '../components/report.js';
 import { openSheet, closeSheet } from '../components/sheet.js';
-import { convRow } from './inbox.js';
+import { convRow, streakChip } from './inbox.js';
 import { playNotifSound } from '../notify.js';
 
 // Choisir un compte (nouveau message)
@@ -245,7 +245,7 @@ export async function messagesView(ctx) {
     ) });
   });
   const who = h('a', { href: `/@${enc(other.username)}`, class: 'dm-who' });
-  const paintWho = () => who.replaceChildren(avatar(other, 'sm', { presence: true }), h('span', null, h('b', null, other.displayName, other.verified ? verifiedMark() : null), h('small', null, other.online ? 'En ligne' : `@${other.username}`)));
+  const paintWho = () => who.replaceChildren(avatar(other, 'sm', { presence: true }), h('span', null, h('b', null, other.displayName, other.verified ? verifiedMark() : null, streakChip(data.streak)), h('small', null, other.online ? 'En ligne' : `@${other.username}`)));
   paintWho();
   const showTyping = () => {
     const atBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
@@ -254,8 +254,12 @@ export async function messagesView(ctx) {
     clearTimeout(typing._t);
     typing._t = setTimeout(() => (typing.hidden = true), isPolling() ? 6500 : 4000);
   };
+  // Série en danger (personne n'a encore écrit de son côté aujourd'hui) : un mot pour la garder
+  const st = data.streak;
+  const streakHint = st?.atRisk && !st.mine && !blocked ? h('div', { class: 'dm-streak-hint' }, `⏳ Votre série de ${st.days} jours s’arrête ce soir : écris-lui pour la garder 🔥`) : null;
   threadHost.append(
     h('header', { class: 'dm-head' }, h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Retour', onclick: () => navigate('/messages') }, icon('back')), who, optBtn),
+    streakHint,
     scroller,
     blocked ? h('p', { class: 'dm-blocked' }, blockedByMe ? 'Tu as bloqué ce compte. Débloque-le (menu ⋯) pour vous écrire.' : data.blocked ? 'Tu ne peux pas répondre à cette conversation.' : data.refused) : h('div', { class: 'dm-compose' }, emojis, form),
   );

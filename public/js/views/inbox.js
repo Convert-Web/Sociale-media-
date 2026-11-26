@@ -5,6 +5,7 @@ import { navigate } from '../router.js';
 import { h, icon, avatar, timeAgo, emptyState, spinner, toast, verifiedMark, scrollRoot } from '../dom.js';
 import { followButton } from '../components/userlist.js';
 import { pickUser } from './messages.js';
+import { inviteFriends } from '../components/invite.js';
 
 // « ta vidéo », « ta photo », « tes photos », « ta publication » selon la publication
 const what = (n) => ({ photo: 'ta photo', photos: 'tes photos', text: 'ta publication' })[n.post?.kind] || 'ta vidéo';
@@ -18,6 +19,7 @@ const TEXTS = {
   follow: 'a commencé à te suivre.',
   follow_request: 'souhaite s’abonner à ton compte.',
   follow_accept: 'a accepté ta demande d’abonnement.',
+  invite_joined: 'a rejoint AURUM grâce à ton invitation 🎉',
   repost: (n) => `a republié ${what(n)}.`,
   duet: 'a fait un Duo avec ta vidéo.',
   stitch: 'a fait un Stitch de ta vidéo.',
@@ -74,7 +76,7 @@ function groupRow(items) {
 }
 
 export function notifLink(n) {
-  if (['follow', 'follow_accept', 'follow_request'].includes(n.type)) return `/@${n.actor.username}`;
+  if (['follow', 'follow_accept', 'follow_request', 'invite_joined'].includes(n.type)) return `/@${n.actor.username}`;
   if (n.type === 'live') return `/live/${n.actor.username}`;
   if (n.post) return `/@${enc(n.post.author || store.user.username)}/video/${n.post.id}${n.commentId ? `?commentaire=${n.commentId}${n.commentParentId ? `&fil=${n.commentParentId}` : ''}` : ''}`;
   return `/@${n.actor.username}`;
@@ -92,7 +94,7 @@ function notifRow(n) {
   const quote = n.body && ['comment', 'reply', 'mention', 'comment_like', 'live'].includes(n.type) ? h('span', { class: 'n-quote' }, ` : ${n.body.slice(0, 90)}`) : null;
   let right = null;
   if (n.post?.image) right = h('img', { class: 'n-thumb', src: n.post.image, alt: '' });
-  else if (n.type === 'follow' && !n.followingBack) right = followButton({ id: n.actor.id, username: n.actor.username, isFollowing: false, followsYou: true, requested: false });
+  else if ((n.type === 'follow' || n.type === 'invite_joined') && !n.followingBack) right = followButton({ id: n.actor.id, username: n.actor.username, isFollowing: false, followsYou: true, requested: false });
   // Demande d'abonnement : accepter ou refuser sur place
   if (n.type === 'follow_request' && n.pendingRequest) {
     right = h('span', { class: 'n-req' });
@@ -127,6 +129,8 @@ export async function inboxView(ctx) {
     'div',
     { class: 'page inbox' },
     h('header', { class: 'page-head' }, h('span', { class: 'icon-btn' }), h('h1', null, 'Boîte de réception'), newBtn),
+    // Inviter des amis : en tête de la boîte, un toucher ouvre l'invitation à son nom
+    h('button', { type: 'button', class: 'inbox-row invite-row', onclick: () => inviteFriends() }, h('span', { class: 'inbox-ic grad' }, icon('userPlus')), h('span', { class: 'inbox-text' }, h('b', null, 'Invite tes amis'), h('small', null, 'Plus on est, plus c’est fun : envoie ton lien')), icon('chevron', 'icon-sm')),
     row('/activite?type=followers', 'friends', 'blue', 'Nouveaux abonnés', 'Qui a commencé à te suivre', 0),
     row('/activite', 'bell', 'pink', 'Activité', 'J’aime, commentaires, mentions…', c.notifications),
     c.requests ? row('/activite?type=demandes', 'userPlus', 'violet', 'Demandes d’abonnement', `${c.requests} en attente`, c.requests) : null,
@@ -164,13 +168,19 @@ function preview(c) {
   return `${last.fromMe ? (last.seen ? 'Vu · ' : 'Toi : ') : ''}${last.body}`;
 }
 
+// Série (🔥 jours d'affilée à s'écrire) ; ⏳ : elle s'arrête ce soir si personne n'écrit
+export function streakChip(st) {
+  if (!st?.days) return null;
+  return h('span', { class: `streak${st.atRisk ? ' risk' : ''}`, title: st.atRisk ? `Série de ${st.days} jours : écrivez-vous aujourd’hui pour la garder` : `Série de ${st.days} jours d’affilée` }, `🔥 ${st.days >= 120 ? '120+' : st.days}`, st.atRisk ? ' ⏳' : null);
+}
+
 export function convRow(c, active = false) {
   const last = c.lastMessage;
   return h(
     'a',
     { href: `/messages/${enc(c.user.username)}`, class: `conv${c.unread ? ' unread' : ''}${active === true ? ' active' : ''}` },
     avatar(c.user, 'md', { presence: true }),
-    h('span', { class: 'conv-text' }, h('b', null, c.user.displayName), h('small', null, preview(c))),
+    h('span', { class: 'conv-text' }, h('b', null, h('span', { class: 'conv-name' }, c.user.displayName), streakChip(c.streak)), h('small', null, preview(c))),
     h('span', { class: 'conv-meta' }, h('small', null, timeAgo(last.createdAt)), c.unread ? h('span', { class: 'dot' }) : null),
   );
 }
@@ -180,7 +190,7 @@ const FILTER_TYPES = {
   likes: ['like', 'favorite', 'comment_like'],
   comments: ['comment', 'reply'],
   mentions: ['mention'],
-  followers: ['follow', 'follow_accept', 'follow_request'],
+  followers: ['follow', 'follow_accept', 'follow_request', 'invite_joined'],
   other: ['repost', 'duet', 'stitch', 'live', 'gift'],
 };
 const EMPTY = {

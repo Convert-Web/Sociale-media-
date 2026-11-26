@@ -6,6 +6,7 @@ import { navigate, safePath } from '../router.js';
 import { h, icon, toast, debounce, logoMark } from '../dom.js';
 import { detachPush } from '../push.js';
 import { fieldError } from '../forms.js';
+import { pendingInvite, clearInvite } from '../components/invite.js';
 
 const PASSWORD_HINT = '8 caractères au moins, avec des lettres et un chiffre ou un symbole.';
 
@@ -173,9 +174,11 @@ export function signupView(ctx) {
             displayName: name.value.trim() || chosen,
             password: pw.input.value,
             terms: terms.checked,
+            ref: pendingInvite() || undefined,
             website: trap.value,
             elapsed: Date.now() - shownAt,
           });
+          clearInvite();
           toast(`Bienvenue sur AURUM, ${user.displayName} !`);
           await afterAuth(ctx, user, { fresh: true });
         } catch (err) {

@@ -4,7 +4,7 @@ const express = require('express');
 const { requireAuth } = require('../auth');
 const { fail, text, intParam } = require('../http');
 const { throttle } = require('../antispam');
-const { authorOf, counters, pushCounters, isBlocked, areFriends, flaggedLabels, getPost, prefs, onlineSet, touchPresence, isTyping, freshSince, unreadTotal, absoluteUrl } = require('../social');
+const { authorOf, counters, pushCounters, isBlocked, areFriends, flaggedLabels, getPost, prefs, onlineSet, touchPresence, isTyping, freshSince, unreadTotal, absoluteUrl, streaksFor } = require('../social');
 const { moderate, autoReport } = require('../contentFilter');
 const { sendPush } = require('../push');
 
@@ -108,9 +108,11 @@ module.exports = function messageRoutes(ctx) {
       me, me, me, me, me, me,
     );
     const online = await onlineSet(ctx, rows.map((row) => row.user_id));
+    const streaks = await streaksFor(ctx, me, rows.map((row) => row.user_id));
     res.json({
       conversations: rows.map((row) => ({
         user: { ...authorOf(row), online: online.has(row.user_id) },
+        streak: streaks.get(row.user_id) || null,
         lastMessage: {
           // Publication partagée sans texte : le client écrit « Tu as partagé… » ou « A partagé… »
           body: row.flagged && row.sender_id !== me ? HIDDEN : row.body || '',
@@ -176,6 +178,8 @@ module.exports = function messageRoutes(ctx) {
       // Sans connexion permanente, « écrit… » arrive avec la relecture régulière
       typing: !blockedByMe && !blockedMe && (await isTyping(ctx, other.id, me)),
       blocked: blockedByMe || blockedMe,
+      // Série du jour (🔥), seulement à l'ouverture de la conversation
+      streak: before || after ? undefined : (await streaksFor(ctx, me, [other.id])).get(other.id) || null,
       blockedByMe,
       blockedMe,
       refused: await canMessage(req.user, other),
