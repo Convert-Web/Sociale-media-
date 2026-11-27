@@ -123,6 +123,9 @@ async function forYou(ctx, viewer, { exclude = [], limit = 8, rand = Math.random
   const vid = viewer?.id || 0;
   const ex = exclude.slice(-300);
   const exSql = ex.length ? `AND p.id NOT IN (${ex.map(() => '?').join(',')})` : '';
+  // Sujet du jour en cours : ses réponses ne se voient qu'une fois qu'on a soi-même répondu
+  const now = Date.now();
+  const open = await ctx.db.get('SELECT id FROM subjects WHERE opens_at <= ? AND closes_at > ? ORDER BY id DESC LIMIT 1', now, now);
   const rows = await ctx.db.all(
     `SELECT p.id, p.user_id, p.sound_id, p.category, p.created_at, p.share_count, p.guest_views,
        (SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id) AS likes,
@@ -138,13 +141,13 @@ async function forYou(ctx, viewer, { exclude = [], limit = 8, rand = Math.random
      FROM ${VIEWER} CROSS JOIN posts p JOIN users u ON u.id = p.user_id
      WHERE (p.video_id IS NOT NULL OR p.image IS NOT NULL OR p.bg IS NOT NULL) AND p.user_id != v.id AND ${VISIBLE}
        AND NOT EXISTS (SELECT 1 FROM not_interested ni WHERE ni.user_id = v.id AND (ni.post_id = p.id OR (ni.post_id = 0 AND ni.author_id = p.user_id)))
+       AND (p.subject_id IS NULL OR p.subject_id != ? OR EXISTS (SELECT 1 FROM posts mine WHERE mine.subject_id = p.subject_id AND mine.user_id = v.id))
        ${exSql}
      ORDER BY p.id DESC LIMIT 500`,
-    vid, ...ex,
+    vid, open?.id || 0, ...ex,
   );
   // Fil non personnalisé (réglage) : seulement popularité, fraîcheur et découverte
   const interests = viewer && viewer.personalized === 0 ? null : await loadInterests(ctx.db, vid);
-  const now = Date.now();
   const scored = rows.map((r) => ({ r, s: score(r, interests, now, rand) })).sort((a, b) => b.s - a.s);
   // Variété : un même créateur et un même son une fois par page (sauf s'il ne reste que lui)
   const picked = [];

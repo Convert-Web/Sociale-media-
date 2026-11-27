@@ -2,7 +2,7 @@
 // Adresses des pages de l'application (mêmes que public/js/app.js) : elles renvoient la page
 // de l'application avec le statut 200 ; toute autre adresse renvoie la page 404 (statut 404).
 // La même liste figure dans vercel.json (réécriture vers index.html) : un test vérifie l'accord.
-const PAGE_SOURCE = '(?:|abonnements|amis|explorer|actu(?:/[0-9]+)?|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?';
+const PAGE_SOURCE = '(?:|abonnements|amis|explorer|actu(?:/[0-9]+)?|sujet(?:/[0-9]+)?|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?';
 const PAGE_RE = new RegExp(`^/${PAGE_SOURCE}$`);
 
 const isPage = (path) => PAGE_RE.test(path);

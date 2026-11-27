@@ -15,6 +15,7 @@ import { editPost } from './components/postedit.js';
 import { homeView, videoView, friendsView } from './views/home.js';
 import { exploreView } from './views/explore.js';
 import { actuView } from './views/actu.js';
+import { subjectView, todaySubject } from './views/subject.js';
 import { searchView } from './views/search.js';
 import { profileView } from './views/profile.js';
 import { tagView, soundView } from './views/collections.js';
@@ -56,6 +57,8 @@ const ROUTES = [
   { path: '/explorer', view: exploreView, layout: 'app', nav: 'explore' },
   { path: '/actu', view: actuView, layout: 'app', nav: 'actu' },
   { path: '/actu/:id', view: actuView, layout: 'app', nav: 'actu' },
+  { path: '/sujet', view: subjectView, layout: 'app', nav: 'home', access: 'auth' },
+  { path: '/sujet/:id', view: subjectView, layout: 'app', nav: 'home', access: 'auth' },
   { path: '/recherche', view: searchView, layout: 'app', nav: 'explore' },
   { path: '/tag/:tag', view: tagView, layout: 'app', nav: 'explore' },
   { path: '/son/:id', view: soundView, layout: 'app', nav: 'explore' },
@@ -551,8 +554,9 @@ setRenderer(render);
       return;
     }
   }
-  // Les premières vidéos de « Pour toi » se préparent pendant le rendu
+  // Les premières vidéos de « Pour toi » et le Sujet du jour se préparent pendant le rendu
   if (location.pathname === '/' && store.user) prefetchReels();
+  if (store.user) todaySubject();
   registerServiceWorker();
   window.__vibzStarted = true;
   startUpdateChecks();

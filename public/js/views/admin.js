@@ -15,6 +15,7 @@ const TABS = [
   ['comptes', 'Comptes'],
   ['publications', 'Publications'],
   ['audience', 'Audience'],
+  ['sujets', 'Sujet du jour'],
   ['legal', 'Légal'],
   ['actu', 'Actu'],
   ['demo', 'Démo'],
@@ -382,13 +383,69 @@ async function errors() {
     refused.length ? h('div', { class: 'set-card' }, refused.map(item)) : null);
 }
 
+// Sujet du jour : tout est automatique (un sujet par jour à 19 h) ; on peut programmer un sujet
+// partenaire avec un lot, qui passe avant le choix automatique
+async function subjectsAdmin() {
+  const wrap = h('div', { class: 'admin-subjects' });
+  const fmtDay = (day) => new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${day}T12:00:00Z`));
+  async function load() {
+    const d = await api.get('/api/admin/subjects');
+    const dayIn = h('select', { class: 'input', 'aria-label': 'Jour' }, d.upcoming.map((u) => h('option', { value: u.day }, `${fmtDay(u.day)}${u.planned ? ' (déjà programmé)' : ''}`)));
+    const title = h('input', { class: 'input', maxlength: 120, required: true, placeholder: 'Le sujet (ex. : Ton sport le plus improbable)', 'aria-label': 'Sujet' });
+    const sponsor = h('input', { class: 'input', maxlength: 60, placeholder: 'Partenaire (facultatif)', 'aria-label': 'Partenaire' });
+    const prize = h('input', { class: 'input', maxlength: 80, placeholder: 'Lot à gagner (facultatif)', 'aria-label': 'Lot à gagner' });
+    const save = h('button', { type: 'submit', class: 'btn btn-primary' }, 'Programmer');
+    const form = h('form', { class: 'form-stack set-card pad', onsubmit: async (e) => {
+      e.preventDefault();
+      save.disabled = true;
+      try {
+        await api.post('/api/admin/subjects', { day: dayIn.value, title: title.value.trim(), sponsor: sponsor.value.trim(), prize: prize.value.trim() });
+        toast('Sujet programmé');
+        load();
+      } catch (err) {
+        fieldError(title, err.message);
+      } finally {
+        save.disabled = false;
+      }
+    } }, h('h3', { class: 'section-title' }, 'Programmer un sujet'), dayIn, title, sponsor, prize, save);
+    const edit = (u) => {
+      dayIn.value = u.day;
+      title.value = u.planned?.title || '';
+      sponsor.value = u.planned?.sponsor || '';
+      prize.value = u.planned?.prize || '';
+      title.focus();
+    };
+    const upcoming = h('div', { class: 'set-card' }, d.upcoming.map((u) => h('div', { class: 'tx' },
+      h('span', { class: 'tx-text' }, h('b', null, fmtDay(u.day)), h('small', null, u.planned ? `${u.planned.title}${u.planned.sponsor ? ` · ${u.planned.sponsor}` : ''}${u.planned.prize ? ` · ${u.planned.prize}` : ''}` : `Automatique : ${u.theme}`)),
+      h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: () => edit(u) }, u.planned ? 'Modifier' : 'Programmer'),
+      u.planned ? h('button', { type: 'button', class: 'btn btn-ghost btn-sm', onclick: async () => {
+        if (!(await confirmDialog('Retirer ce sujet ?', 'Le choix automatique reprendra la main ce jour-là.', 'Retirer'))) return;
+        await api.del(`/api/admin/subjects/${u.planned.id}`);
+        load();
+      } }, 'Retirer') : null)));
+    const past = d.subjects.length
+      ? h('div', { class: 'set-card' }, d.subjects.map((x) => h('a', { href: `/sujet/${x.id}`, class: 'tx' },
+        h('span', { class: 'tx-text' }, h('b', null, x.title), h('small', null, `${fmtDay(x.day)} · ${x.label}${x.open ? ' · en cours' : ''}${x.winner ? ` · Or du jour : @${x.winner}` : ''}${x.notified ? ' · notification envoyée' : ''}`)),
+        h('b', null, num(x.answers)))))
+      : h('p', { class: 'muted small pad' }, 'Aucun sujet pour l’instant.');
+    wrap.replaceChildren(
+      h('p', { class: 'muted small' }, 'Tout est automatique : un nouveau sujet chaque jour à 19 h (un thème par jour de la semaine, l’actualité le mercredi), une notification à tous, et l’Or du jour décerné le lendemain à la réponse la plus aimée. Un sujet programmé ici passe avant le choix automatique.'),
+      d.cron ? null : h('p', { class: 'muted small' }, 'Conseil : ajoute la variable CRON_SECRET sur Vercel pour protéger la tâche de 19 h.'),
+      h('h3', { class: 'section-title' }, 'Les 7 prochains jours'), upcoming,
+      form,
+      h('h3', { class: 'section-title' }, 'Sujets passés (nombre de réponses)'), past);
+  }
+  await load();
+  return wrap;
+}
+
 export async function adminView(ctx) {
   ctx.title = 'Administration — AURUM';
   const tab = TABS.some(([k]) => k === ctx.query.get('onglet')) ? ctx.query.get('onglet') : 'apercu';
   const nav = h('nav', { class: 'tabs scroll-x' }, TABS.map(([k, label]) => h('a', { href: `/admin?onglet=${k}`, class: `tab-link${k === tab ? ' on' : ''}` }, label)));
   revealActive(nav);
   const body = h('div', { class: 'admin-body' }, spinner());
-  const views = { apercu: overview, signalements: reports, comptes: users, publications: posts, audience, legal, actu: actuSources, demo, erreurs: errors };
+  const views = { apercu: overview, signalements: reports, comptes: users, publications: posts, audience, sujets: subjectsAdmin, legal, actu: actuSources, demo, erreurs: errors };
   try {
     body.replaceChildren(await views[tab]());
   } catch (err) {

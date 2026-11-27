@@ -196,6 +196,10 @@ function slide(post) {
       chips.push(h('a', { class: 'info-chip actu-chip', href: `/actu/${post.actu.id}`, onclick: (e) => { e.preventDefault(); e.stopPropagation(); openActu(post.actu.id); } },
         icon('newspaper', 'icon-xs'), h('span', null, `Réagit à : ${post.actu.title}`)));
     }
+    if (post.subject) {
+      chips.push(h('a', { class: `info-chip subject-chip${post.subject.gold ? ' gold' : ''}`, href: `/sujet/${post.subject.id}` },
+        h('i', { class: 'subject-dot', 'aria-hidden': 'true' }), h('span', null, `${post.subject.gold ? 'Or du jour' : 'Sujet du jour'} : ${post.subject.title}`)));
+    }
     if (post.duetOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.duetOf.username)}/video/${post.duetOf.id}` }, icon('duet', 'icon-xs'), `Duo avec @${post.duetOf.username}`));
     if (post.stitchOf) chips.push(h('a', { class: 'info-chip', href: `/@${enc(post.stitchOf.username)}/video/${post.stitchOf.id}` }, icon('scissors', 'icon-xs'), `Stitch avec @${post.stitchOf.username}`));
     if (post.privacy !== 'public') chips.push(h('span', { class: 'info-chip' }, icon(post.privacy === 'private' ? 'lock' : 'friends', 'icon-xs'), post.privacy === 'private' ? 'Moi uniquement' : 'Amis'));
@@ -247,7 +251,7 @@ const fastNet = () => {
   return !/(^|-)(2g|3g)$/.test(c.effectiveType || '') && !(c.downlink && c.downlink < 3);
 };
 
-export function verticalFeed({ load, initial = [], more: initialMore = true, startId = null, emptyView = null, onActive = null, onRefresh = null, onUpcoming = null }) {
+export function verticalFeed({ load, initial = [], more: initialMore = true, startId = null, emptyView = null, onActive = null, onRefresh = null, onUpcoming = null, head = null }) {
   const player = reelsPlayer();
   const track = h('div', { class: 'feed-track' });
   const hint = h('button', { class: 'feed-unmute', type: 'button', hidden: true }, icon('mute', 'icon-sm'), 'Activer le son');
@@ -460,6 +464,8 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
   }
 
   function leaveForEnd() {
+    // Carte de fin ou du Sujet du jour : pas de vidéo, donc ni barre de lecture ni bouton du son
+    root.classList.add('no-scrub');
     if (!active) return;
     endWatch();
     setBuffering(false);
@@ -925,6 +931,13 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     { root: track, threshold: [0.6] },
   );
 
+  // Carte en tête du fil (le Sujet du jour) : un écran à part entière, la vidéo ne joue pas dessus
+  if (head) {
+    head.__end = true;
+    track.append(head);
+    io.observe(head);
+  }
+
   const seen = new Set();
   const all = [];
   let more = initialMore;
@@ -1136,6 +1149,7 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
       destroyed = true;
       sleeping = null;
       io.disconnect();
+      head?.__dispose?.();
       clearTimeout(bufferTimer);
       clearTimeout(pressTimer);
       clearTimeout(stallTimer);
