@@ -330,11 +330,30 @@ async function viewerView(ctx, username) {
     fetch(`/api/live/${live.id}/leave`, { method: 'POST', headers: { 'x-vibz': '1', 'content-type': 'application/json' }, body, keepalive: true }).catch(() => {});
   };
   addEventListener('pagehide', leave);
+  // Arrière-plan : LIVE muet (pas de lecteur sur l'écran verrouillé de l'iPhone) ; au retour, le son
+  // revient s'il était activé, sinon « Activer le son »
+  let hadSound = false;
+  const onVisibility = () => {
+    if (document.hidden) {
+      hadSound = hadSound || !video.muted;
+      video.muted = true;
+    } else if (hadSound && !ended) {
+      hadSound = false;
+      video.muted = false;
+      video.play().catch(() => {
+        video.muted = true;
+        unmute.hidden = false;
+        video.play().catch(() => {});
+      });
+    }
+  };
+  document.addEventListener('visibilitychange', onVisibility);
   ctx.onCleanup(() => {
     destroyed = true;
     clearTimeout(retryTimer);
     clearTimeout(pollTimer);
     removeEventListener('pagehide', leave);
+    document.removeEventListener('visibilitychange', onVisibility);
     leave();
     pc?.close();
     video.srcObject = null;

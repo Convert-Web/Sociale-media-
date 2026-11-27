@@ -3050,9 +3050,20 @@ html.feed-mode .cookie-banner {
   background: var(--bg-2);
   color: var(--fg);
 }
+/* Pages sans barre d'onglets ni barre latérale (entrée, connexion, inscription…) : tout en bas,
+   centré, et la page réserve sa hauteur pour que rien ne passe dessous */
+body:not(:has(.shell)) .cookie-banner {
+  bottom: calc(12px + var(--safe-b));
+}
+html.cookie-open body:not(:has(.shell)) #app {
+  padding-bottom: var(--cookie-h, 96px);
+}
 @media (min-width: 900px) {
   .cookie-banner {
     bottom: 16px;
+  }
+  /* À côté de la barre latérale quand il y en a une (sinon, centré sous la page) */
+  body:has(.shell) .cookie-banner {
     left: calc(var(--side-w) + 16px);
   }
 }
@@ -4951,6 +4962,14 @@ button.stat:active {
   display: grid;
   gap: 18px;
   padding-top: 10px;
+}
+/* Ordinateur : le formulaire au milieu de l'écran quand il y a la place (sinon, la page défile
+   normalement, sans jamais couper le haut) */
+@media (min-width: 900px) {
+  .auth-card {
+    margin-block: auto;
+    padding-bottom: 24px;
+  }
 }
 .auth-logo {
   display: grid;

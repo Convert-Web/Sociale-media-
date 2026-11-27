@@ -47,6 +47,42 @@ export const notifSettings = {
 // Le son (synthétisé : aucun fichier à télécharger)
 // ---------------------------------------------------------------------------
 let ac = null;
+let unlocked = false; // le son est autorisé (premier toucher)
+let sleepTimer = 0;
+// Un contexte audio qui reste allumé passe, sur l'iPhone, pour un lecteur : l'écran verrouillé
+// affichait « Boîte de réception — AURUM » avec lecture et ±10 s. Le contexte se met donc en veille
+// juste après chaque son, et il est fermé dès que l'appli passe en arrière-plan.
+function sleepSoon(ms) {
+  clearTimeout(sleepTimer);
+  sleepTimer = setTimeout(() => {
+    if (ac?.state === 'running') ac.suspend().catch(() => {});
+    restoreSession();
+  }, ms);
+}
+// Le temps du son, session audio « ambiante » (iPhone) : mélangée à la musique en cours (Spotify…)
+// au lieu de la couper, muette avec le bouton silence, et jamais présentée comme un média. Sauf si une
+// vidéo joue déjà avec le son : elle garde la main.
+let prevType = null;
+function ambientSession() {
+  const s = navigator.audioSession;
+  if (!s || prevType !== null) return;
+  if ([...document.querySelectorAll('video, audio')].some((m) => !m.paused && !m.muted)) return;
+  try {
+    prevType = s.type;
+    s.type = 'ambient';
+  } catch {
+    prevType = null;
+  }
+}
+function restoreSession() {
+  if (prevType === null) return;
+  try {
+    navigator.audioSession.type = prevType;
+  } catch {
+    /* session audio indisponible */
+  }
+  prevType = null;
+}
 // Les navigateurs (l'iPhone surtout) n'autorisent le son qu'après un premier toucher
 export function unlockSound() {
   try {
@@ -55,20 +91,33 @@ export function unlockSound() {
       if (!AC) return;
       ac = new AC();
     }
-    if (ac.state !== 'running') ac.resume().catch(() => {});
+    ambientSession();
+    if (ac.state === 'running') unlocked = true;
+    else ac.resume().then(() => (unlocked = ac?.state === 'running')).catch(() => {});
     const silent = ac.createBufferSource();
     silent.buffer = ac.createBuffer(1, 1, 22050);
     silent.connect(ac.destination);
     silent.start(0);
+    sleepSoon(400);
   } catch {
     /* pas de son sur ce navigateur */
   }
 }
 const onGesture = () => {
-  if (ac?.state === 'running') return;
+  if (ac && unlocked) return;
   unlockSound();
 };
 for (const ev of ['pointerdown', 'touchend', 'keydown']) addEventListener(ev, onGesture, { capture: true, passive: true });
+// Arrière-plan (écran verrouillé, autre appli) : contexte fermé, plus rien sur l'écran verrouillé.
+// Il est recréé au prochain toucher.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden || !ac) return;
+  clearTimeout(sleepTimer);
+  ac.close().catch(() => {});
+  ac = null;
+  unlocked = false;
+  restoreSession();
+});
 
 // Une bulle qui monte : sinusoïde dont la hauteur glisse vers le haut, attaque nette, chute rapide
 function bubble(c, out, t, from, to, dur, gain) {
@@ -129,9 +178,14 @@ export function playNotifSound(kind = 'notif', { force = false } = {}) {
   if (!ac) unlockSound();
   if (!ac) return;
   lastSound = now;
-  const play = () => renderSound(ac, ac.destination, kind, ac.currentTime + 0.02);
-  if (ac.state === 'running') play();
-  else ac.resume().then(() => ac.state === 'running' && play()).catch(() => {});
+  ambientSession();
+  const c = ac;
+  const play = () => {
+    renderSound(c, c.destination, kind, c.currentTime + 0.02);
+    sleepSoon(1500); // le son dure moins d'une seconde
+  };
+  if (c.state === 'running') play();
+  else c.resume().then(() => c.state === 'running' && play()).catch(() => {});
   try {
     navigator.vibrate?.(kind === 'soft' ? 12 : [18, 40, 26]);
   } catch {
