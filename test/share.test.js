@@ -63,6 +63,10 @@ test('vidéo publique : titre, légende, image dessinée en 1200 × 630', async 
   assert.match(res.headers.get('cache-control'), /immutable/);
   assert.deepEqual(jpegSize(buf), [1200, 630]);
   assert.ok(buf.length < 300 * 1024, `${buf.length} octets`);
+  // Devant une voyelle : « Vidéo d’Inès », jamais « Vidéo de Inès »
+  const ines = await signup(base, 'ap_ines', { displayName: 'Inès' });
+  const p2 = await publishVideo(base, ines, 'Ride du soir');
+  assert.equal(meta((await page(`/@ap_ines/video/${p2.id}`)).html, 'og:title'), 'Vidéo d’Inès sur AURUM');
   // Une autre version renvoie vers la bonne (jamais dessinée deux fois)
   const wrong = await fetch(`${base}/apercu/video/${post.id}.jpg?v=0000000000`, { redirect: 'manual' });
   assert.equal(wrong.status, 302);

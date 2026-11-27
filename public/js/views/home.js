@@ -3,7 +3,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, emptyState, toast, syncThemeColor, logoMark } from '../dom.js';
+import { h, icon, avatar, emptyState, toast, syncThemeColor, logoMark, deName } from '../dom.js';
 import { verticalFeed } from '../components/feed.js';
 import { takeReels, pendingReels, prefetchReels, saveUpcoming } from '../components/video.js';
 import { needLogin, follow } from '../components/actions.js';
@@ -202,7 +202,7 @@ export async function videoView(ctx) {
   const feed = verticalFeed({ initial, load, more });
   ctx.onCleanup(() => feed.destroy());
   ctx.title = `${post.author.displayName} sur AURUM${post.body ? ` : « ${post.body.slice(0, 60)} »` : ''}`;
-  ctx.description = post.body?.slice(0, 160) || `Vidéo de ${post.author.displayName} sur AURUM.`;
+  ctx.description = post.body?.slice(0, 160) || `Vidéo ${deName(post.author.displayName)} sur AURUM.`;
   // Lien vers un commentaire précis (notification) : la feuille des commentaires s'ouvre dessus
   const focus = Number(ctx.query.get('commentaire'));
   const focusParent = Number(ctx.query.get('fil')) || null;

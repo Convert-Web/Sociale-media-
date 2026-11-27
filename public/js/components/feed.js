@@ -211,7 +211,7 @@ function slide(post) {
       { class: 'info' },
       post.repostedBy ? h('a', { class: 'info-repost', href: `/@${enc(post.repostedBy.username)}` }, icon('repost', 'icon-xs'), `${post.repostedBy.displayName} a republié`) : null,
       h('div', { class: 'info-who' },
-        h('a', { href: `/@${enc(post.author.username)}`, class: 'info-avatar', 'aria-label': `Profil de ${post.author.displayName}` }, avatar(post.author, 'sm', { live: true })),
+        h('a', { href: `/@${enc(post.author.username)}`, class: 'info-avatar', 'aria-label': `Profil ${deName(post.author.displayName)}` }, avatar(post.author, 'sm', { live: true })),
         h('span', { class: 'info-id' },
           h('a', { href: `/@${enc(post.author.username)}`, class: 'info-user' }, h('b', null, post.author.displayName), post.author.verified ? verifiedMark() : null),
           h('span', { class: 'info-meta' }, h('span', { class: 'info-date' }, timeAgo(post.createdAt)), views)),

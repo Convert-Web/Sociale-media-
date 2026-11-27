@@ -33,6 +33,9 @@ function short(n) {
   return String(n);
 }
 const plural = (n, one, many) => `${short(n)} ${n > 1 ? many : one}`;
+// « de » devant un nom : élidé devant une voyelle (« d’Inès », « d’AURUM Vidéos »), sinon « de Camille »
+// (même règle que deName dans l'appli)
+const de = (name) => (/^[aeiouyhàâäéèêëîïôöùûüœæ]/i.test(String(name || '').trim()) ? `d’${name}` : `de ${name}`);
 const firstName = (name) => [...oneLine(name).split(' ')[0]].slice(0, 18).join('');
 const dayFmt = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Paris' });
 const dayName = (day) => {
@@ -84,11 +87,11 @@ async function describe(ctx, kind, key) {
     return {
       page: `/@${a.username}/video/${post.id}`,
       meta: {
-        title: subject ? `${name} répond au Sujet du jour sur AURUM` : `${isVideo ? 'Vidéo' : 'Publication'} de ${name} sur AURUM`,
+        title: subject ? `${name} répond au Sujet du jour sur AURUM` : `${isVideo ? 'Vidéo' : 'Publication'} ${de(name)} sur AURUM`,
         description: subject
           ? `« ${oneLine(subject.title)} »${caption ? ` — ${excerpt(caption, 150)}` : ' — Regarde sa réponse en vidéo.'}`
-          : caption ? excerpt(caption) : `Regarde ${isVideo ? 'la vidéo' : 'la publication'} de ${name} sur AURUM.`,
-        alt: `${isVideo ? 'Vidéo' : 'Publication'} de ${name} sur AURUM${caption ? ` : ${excerpt(caption, 100)}` : ''}`,
+          : caption ? excerpt(caption) : `Regarde ${isVideo ? 'la vidéo' : 'la publication'} ${de(name)} sur AURUM.`,
+        alt: `${isVideo ? 'Vidéo' : 'Publication'} ${de(name)} sur AURUM${caption ? ` : ${excerpt(caption, 100)}` : ''}`,
       },
       card: {
         layout: 'post',
@@ -128,7 +131,7 @@ async function describe(ctx, kind, key) {
         page: `/live/${u.username}`,
         meta: {
           title: `${name} est en LIVE sur AURUM`,
-          description: oneLine(live.title) ? `${excerpt(live.title, 120)} — Rejoins le LIVE de ${name} sur AURUM.` : `Rejoins le LIVE de ${name} sur AURUM.`,
+          description: oneLine(live.title) ? `${excerpt(live.title, 120)} — Rejoins le LIVE ${de(name)} sur AURUM.` : `Rejoins le LIVE ${de(name)} sur AURUM.`,
           alt: `${name} est en LIVE sur AURUM`,
         },
         card: { layout: 'person', live: true, author, title: `${name} est en LIVE`, subtitle: oneLine(live.title) || `@${u.username}`, cta: 'Rejoindre le LIVE', ctaIcon: 'play' },
@@ -141,8 +144,8 @@ async function describe(ctx, kind, key) {
       page: kind === 'live' ? `/live/${u.username}` : `/@${u.username}`,
       meta: {
         title: `${name} (@${u.username}) sur AURUM`,
-        description: u.bio ? excerpt(u.bio) : `${counts}. Regarde les vidéos de ${name} sur AURUM.`,
-        alt: `Le profil de ${name} sur AURUM`,
+        description: u.bio ? excerpt(u.bio) : `${counts}. Regarde les vidéos ${de(name)} sur AURUM.`,
+        alt: `Le profil ${de(name)} sur AURUM`,
       },
       card: { layout: 'person', author, title: name, subtitle: `@${u.username} · ${counts}`, about: u.bio || null, cta: 'Voir le profil' },
       images,
@@ -226,8 +229,8 @@ async function describe(ctx, kind, key) {
     const by = oneLine(s.display_name) || s.username;
     return {
       page: `/son/${s.id}`,
-      meta: { title: `${oneLine(s.title)} — un son sur AURUM`, description: `Son de ${by} · ${plural(n, 'vidéo', 'vidéos')} avec ce son sur AURUM.`, alt: `${oneLine(s.title)}, son de ${by}` },
-      card: { layout: 'text', label: 'SON', title: s.title, subtitle: `Son de ${by} · ${plural(n, 'vidéo', 'vidéos')}`, cta: 'Voir les vidéos', ctaIcon: 'play' },
+      meta: { title: `${oneLine(s.title)} — un son sur AURUM`, description: `Son ${de(by)} · ${plural(n, 'vidéo', 'vidéos')} avec ce son sur AURUM.`, alt: `${oneLine(s.title)}, son ${de(by)}` },
+      card: { layout: 'text', label: 'SON', title: s.title, subtitle: `Son ${de(by)} · ${plural(n, 'vidéo', 'vidéos')}`, cta: 'Voir les vidéos', ctaIcon: 'play' },
       images: { media: null, avatar: null },
     };
   }

@@ -3,7 +3,7 @@
 import { api } from '../api.js';
 import { store } from '../store.js';
 import { navigate, safePath } from '../router.js';
-import { h, icon, money, num, timeAgo, toast, modal, emptyState } from '../dom.js';
+import { h, icon, money, num, timeAgo, toast, modal, emptyState, deName } from '../dom.js';
 
 export async function walletView(ctx) {
   ctx.title = 'Portefeuille — AURUM';
@@ -65,7 +65,7 @@ export async function walletView(ctx) {
   const label = (t) => {
     if (t.kind === 'purchase') return `Recharge de ${num(t.coins)} ${t.coins > 1 ? 'pièces' : 'pièce'}`;
     if (t.kind === 'gift_sent') return `${t.gift ? `${t.gift.emoji} ${t.gift.name}` : 'Cadeau'}${t.count > 1 ? ` ×${t.count}` : ''} envoyé${t.other ? ` à ${t.other.displayName}` : ''}`;
-    if (t.kind === 'gift_received') return `${t.gift ? `${t.gift.emoji} ${t.gift.name}` : 'Cadeau'}${t.count > 1 ? ` ×${t.count}` : ''} reçu${t.other ? ` de ${t.other.displayName}` : ''}`;
+    if (t.kind === 'gift_received') return `${t.gift ? `${t.gift.emoji} ${t.gift.name}` : 'Cadeau'}${t.count > 1 ? ` ×${t.count}` : ''} reçu${t.other ? ` ${deName(t.other.displayName)}` : ''}`;
     return t.kind;
   };
   const historyEl = w.history.length
