@@ -320,8 +320,8 @@ self.addEventListener('push', (event) => {
       }
       await self.registration.showNotification(title, {
         body,
-        icon: data.icon || '/img/icon-192.png',
-        badge: '/img/badge-96.png',
+        icon: data.icon || '/img/icon-192.png?v=au79',
+        badge: '/img/badge-96.png?v=au79',
         tag,
         renotify: Boolean(tag) && data.renotify !== false,
         timestamp: Date.now(),
