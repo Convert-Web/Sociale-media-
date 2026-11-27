@@ -146,7 +146,7 @@ export async function render(opts) {
     release(...new Set(opts.scenes.flatMap((s) => s.media.map((m) => m.el))));
   }
 }
-async function renderScenes({ width, height, scenes, ac, onProgress, bitrate = 6_000_000 }) {
+async function renderScenes({ width, height, scenes, ac, onProgress, bitrate = 16_000_000 }) {
   const mime = recorderMime();
   if (mime === null) throw new Error('Ce navigateur ne sait pas enregistrer de vidéo. Essaie avec Chrome, Edge, Firefox ou Safari récent.');
   const canvas = document.createElement('canvas');
@@ -171,7 +171,7 @@ async function renderScenes({ width, height, scenes, ac, onProgress, bitrate = 6
   }
   if (ac.state === 'suspended') await ac.resume().catch(() => {});
   const stream = new MediaStream([...canvas.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
-  const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: bitrate, audioBitsPerSecond: 128000 });
+  const rec = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: bitrate, audioBitsPerSecond: 192000 });
   const chunks = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   const stopped = new Promise((r) => (rec.onstop = r));
@@ -210,7 +210,8 @@ async function renderScenes({ width, height, scenes, ac, onProgress, bitrate = 6
   return new File([new Blob(chunks, { type })], `aurum-${Date.now()}.${extFor(type)}`, { type });
 }
 
-const evenSize = (w, hgt, max = 1280) => {
+// Montage en 1080p au plus (au-delà, le téléphone ne suit plus en temps réel)
+const evenSize = (w, hgt, max = 1920) => {
   const s = Math.min(1, max / Math.max(w, hgt));
   return { width: Math.round((w * s) / 2) * 2, height: Math.round((hgt * s) / 2) * 2 };
 };
@@ -235,8 +236,8 @@ export async function mixSound({ file, soundUrl, duration, volumes = { original:
 export async function duet({ camFile, originalBlob, duration, ac, onProgress }) {
   const cam = mediaFor(camFile);
   const orig = mediaFor(originalBlob);
-  const width = 720;
-  const height = 640;
+  const width = 1080;
+  const height = 960;
   return render({
     width,
     height,
@@ -274,7 +275,7 @@ export async function stitch({ originalBlob, from, length, camFile, camDuration,
 }
 
 // Image d'une vidéo à un instant donné (couverture)
-export async function frameAt(file, t, { maxDim = 1080 } = {}) {
+export async function frameAt(file, t, { maxDim = 1440 } = {}) {
   const v = hiddenVideo(URL.createObjectURL(file));
   try {
     await within(ready(v), 15000);

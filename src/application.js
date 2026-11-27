@@ -118,6 +118,10 @@ async function createApp(config, overrides = {}) {
     res.type('application/xml').send(sitemapXml(config.baseUrl, '2026-11-22'));
   });
 
+  // Images des aperçus de liens partagés (dessinées à la demande, gardées par le CDN)
+  const { sharedPage, previewHandler } = require('./share');
+  app.get('/apercu/:kind/:file', previewHandler(ctx));
+
   // Photos et vidéos envoyées (stockées dans la base)
   app.use('/media/v', videoHandler(ctx));
   app.use('/media', mediaHandler(ctx));
@@ -127,11 +131,23 @@ async function createApp(config, overrides = {}) {
   // Attention : les noms d'utilisateur peuvent contenir un point (/@alex.martin).
   const STATIC_PREFIX = /^\/(api|media|fonts|js|css|img|demo)\//;
   const ASSET_EXT = /\.(js|mjs|css|map|png|jpe?g|gif|webp|svg|ico|woff2?|ttf|json|txt|xml|webmanifest)$/i;
-  app.use((req, res, next) => {
+  app.use(async (req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next();
     if (STATIC_PREFIX.test(req.path)) return next();
     const page = isPage(req.path);
     if (!page && ASSET_EXT.test(req.path)) return next();
+    // Lien partagé (vidéo, profil, invitation, Sujet du jour…) : la page avec son propre aperçu.
+    // Gardée 5 minutes par le CDN (elle ne dépend pas de qui la demande), jamais par le navigateur.
+    if (page) {
+      const html = await sharedPage(ctx, req.path, req.query).catch((err) => {
+        console.error('Aperçu du lien :', err.message);
+        return null;
+      });
+      if (html) {
+        res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=3600');
+        return res.type('html').send(html);
+      }
+    }
     // Jamais en cache : les règles de sécurité (CSP) de la page doivent toujours être les dernières
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     // Adresse inconnue : vraie réponse 404 (pour les moteurs), avec la page « introuvable » de l'application

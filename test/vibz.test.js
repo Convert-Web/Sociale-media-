@@ -472,6 +472,6 @@ test('pages de l’application, 404, robots et accord avec vercel.json', async (
   assert.equal((await fetch(`${base}/nimporte/quoi`)).status, 404);
   assert.match(await (await fetch(`${base}/robots.txt`)).text(), /Sitemap:/);
   const vercel = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'vercel.json'), 'utf8'));
-  const { PAGE_SOURCE } = require('../src/pages');
-  assert.equal(vercel.rewrites[0].source, `/(${PAGE_SOURCE.replace('(?:|', '(?:')})?`);
+  const { STATIC_SOURCE } = require('../src/pages');
+  assert.equal(vercel.rewrites[0].source, `/(${STATIC_SOURCE.replace('(?:|', '(?:')})?`);
 });

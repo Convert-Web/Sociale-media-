@@ -1,8 +1,14 @@
 'use strict';
 // Adresses des pages de l'application (mêmes que public/js/app.js) : elles renvoient la page
 // de l'application avec le statut 200 ; toute autre adresse renvoie la page 404 (statut 404).
-// La même liste figure dans vercel.json (réécriture vers index.html) : un test vérifie l'accord.
-const PAGE_SOURCE = '(?:|abonnements|amis|explorer|actu(?:/[0-9]+)?|sujet(?:/[0-9]+)?|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?';
+// - STATIC_SOURCE : servies telles quelles par l'hébergeur (vercel.json les réécrit vers index.html,
+//   un test vérifie l'accord) ;
+// - SHARE_SOURCE : liens qu'on partage (vidéo, profil, Sujet du jour, LIVE, actu, hashtag, son),
+//   servis par le serveur avec leur propre aperçu (titre, description, image : voir share.js).
+//   Les invitations (« /rejoindre?par=… ») passent aussi par le serveur.
+const STATIC_SOURCE = '(?:|abonnements|amis|explorer|actu|live|recherche|boite|activite|messages(?:/[^/]+)?|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?';
+const SHARE_SOURCE = '(?:actu/[0-9]+|sujet(?:/[0-9]+)?|live/[^/]+|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+)/?';
+const PAGE_SOURCE = `(?:${STATIC_SOURCE}|${SHARE_SOURCE})`;
 const PAGE_RE = new RegExp(`^/${PAGE_SOURCE}$`);
 
 const isPage = (path) => PAGE_RE.test(path);
@@ -54,4 +60,4 @@ function sitemapXml(baseUrl, lastmod) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
 
-module.exports = { PAGE_RE, PAGE_SOURCE, isPage, PUBLIC_PAGES, robotsTxt, sitemapXml };
+module.exports = { PAGE_RE, PAGE_SOURCE, STATIC_SOURCE, SHARE_SOURCE, isPage, PUBLIC_PAGES, robotsTxt, sitemapXml };

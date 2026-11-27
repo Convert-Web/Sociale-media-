@@ -56,7 +56,7 @@ export function hiddenVideo(src) {
 }
 
 // Image de la vidéo vers l'instant t (JPEG), ou null si l'appareil n'en livre pas à temps
-export async function grabFrame(v, t, { maxDim = 1080, budget = 7000 } = {}) {
+export async function grabFrame(v, t, { maxDim = 1440, budget = 7000 } = {}) {
   const end = Date.now() + budget;
   const left = (cap) => Math.max(150, Math.min(cap, end - Date.now()));
   const shoot = async (at) => {
@@ -92,7 +92,7 @@ export async function grabFrame(v, t, { maxDim = 1080, budget = 7000 } = {}) {
     let shot = await shoot(t);
     if (shot?.dark && Date.now() < end - 1000) shot = (await shoot(Math.min(2, (v.duration || 2) * 0.3))) || shot;
     if (!shot) return null;
-    return await within(new Promise((r) => shot.c.toBlob(r, 'image/jpeg', 0.85)), left(3000)).catch(() => null);
+    return await within(new Promise((r) => shot.c.toBlob(r, 'image/jpeg', 0.9)), left(3000)).catch(() => null);
   } catch {
     return null;
   }

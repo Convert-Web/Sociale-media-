@@ -521,15 +521,21 @@ export async function shrinkImage(file, maxDim = 1600, quality = 0.85) {
     bitmap.close?.();
     return file;
   }
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  const g = canvas.getContext('2d');
-  g.fillStyle = '#ffffff';
-  g.fillRect(0, 0, canvas.width, canvas.height);
-  g.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  // La meilleure qualité qui passe sous la limite du serveur (4 Mo par image) : d'abord la qualité
+  // demandée, puis un peu moins, puis une image un peu plus petite (photo très détaillée)
+  let blob = null;
+  for (const [k, q] of [[1, quality], [1, Math.min(quality, 0.86)], [0.8, 0.86], [0.64, 0.85]]) {
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale * k);
+    canvas.height = Math.round(bitmap.height * scale * k);
+    const g = canvas.getContext('2d');
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', q));
+    if (!blob || blob.size <= 3.8 * 1024 * 1024) break;
+  }
   bitmap.close?.();
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
   return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file;
 }
 

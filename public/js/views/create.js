@@ -556,7 +556,8 @@ export async function createView(ctx) {
         const mime = recorderMime();
         if (mime === null) return toast('Ce navigateur ne sait pas enregistrer de vidéo : importe-en une.', 'error');
         chunks = [];
-        rec = new MediaRecorder(recorderStream(), { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: 8_000_000, audioBitsPerSecond: 128000 });
+        // Qualité de l'appareil photo de l'iPhone en 1080p (H.264, ~16 Mb/s) et son de qualité musique
+        rec = new MediaRecorder(recorderStream(), { ...(mime ? { mimeType: mime } : {}), videoBitsPerSecond: 16_000_000, audioBitsPerSecond: 192000 });
         rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
         rec.start(1000);
       } else {
@@ -1337,7 +1338,7 @@ export async function createView(ctx) {
         const urls = [];
         for (const [i, f] of S.photos.entries()) {
           const fd = new FormData();
-          fd.append('image', await shrinkImage(f, 1600, 0.85), 'photo.jpg');
+          fd.append('image', await shrinkImage(f, 2560, 0.92), 'photo.jpg');
           urls.push((await api.post('/api/media', fd)).url);
           overlay.set((i + 1) / S.photos.length);
         }

@@ -3,7 +3,7 @@
 // aimée gagne l'Or du jour. Page du sujet (/sujet, /sujet/:id) et carte en tête du fil « Pour toi ».
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { h, icon, avatar, emptyState, spinner, short } from '../dom.js';
+import { h, icon, avatar, emptyState, spinner, short, shareLink } from '../dom.js';
 import { videoGrid } from '../components/grid.js';
 import { uploading } from '../components/uploads.js';
 
@@ -112,7 +112,9 @@ export async function subjectView(ctx) {
   ctx.title = 'Le sujet du jour — AURUM';
   ctx.description = 'Chaque jour à 19 h, un sujet pour tout le monde : réponds en vidéo, découvre les réponses de tes amis et l’Or du jour.';
   const page = h('div', { class: 'page subject-page' });
-  const head = h('header', { class: 'page-head' }, h('span', { class: 'icon-btn' }), h('h1', null, 'Sujet du jour'), h('span', { class: 'icon-btn' }));
+  // Partager le sujet : l'aperçu du lien montre la question (et le nombre de réponses)
+  const shareBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Partager le sujet', disabled: true }, icon('share'));
+  const head = h('header', { class: 'page-head' }, h('span', { class: 'icon-btn' }), h('h1', null, 'Sujet du jour'), shareBtn);
   const body = h('div', { class: 'subject-body' }, h('div', { class: 'subject-loading' }, spinner()));
   page.append(head, body);
   let grid = null;
@@ -123,6 +125,8 @@ export async function subjectView(ctx) {
     const sending = sendingFor(s.id);
     const me = d.me;
     ctx.title = `${s.title} — Le sujet du jour sur AURUM`;
+    shareBtn.disabled = false;
+    shareBtn.onclick = () => shareLink(`Le Sujet du jour sur AURUM : « ${s.title} »`, `/sujet/${s.id}`);
     const cta = s.open
       ? me.answered
         ? h('div', { class: 'subject-done' }, h('span', { class: 'subject-check' }, icon('check', 'icon-sm')), h('span', null, 'Tu as répondu'), h('a', { href: `/sujet/${s.id}#reponses`, class: 'subject-done-link', onclick: (e) => { e.preventDefault(); body.querySelector('.subject-answers')?.scrollIntoView({ behavior: 'smooth' }); } }, 'Voir les réponses'))
