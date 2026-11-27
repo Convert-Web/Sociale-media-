@@ -55,6 +55,9 @@ function left(ms) {
   return mm ? `${hh} h ${String(mm).padStart(2, '0')}` : `${hh} h`;
 }
 const timeLine = (s) => (s.open ? `Encore ${left(s.closesAt - Date.now())} pour répondre` : s.upcoming ? 'Ouverture à 19 h' : 'Terminé');
+// Sujet en cours : depuis quand il est ouvert (le matin, celui d'hier soir n'a pas l'air périmé)
+const parisDay = (t) => new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris' }).format(new Date(t));
+const openedLabel = (s) => (parisDay(s.opensAt) === parisDay(Date.now()) ? 'Depuis 19 h' : 'Depuis hier 19 h');
 const dayName = (day) => {
   const t = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Paris' }).format(new Date(`${day}T12:00:00Z`));
   return t.charAt(0).toUpperCase() + t.slice(1);
@@ -139,7 +142,7 @@ export async function subjectView(ctx) {
       store.user && me.streak ? h('span', null, h('b', null, String(me.streak)), me.streak > 1 ? ' jours de suite' : ' jour de suite') : null,
       store.user && me.golds ? h('span', { class: 'subject-golds' }, h('i', { class: 'subject-dot', 'aria-hidden': 'true' }), h('b', null, String(me.golds)), me.golds > 1 ? ' Ors du jour' : ' Or du jour') : null);
     const hero = h('section', { class: 'subject-hero' },
-      h('p', { class: 'subject-date' }, dayName(s.day)),
+      h('p', { class: 'subject-date' }, s.open ? openedLabel(s) : dayName(s.day)),
       kindTag(s),
       h('h2', { class: 'subject-title' }, s.title),
       s.sponsor ? h('p', { class: 'subject-sponsor' }, `Proposé par ${s.sponsor}${s.prize ? ` · À gagner : ${s.prize}` : ''}`) : null,

@@ -5,6 +5,7 @@
 export function messageFor(el) {
   const v = el.validity;
   if (v.valueMissing) {
+    if (el.dataset.missing) return el.dataset.missing;
     if (el.type === 'checkbox') return 'Coche cette case pour continuer.';
     if (el.type === 'file') return 'Choisis un fichier.';
     if (el.tagName === 'SELECT') return 'Choisis une option.';

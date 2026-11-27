@@ -60,6 +60,7 @@ export function cookieBanner(force = false) {
     write(choice);
     banner?.classList.add('out');
     document.documentElement.classList.remove('cookie-open');
+    document.documentElement.style.removeProperty('--cookie-h');
     setTimeout(() => {
       banner?.remove();
       banner = null;
@@ -72,7 +73,7 @@ export function cookieBanner(force = false) {
     h(
       'p',
       null,
-      'Pas de publicité ni de pistage : seulement un cookie de connexion et un comptage anonyme des visites. ',
+      'Pas de pub ni de pistage : un cookie de connexion et un comptage anonyme des visites. ',
       h('a', { href: '/confidentialite#cookies' }, 'En savoir plus'),
     ),
     h(
@@ -83,8 +84,10 @@ export function cookieBanner(force = false) {
     ),
   );
   document.body.append(banner);
-  // Tant que le bandeau est affiché, la page peut défiler au-dessus de lui (boutons jamais cachés)
+  // Tant que le bandeau est affiché, la page défile au-dessus de lui : il ne cache jamais un champ
+  // ni un bouton (sa hauteur réservée en bas des pages ; dans le fil, il se place en haut)
   document.documentElement.classList.add('cookie-open');
+  document.documentElement.style.setProperty('--cookie-h', `${banner.offsetHeight + 16}px`);
 }
 
 // « Gérer mon choix » (politique de confidentialité)
