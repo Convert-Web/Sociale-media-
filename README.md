@@ -12,8 +12,10 @@ autre service n'est repris. Les vidéos et musiques de démonstration sont gén�
 (`scripts/make-demo.js`).
 
 **Le design d’AURUM** : fond « encre » le soir, « papier » chaud le jour, dégradé de marque violet →
-rose et le point d'or du logo (le « A » d'AURUM), qui marque aussi l'onglet ouvert. Formes douces reprises du logo
-(photos de profil et icônes en « squircle », boutons en pilule). Dans le fil, chaque vidéo ou photo
+rose et touches d’or (le point qui marque l'onglet ouvert). Le logo, c'est « Au », le symbole de l'or
+(numéro 79 du tableau des éléments, d'où le nom AURUM) : en dégradé violet → rose → or sur fond noir, dans
+un cadre du même dégradé, avec le 79 en or ; la petite version (onglet du navigateur, en-tête de l'appli)
+ne garde que « Au ». Formes douces (photos de profil et icônes en « squircle », boutons en pilule). Dans le fil, chaque vidéo ou photo
 remplit tout l'écran, bord à bord et toujours cadrée de la même façon, sans flou ni voile sombre :
 les onglets, la barre d'actions (J'aime, commentaires, favoris, partage), le nom avec son bouton
 « Suivre » et le dock de navigation sont posés directement dessus, lisibles grâce à une ombre

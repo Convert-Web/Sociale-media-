@@ -153,7 +153,7 @@ export function playItem(item) {
       title: item.title,
       artist: item.siteName || 'AURUM',
       album: 'L’Actu — AURUM',
-      artwork: item.image ? [{ src: item.image, sizes: '512x512' }] : [{ src: '/img/icon-512.png', sizes: '512x512', type: 'image/png' }],
+      artwork: item.image ? [{ src: item.image, sizes: '512x512' }] : [{ src: '/img/icon-512.png?v=au79', sizes: '512x512', type: 'image/png' }],
     });
   }
   audio.play().catch(() => {});

@@ -9,8 +9,8 @@
 @font-face { font-family: 'Inter'; font-style: normal; font-display: swap; font-weight: 700 900; src: url(/fonts/inter/inter-latin-700-normal.woff2) format('woff2'); }
 @font-face { font-family: 'Bricolage Grotesque'; font-style: normal; font-display: swap; font-weight: 200 800; src: url(/fonts/bricolage/bricolage-grotesque-latin-opsz-normal.woff2) format('woff2-variations'), url(/fonts/bricolage/bricolage-grotesque-latin-opsz-normal.woff2) format('woff2'); }
 
-/* Identité AURUM : encre et papier, dégradé violet → rose, point « soleil » du logo,
-   formes arrondies (squircle comme le logo, pilules), commandes en verre dépoli */
+/* Identité AURUM : encre et papier, dégradé violet → rose du logo, touches d’or (point « soleil »),
+   formes arrondies (squircle, pilules), commandes en verre dépoli */
 :root {
   --bg: #f6f4f0;
   --bg-2: #eeebe5;
@@ -683,7 +683,7 @@ input[type='range'] {
   place-items: center;
   height: 26px;
 }
-/* Onglet actif : le point « soleil » du logo, en haut à droite de l'icône */
+/* Onglet actif : le point « soleil » (l'or d'AURUM), en haut à droite de l'icône */
 .tab.active:not(.tab-profile) .tab-ic::after {
   content: '';
   position: absolute;
@@ -722,7 +722,7 @@ input[type='range'] {
 .tab-create:active .create-btn {
   transform: scale(0.94);
 }
-/* Bouton Créer : le logo d’AURUM (squircle dégradé, point soleil) avec un « + » */
+/* Bouton Créer : aux couleurs du logo d’AURUM (squircle dégradé, point soleil) avec un « + » */
 .create-btn {
   position: relative;
   display: grid;

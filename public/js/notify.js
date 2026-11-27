@@ -175,7 +175,7 @@ function hideBanner() {
 
 // who : { displayName, avatar, username } ou une adresse d'image (notification du téléphone)
 function showBanner({ who, title, text, image = null, href, kind }) {
-  const pic = typeof who === 'string' || !who ? h('img', { class: 'nb-pic', src: who || '/img/icon-192.png', alt: '' }) : avatar(who, 'sm');
+  const pic = typeof who === 'string' || !who ? h('img', { class: 'nb-pic', src: who || '/img/icon-192.png?v=au79', alt: '' }) : avatar(who, 'sm');
   const card = h(
     'a',
     { class: 'nb-card', href },
