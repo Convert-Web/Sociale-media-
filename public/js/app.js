@@ -107,10 +107,14 @@ const appEl = document.getElementById('app');
 // Titre de l'onglet (avec compteur de non-lus)
 // ---------------------------------------------------------------------------
 let baseTitle = 'AURUM';
+// Appli installée (écran d'accueil, Dock du Mac) : le système affiche déjà « AURUM » devant le titre
+// (« AURUM - Inscription — AURUM ») : on ne le répète pas
+const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 function paintTitle() {
   const c = store.counters;
   const n = store.user ? (c.notifications || 0) + (c.messages || 0) + (c.requests || 0) : 0;
-  document.title = n ? `(${n > 99 ? '99+' : n}) ${baseTitle}` : baseTitle;
+  const title = installed() ? baseTitle.replace(/\s+—\s+AURUM$/, '') || 'AURUM' : baseTitle;
+  document.title = n ? `(${n > 99 ? '99+' : n}) ${title}` : title;
 }
 store.on('counters', paintTitle);
 

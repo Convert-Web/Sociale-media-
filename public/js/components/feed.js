@@ -1030,10 +1030,24 @@ export function verticalFeed({ load, initial = [], more: initialMore = true, sta
     if (document.hidden) {
       endWatch();
       if (!player.paused) player.pause();
+      // En pause mais avec le son, la vidéo laisserait un lecteur « AURUM » sur l'écran verrouillé de
+      // l'iPhone : muette tant que l'appli est en arrière-plan
+      player.muted = true;
     } else if (active?.__post.kind === 'video' && !userPaused && root.isConnected) {
       const post = active.__post;
       watch = { id: post.id, ms: 0, max: 0, loops: 0, last: player.currentTime || 0, duration: duration(), playing: false, since: 0, viewed: true };
-      player.play().catch(() => {});
+      player.muted = !sound.get();
+      paintSound();
+      player.play().catch(() => {
+        // Son refusé au retour (sans toucher) : lecture muette, un toucher remet le son
+        player.muted = true;
+        paintSound();
+        hint.hidden = false;
+        player.play().catch(() => {});
+      });
+    } else {
+      player.muted = !sound.get();
+      paintSound();
     }
   };
   const onPageHide = () => endWatch();
