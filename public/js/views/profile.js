@@ -3,7 +3,7 @@
 import { api, enc } from '../api.js';
 import { store } from '../store.js';
 import { navigate } from '../router.js';
-import { h, icon, avatar, short, toast, emptyState, modal, closeModal, verifiedMark, shareLink, confirmDialog, debounce, spinner, shrinkImage } from '../dom.js';
+import { h, icon, avatar, short, toast, emptyState, modal, closeModal, verifiedMark, shareLink, confirmDialog, debounce, spinner, shrinkImage, deName } from '../dom.js';
 import { openSheet, closeSheet } from '../components/sheet.js';
 import { videoGrid } from '../components/grid.js';
 import { follow, needLogin } from '../components/actions.js';
@@ -28,7 +28,7 @@ export async function profileView(ctx) {
   // Adresse avec l'ancienne casse ou un ancien nom : la bonne adresse
   if (user.username !== username) history.replaceState(history.state, '', `/@${user.username}${location.search}`);
   ctx.title = `${user.displayName} (@${user.username}) — AURUM`;
-  ctx.description = user.bio || `Les vidéos de ${user.displayName} sur AURUM.`;
+  ctx.description = user.bio || `Les vidéos ${deName(user.displayName)} sur AURUM.`;
   const me = user.me;
   const root = h('div', { class: 'page profile' });
   let grid = null;
