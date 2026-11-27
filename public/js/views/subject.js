@@ -3,7 +3,7 @@
 // aimée gagne l'Or du jour. Page du sujet (/sujet, /sujet/:id) et carte en tête du fil « Pour toi ».
 import { api } from '../api.js';
 import { store } from '../store.js';
-import { h, icon, avatar, emptyState, spinner, short } from '../dom.js';
+import { h, icon, avatar, emptyState, spinner, short, shareLink } from '../dom.js';
 import { videoGrid } from '../components/grid.js';
 import { uploading } from '../components/uploads.js';
 
@@ -55,6 +55,9 @@ function left(ms) {
   return mm ? `${hh} h ${String(mm).padStart(2, '0')}` : `${hh} h`;
 }
 const timeLine = (s) => (s.open ? `Encore ${left(s.closesAt - Date.now())} pour répondre` : s.upcoming ? 'Ouverture à 19 h' : 'Terminé');
+// Sujet en cours : depuis quand il est ouvert (le matin, celui d'hier soir n'a pas l'air périmé)
+const parisDay = (t) => new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris' }).format(new Date(t));
+const openedLabel = (s) => (parisDay(s.opensAt) === parisDay(Date.now()) ? 'Depuis 19 h' : 'Depuis hier 19 h');
 const dayName = (day) => {
   const t = new Intl.DateTimeFormat('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Paris' }).format(new Date(`${day}T12:00:00Z`));
   return t.charAt(0).toUpperCase() + t.slice(1);
@@ -112,7 +115,9 @@ export async function subjectView(ctx) {
   ctx.title = 'Le sujet du jour — AURUM';
   ctx.description = 'Chaque jour à 19 h, un sujet pour tout le monde : réponds en vidéo, découvre les réponses de tes amis et l’Or du jour.';
   const page = h('div', { class: 'page subject-page' });
-  const head = h('header', { class: 'page-head' }, h('span', { class: 'icon-btn' }), h('h1', null, 'Sujet du jour'), h('span', { class: 'icon-btn' }));
+  // Partager le sujet : l'aperçu du lien montre la question (et le nombre de réponses)
+  const shareBtn = h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Partager le sujet', disabled: true }, icon('share'));
+  const head = h('header', { class: 'page-head' }, h('span', { class: 'icon-btn' }), h('h1', null, 'Sujet du jour'), shareBtn);
   const body = h('div', { class: 'subject-body' }, h('div', { class: 'subject-loading' }, spinner()));
   page.append(head, body);
   let grid = null;
@@ -123,6 +128,8 @@ export async function subjectView(ctx) {
     const sending = sendingFor(s.id);
     const me = d.me;
     ctx.title = `${s.title} — Le sujet du jour sur AURUM`;
+    shareBtn.disabled = false;
+    shareBtn.onclick = () => shareLink(`Le Sujet du jour sur AURUM : « ${s.title} »`, `/sujet/${s.id}`);
     const cta = s.open
       ? me.answered
         ? h('div', { class: 'subject-done' }, h('span', { class: 'subject-check' }, icon('check', 'icon-sm')), h('span', null, 'Tu as répondu'), h('a', { href: `/sujet/${s.id}#reponses`, class: 'subject-done-link', onclick: (e) => { e.preventDefault(); body.querySelector('.subject-answers')?.scrollIntoView({ behavior: 'smooth' }); } }, 'Voir les réponses'))
@@ -135,7 +142,7 @@ export async function subjectView(ctx) {
       store.user && me.streak ? h('span', null, h('b', null, String(me.streak)), me.streak > 1 ? ' jours de suite' : ' jour de suite') : null,
       store.user && me.golds ? h('span', { class: 'subject-golds' }, h('i', { class: 'subject-dot', 'aria-hidden': 'true' }), h('b', null, String(me.golds)), me.golds > 1 ? ' Ors du jour' : ' Or du jour') : null);
     const hero = h('section', { class: 'subject-hero' },
-      h('p', { class: 'subject-date' }, dayName(s.day)),
+      h('p', { class: 'subject-date' }, s.open ? openedLabel(s) : dayName(s.day)),
       kindTag(s),
       h('h2', { class: 'subject-title' }, s.title),
       s.sponsor ? h('p', { class: 'subject-sponsor' }, `Proposé par ${s.sponsor}${s.prize ? ` · À gagner : ${s.prize}` : ''}`) : null,

@@ -5,7 +5,13 @@
   ],
   "rewrites": [
     {
-      "source": "/((?:abonnements|amis|explorer|actu(?:/[0-9]+)?|sujet(?:/[0-9]+)?|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?)?",
+      "source": "/((?:abonnements|amis|explorer|actu|live|recherche|boite|activite|messages(?:/[^/]+)?|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?)?",
+      "missing": [
+        {
+          "type": "query",
+          "key": "par"
+        }
+      ],
       "destination": "/index.html"
     }
   ],
@@ -40,7 +46,13 @@
       ]
     },
     {
-      "source": "/((?:abonnements|amis|explorer|actu(?:/[0-9]+)?|sujet(?:/[0-9]+)?|live(?:/[^/]+)?|recherche|boite|activite|messages(?:/[^/]+)?|@[^/]+(?:/video/[0-9]+)?|tag/[^/]+|son/[0-9]+|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?)?",
+      "source": "/((?:abonnements|amis|explorer|actu|live|recherche|boite|activite|messages(?:/[^/]+)?|creer|reglages(?:/(?:compte|confidentialite|notifications|apparence))?|portefeuille|studio|admin|aide|regles|bienvenue|rejoindre|connexion|inscription|mot-de-passe-oublie|reinitialiser|cgu|cgv|rgpd|confidentialite|mentions-legales|p/[0-9]+|salon|videos)/?)?",
+      "missing": [
+        {
+          "type": "query",
+          "key": "par"
+        }
+      ],
       "headers": [
         {
           "key": "Cache-Control",

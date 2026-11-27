@@ -104,9 +104,10 @@ export function signupView(ctx) {
   ctx.title = 'Inscription — AURUM';
   const shownAt = Date.now();
   // Étape 1 : date de naissance (comme les grands réseaux : 13 ans au moins)
-  const day = h('select', { class: 'input', required: true, 'aria-label': 'Jour' }, h('option', { value: '' }, 'Jour'), Array.from({ length: 31 }, (_, i) => h('option', { value: String(i + 1) }, String(i + 1))));
-  const month = h('select', { class: 'input', required: true, 'aria-label': 'Mois' }, h('option', { value: '' }, 'Mois'), MONTHS.map((m, i) => h('option', { value: String(i + 1) }, m)));
-  const year = h('select', { class: 'input', required: true, 'aria-label': 'Année' }, h('option', { value: '' }, 'Année'), Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map((y) => h('option', { value: String(y) }, String(y))));
+  const BIRTH_MISSING = { missing: 'Indique ta date de naissance (jour, mois et année).' };
+  const day = h('select', { class: 'input', required: true, 'aria-label': 'Jour', dataset: BIRTH_MISSING }, h('option', { value: '' }, 'Jour'), Array.from({ length: 31 }, (_, i) => h('option', { value: String(i + 1) }, String(i + 1))));
+  const month = h('select', { class: 'input', required: true, 'aria-label': 'Mois', dataset: BIRTH_MISSING }, h('option', { value: '' }, 'Mois'), MONTHS.map((m, i) => h('option', { value: String(i + 1) }, m)));
+  const year = h('select', { class: 'input', required: true, 'aria-label': 'Année', dataset: BIRTH_MISSING }, h('option', { value: '' }, 'Année'), Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map((y) => h('option', { value: String(y) }, String(y))));
   const email = h('input', { class: 'input', type: 'email', autocomplete: 'email', required: true, placeholder: 'adresse@exemple.fr' });
   const username = h('input', { class: 'input', type: 'text', autocomplete: 'username', minlength: 2, maxlength: 24, placeholder: 'nom_utilisateur', autocapitalize: 'none', spellcheck: 'false' });
   const HINT = 'Lettres sans accent, chiffres, « _ » et « . » — modifiable ensuite.';
@@ -122,6 +123,8 @@ export function signupView(ctx) {
     userHint.textContent = text;
     userHint.classList.toggle('ok', state === 'ok');
     userHint.classList.toggle('bad', state === 'bad');
+    if (state === 'bad') username.setAttribute('aria-invalid', 'true');
+    else username.removeAttribute('aria-invalid');
   };
   const check = debounce(async () => {
     const v = username.value.trim().replace(/^@/, '');
@@ -186,7 +189,12 @@ export function signupView(ctx) {
         } catch (err) {
           submit.disabled = false;
           const el = FIELD_OF[err.code]?.();
-          if (el) fieldError(el, err.message);
+          if (el === username) {
+            // Au même endroit que la vérification en direct : un seul message sous le champ
+            paintHint(err.message, 'bad');
+            username.focus({ preventScroll: true });
+            username.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          } else if (el) fieldError(el, err.message);
           else error.show(err.message);
         }
       },

@@ -33,6 +33,7 @@
   --ok: #00a67e;
   --warn: #c98200;
   --danger: #e5383b;
+  --danger-text: #b91c1c; /* texte rouge lisible (AA) */
   --chart: #6a4cff;
   --grad: linear-gradient(135deg, #7b5cff 0%, #b14dff 50%, #ff3d7f 100%);
   --grad-soft: linear-gradient(135deg, rgba(123, 92, 255, 0.14), rgba(255, 61, 127, 0.12));
@@ -58,6 +59,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
+    --danger-text: #ff6b6b; /* texte rouge lisible (AA) sur fond sombre */
     --bg: #0b0a10;
     --bg-2: #15131c;
     --bg-3: #201d2a;
@@ -81,6 +83,7 @@
   }
 }
 :root[data-theme='dark'] {
+  --danger-text: #ff6b6b; /* texte rouge lisible (AA) sur fond sombre */
   --bg: #0b0a10;
   --bg-2: #15131c;
   --bg-3: #201d2a;
@@ -2994,37 +2997,56 @@ input[type='range'] {
 .upload-pill.error {
   background: #7f1d1d;
 }
+/* Bandeau cookies : compact (texte et boutons sur une ligne), jamais par-dessus un champ ou un
+   bouton : la page réserve sa hauteur en bas ; dans le fil plein écran, il se place en haut */
 .cookie-banner {
   position: fixed;
   z-index: 70;
   left: 12px;
   right: 12px;
   bottom: calc(var(--tab-h) + 12px + var(--safe-b));
-  max-width: 520px;
+  max-width: 560px;
   margin: 0 auto;
-  padding: 12px 14px;
-  border-radius: 18px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 16px;
   background: var(--card);
   color: var(--fg);
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
-  font-size: 13px;
-  line-height: 1.4;
-  display: grid;
+  font-size: 12.5px;
+  line-height: 1.35;
+  display: flex;
+  align-items: center;
   gap: 10px;
 }
+.cookie-banner p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+html.cookie-open .shell:not(.is-feed) .main {
+  padding-bottom: calc(var(--tab-h) + var(--safe-b) + var(--cookie-h, 96px));
+}
+html.feed-mode .cookie-banner {
+  top: calc(var(--safe-t) + 52px);
+  bottom: auto;
+}
 .cookie-banner a {
+  display: inline-block;
+  padding: 8px 2px;
+  margin: -8px -2px;
   color: var(--fg);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 .cookie-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  display: flex;
+  flex: none;
+  gap: 6px;
 }
 .cookie-actions .btn {
-  min-height: 38px;
+  min-height: 40px;
+  padding: 0 12px;
   background: var(--bg-2);
   color: var(--fg);
 }
@@ -4690,6 +4712,15 @@ button.stat:active {
   font-size: 12px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
 }
+.dm-post-meta b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: rgba(11, 10, 16, 0.62);
+}
 .dm-post-play {
   position: absolute;
   top: 8px;
@@ -4860,7 +4891,7 @@ button.stat:active {
   background: var(--bg-3);
 }
 .set-row.danger {
-  color: var(--danger);
+  color: var(--danger-text, var(--danger));
 }
 .set-ic {
   display: grid;
@@ -4979,6 +5010,16 @@ button.stat:active {
 }
 .auth-link.center {
   justify-self: center;
+}
+/* Liens isolés (Se connecter, S'inscrire, Mot de passe oublié, Retour, Passer) : une zone tactile
+   confortable au doigt (44 px de haut environ), sans rien changer à leur place ni à leur aspect */
+.auth-switch a,
+.land-login a,
+.auth-link,
+.welcome-go .link-btn {
+  display: inline-block;
+  padding: 12px 8px;
+  margin: -12px -8px;
 }
 .pw-wrap {
   position: relative;
@@ -5760,6 +5801,10 @@ button.stat:active {
 }
 .live-top > * {
   flex: none;
+}
+/* « Activer le son » sous la barre du haut (nom, LIVE, signaler, fermer), jamais par-dessus */
+.live-room .feed-unmute {
+  top: calc(var(--safe-t) + 72px);
 }
 .live-top > .live-host {
   flex: 0 1 auto;

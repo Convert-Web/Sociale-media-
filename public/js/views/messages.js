@@ -53,7 +53,7 @@ function bubble(m, meId, other) {
     parts.push(
       !m.post || m.post.unavailable
         ? h('div', { class: 'dm-post gone' }, icon('eyeOff', 'icon-sm'), 'Publication indisponible')
-        : h('a', { href: `/@${enc(m.post.author.username)}/video/${m.post.id}`, class: 'dm-post' }, m.post.image ? h('img', { src: m.post.image, alt: '' }) : h('span', { class: 'dm-post-text' }, m.post.body), h('span', { class: 'dm-post-meta' }, avatar(m.post.author, 'xs'), h('b', null, m.post.author.displayName)), h('span', { class: 'dm-post-play' }, icon('play', 'icon-sm'))),
+        : h('a', { href: `/@${enc(m.post.author.username)}/video/${m.post.id}`, class: 'dm-post' }, m.post.image ? h('img', { src: m.post.image, alt: '' }) : h('span', { class: `dm-post-text bg-${m.post.bg || 'violet'}` }, m.post.body), h('span', { class: 'dm-post-meta' }, avatar(m.post.author, 'xs'), h('b', null, m.post.author.displayName)), h('span', { class: 'dm-post-play' }, icon('play', 'icon-sm'))),
     );
   }
   if (m.body) {

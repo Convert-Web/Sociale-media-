@@ -10,7 +10,7 @@ import { openActu, sourceLine } from '../components/actusheet.js';
 export const cleanQuery = (v) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, 80);
 
 export function searchBar(value = '', { autofocus = false } = {}) {
-  const input = h('input', { class: 'input', type: 'search', placeholder: 'Vidéos, comptes, #hashtags, sons', value, maxlength: 80, enterkeyhint: 'search', 'aria-label': 'Rechercher', autofocus });
+  const input = h('input', { class: 'input', type: 'search', placeholder: 'Comptes, vidéos, #tags…', value, maxlength: 80, enterkeyhint: 'search', 'aria-label': 'Rechercher', autofocus });
   const form = h('form', { class: 'searchbar', role: 'search', onsubmit: (e) => { e.preventDefault(); const q = cleanQuery(input.value); if (q) navigate(`/recherche?q=${enc(q)}`); } }, icon('search'), input, h('button', { type: 'submit', class: 'searchbar-go' }, 'Rechercher'));
   form.input = input;
   return form;
